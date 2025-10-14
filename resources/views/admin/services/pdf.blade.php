@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Invoice {{ $dailyReport->invoice_no }}</title>
+    <title>Invoice {{ $service->invoice_no }}</title>
     <style>
         /* Kunci margin & orientasi kertas */
         @page {
@@ -72,7 +72,7 @@
 <body>
     <div class="invoice-box">
         {{-- Konten invoice tetap sama --}}
-        @include('admin.daily_reports.pdf_content', ['dailyReport' => $dailyReport])
+        @include('admin.service.pdf_content', ['service' => $service])
     </div>
 </body>
 </html>

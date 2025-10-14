@@ -397,11 +397,10 @@ return [
                 ['text' => 'Laporan Stok Keseluruhan', 'route' => 'admin.reports.stock-report', 'can' => 'is-not-kepala-gudang'],
             ],
         ],
-
         [
-            'text' => 'Daily Report',
-            'url'  => 'admin/daily-reports',
-            'icon' => 'fas fa-fw fa-file-excel',
+            'text' => 'Data Service',
+            'route'  => 'admin.services.index',
+            'icon' => 'fas fa-fw fa-wrench', // Ikon diubah agar lebih sesuai
         ],
 
         // SUBMENU: Pengaturan
@@ -487,6 +486,16 @@ return [
                     'type' => 'css',
                     'asset' => true, // Ganti dari false ke true jika sebelumnya false
                     'location' => 'vendor/select2-bootstrap4-theme/select2-bootstrap4.min.css',
+                ],
+            ],
+        ],
+        'BsCustomFileInput' => [
+            'active' => true,
+            'files' => [
+                [
+                    'type' => 'js',
+                    'asset' => true,
+                    'location' => 'vendor/bs-custom-file-input/bs-custom-file-input.min.js',
                 ],
             ],
         ],

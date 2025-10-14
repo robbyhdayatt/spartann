@@ -28,6 +28,7 @@
     use App\Http\Controllers\Admin\QuarantineStockController;
     use App\Http\Controllers\Admin\MutationReceivingController;
     use App\Http\Controllers\Admin\CustomerDiscountCategoryController;
+    use App\Http\Controllers\Admin\ServiceController;
 
     /*
     |--------------------------------------------------------------------------
@@ -158,10 +159,10 @@
         Route::post('mutation-receiving/{mutation}', [\App\Http\Controllers\Admin\MutationReceivingController::class, 'receive'])->name('mutation-receiving.receive');
 
         // Rute untuk Daily Report
-        Route::get('daily-reports', [\App\Http\Controllers\Admin\DailyReportController::class, 'index'])->name('daily-reports.index');
-        Route::post('daily-reports/import', [\App\Http\Controllers\Admin\DailyReportController::class, 'import'])->name('daily-reports.import');
-        Route::get('daily-reports/{dailyReport}', [\App\Http\Controllers\Admin\DailyReportController::class, 'show'])->name('daily-reports.show');
-        Route::get('daily-reports/{id}/pdf', [\App\Http\Controllers\Admin\DailyReportController::class, 'downloadPDF'])->name('daily-reports.pdf');
+        Route::get('services', [ServiceController::class, 'index'])->name('services.index');
+        Route::post('services/import', [ServiceController::class, 'import'])->name('services.import');
+        Route::get('services/{service}', [ServiceController::class, 'show'])->name('services.show');
+        Route::get('services/{id}/pdf', [ServiceController::class, 'downloadPDF'])->name('services.pdf');
 
 
         // === API (untuk AJAX) ===

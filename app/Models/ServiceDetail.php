@@ -5,14 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class DailyReportDetail extends Model
+class ServiceDetail extends Model
 {
     use HasFactory;
 
+    protected $table = 'service_details'; // Menyesuaikan dengan nama tabel baru
     protected $guarded = ['id'];
 
-    public function dailyReport()
+    public function service()
     {
-        return $this->belongsTo(DailyReport::class);
+        return $this->belongsTo(Service::class);
     }
 }

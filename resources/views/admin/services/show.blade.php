@@ -1,20 +1,18 @@
 @php
 use App\Helpers\NumberHelper;
-
-// Inisialisasi variabel dan grouping
-$detailsGrouped = $dailyReport->details->groupBy('service_category_code');
+$detailsGrouped = $service->details->groupBy('service_category_code');
 $subTotal = 0;
 @endphp
 
 @extends('adminlte::page')
 
-@section('title', 'Invoice ' . $dailyReport->invoice_no)
+@section('title', 'Invoice ' . $service->invoice_no)
 
 @section('content_header')
     <div class="d-flex justify-content-between align-items-center">
-        <h1>Faktur Service: {{ $dailyReport->invoice_no }}</h1>
+        <h1>Faktur Service: {{ $service->invoice_no }}</h1>
         <div>
-            <a href="{{ route('admin.daily-reports.pdf', $dailyReport->id) }}" class="btn btn-danger">
+            <a href="{{ route('admin.services.pdf', $service->id) }}" class="btn btn-danger">
                 <i class="fas fa-file-pdf"></i> Export PDF
             </a>
         </div>
@@ -23,72 +21,9 @@ $subTotal = 0;
 
 @section('content')
 <div class="invoice p-3 mb-3">
-    {{-- CSS Kustom untuk meniru tampilan PDF/Gambar --}}
+    {{-- CSS Kustom --}}
     <style>
-        .invoice-box {
-            border: 1px solid #aaa;
-            padding: 20px;
-            font-family: 'Courier New', Courier, monospace; /* Font yang mirip mesin tik/dot matrix */
-            font-size: 12px;
-            color: #000;
-        }
-        .invoice-box table {
-            width: 100%;
-            line-height: inherit;
-            text-align: left;
-            border-collapse: collapse;
-        }
-        .invoice-box table td, .invoice-box table th {
-            padding: 2px 4px;
-            vertical-align: top;
-        }
-        .header-main {
-            font-size: 16px;
-            font-weight: bold;
-        }
-        .header-sub {
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .info-table td {
-            padding-bottom: 3px;
-        }
-        .items-table th, .items-table td {
-            border: 1px solid #000;
-            padding: 4px;
-        }
-        .items-table th {
-            text-align: center;
-        }
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .font-bold { font-weight: bold; }
-        .terbilang-box {
-            padding: 5px;
-            font-style: italic;
-        }
-        .signature-box {
-            margin-top: 40px;
-        }
-        /* Hide elements on print */
-        @media print {
-            body {
-                margin: 0;
-                padding: 0;
-            }
-            .main-header, .main-sidebar, .main-footer, .btn, .content-header {
-                display: none !important;
-            }
-            .content-wrapper, .content {
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            .invoice {
-                border: none !important;
-                padding: 0 !important;
-                box-shadow: none !important;
-            }
-        }
+        .invoice-box{border:1px solid #aaa;padding:20px;font-family:'Courier New',Courier,monospace;font-size:12px;color:#000}.invoice-box table{width:100%;line-height:inherit;text-align:left;border-collapse:collapse}.invoice-box table td,.invoice-box table th{padding:2px 4px;vertical-align:top}.header-main{font-size:16px;font-weight:bold}.header-sub{font-size:14px;font-weight:bold}.info-table td{padding-bottom:3px}.items-table th,.items-table td{border:1px solid #000;padding:4px}.items-table th{text-align:center}.text-right{text-align:right}.text-center{text-align:center}.font-bold{font-weight:bold}.terbilang-box{padding:5px;font-style:italic}.signature-box{margin-top:40px}@media print{body{margin:0;padding:0}.main-header,.main-sidebar,.main-footer,.btn,.content-header{display:none!important}.content-wrapper,.content{padding:0!important;margin:0!important}.invoice{border:none!important;padding:0!important;box-shadow:none!important}}
     </style>
 
     {{-- Konten Faktur --}}
@@ -96,9 +31,7 @@ $subTotal = 0;
         {{-- Header --}}
         <table>
             <tr>
-                <td style="width: 60%;">
-                    <div class="header-main">FAKTUR SERVICE</div>
-                </td>
+                <td style="width: 60%;"><div class="header-main">FAKTUR SERVICE</div></td>
                 <td style="width: 40%;" class="text-right">
                     <div class="header-sub">SENTRAL YAMAHA LAMPUNG</div>
                     <div>JL. IKAN TENGGIRI NO. 24</div>
@@ -111,34 +44,32 @@ $subTotal = 0;
         {{-- Info Pelanggan & Kendaraan --}}
         <table style="width: 100%;">
             <tr>
-                {{-- Kolom Kiri --}}
                 <td style="width: 65%; vertical-align: top;">
                     <table class="info-table">
-                        <tr><td style="width: 18%;"><strong>Tanggal</strong></td><td>: {{ $dailyReport->reg_date ? \Carbon\Carbon::parse($dailyReport->reg_date)->format('d/m/Y') : '-' }}</td></tr>
-                        <tr><td><strong>No. Invoice</strong></td><td>: {{ $dailyReport->invoice_no ?? '-' }}</td></tr>
-                        <tr><td><strong>Order No.</strong></td><td>: {{ $dailyReport->work_order_no ?? '-' }}</td></tr>
+                        <tr><td style="width: 18%;"><strong>Tanggal</strong></td><td>: {{ $service->reg_date ? \Carbon\Carbon::parse($service->reg_date)->format('d/m/Y') : '-' }}</td></tr>
+                        <tr><td><strong>No. Invoice</strong></td><td>: {{ $service->invoice_no ?? '-' }}</td></tr>
+                        <tr><td><strong>Order No.</strong></td><td>: {{ $service->work_order_no ?? '-' }}</td></tr>
                         <tr><td colspan="2"><hr style="border-top: 1px dotted #000; margin: 3px 0;"></td></tr>
-                        <tr><td><strong>Nama</strong></td><td>: {{ $dailyReport->customer_name ?? '-' }}</td></tr>
+                        <tr><td><strong>Nama</strong></td><td>: {{ $service->customer_name ?? '-' }}</td></tr>
                         <tr><td><strong>Alamat</strong></td><td>: -</td></tr>
-                        <tr><td><strong>Mobile</strong></td><td>: {{ $dailyReport->customer_phone ?? '-' }}</td></tr>
+                        <tr><td><strong>Mobile</strong></td><td>: {{ $service->customer_phone ?? '-' }}</td></tr>
                         <tr><td colspan="2"><hr style="border-top: 1px dotted #000; margin: 3px 0;"></td></tr>
-                        <tr><td><strong>No. Rangka</strong></td><td>: {{ $dailyReport->mc_frame_no ?? '-' }}</td></tr>
+                        <tr><td><strong>No. Rangka</strong></td><td>: {{ $service->mc_frame_no ?? '-' }}</td></tr>
                         <tr><td><strong>No. Mesin</strong></td><td>: -</td></tr>
-                        <tr><td><strong>Tipe Motor</strong></td><td>: {{ $dailyReport->mc_model_name ?? '-' }}</td></tr>
+                        <tr><td><strong>Tipe Motor</strong></td><td>: {{ $service->mc_model_name ?? '-' }}</td></tr>
                     </table>
                 </td>
-                {{-- Kolom Kanan --}}
                 <td style="width: 35%; vertical-align: top;">
                     <table class="info-table">
-                        <tr><td style="width: 35%;"><strong>No. Polisi</strong></td><td>: {{ $dailyReport->plate_no ?? '-' }}</td></tr>
+                        <tr><td style="width: 35%;"><strong>No. Polisi</strong></td><td>: {{ $service->plate_no ?? '-' }}</td></tr>
                         <tr><td colspan="2">&nbsp;</td></tr>
                         <tr><td colspan="2">&nbsp;</td></tr>
                         <tr><td colspan="2"><hr style="border-top: 1px dotted #000; margin: 3px 0;"></td></tr>
-                        <tr><td><strong>Technician</strong></td><td>: {{ $dailyReport->technician_name ?? '-' }}</td></tr>
+                        <tr><td><strong>Technician</strong></td><td>: {{ $service->technician_name ?? '-' }}</td></tr>
                         <tr><td><strong>Members</strong></td><td>: -</td></tr>
                         <tr><td colspan="2">&nbsp;</td></tr>
                         <tr><td colspan="2"><hr style="border-top: 1px dotted #000; margin: 3px 0;"></td></tr>
-                        <tr><td><strong>YSS Code</strong></td><td>: {{ $dailyReport->yss ?? '-' }}</td></tr>
+                        <tr><td><strong>YSS Code</strong></td><td>: {{ $service->yss ?? '-' }}</td></tr>
                     </table>
                 </td>
             </tr>
@@ -181,13 +112,13 @@ $subTotal = 0;
             </tbody>
         </table>
 
-        {{-- Footer: Summary & Tanda Tangan --}}
+        {{-- Footer --}}
         <table style="margin-top: 10px;">
             <tr>
                 <td style="width: 60%; vertical-align: top;">
                     <div>
                         <span class="font-bold">Terbilang:</span>
-                        <div class="terbilang-box"># {{ trim(NumberHelper::terbilang($dailyReport->total_payment ?? 0)) }} Rupiah #</div>
+                        <div class="terbilang-box"># {{ trim(NumberHelper::terbilang($service->total_payment ?? 0)) }} Rupiah #</div>
                     </div>
                     <table class="signature-box" style="width: 100%;">
                         <tr>
@@ -208,7 +139,7 @@ $subTotal = 0;
                         </tr>
                         <tr>
                             <td class="font-bold">Discount:</td>
-                            <td class="text-right">Rp {{ number_format($dailyReport->benefit_amount ?? 0, 0, ',', '.') }}</td>
+                            <td class="text-right">Rp {{ number_format($service->benefit_amount ?? 0, 0, ',', '.') }}</td>
                         </tr>
                         <tr>
                             <td class="font-bold">Pajak PPN (11%):</td>
@@ -216,7 +147,7 @@ $subTotal = 0;
                         </tr>
                         <tr>
                             <td class="font-bold">Grand Total:</td>
-                            <td class="text-right font-bold">Rp {{ number_format($dailyReport->total_payment ?? 0, 0, ',', '.') }}</td>
+                            <td class="text-right font-bold">Rp {{ number_format($service->total_payment ?? 0, 0, ',', '.') }}</td>
                         </tr>
                     </table>
                 </td>
