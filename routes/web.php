@@ -63,7 +63,7 @@
 
         // === TRANSAKSI GUDANG ===
         Route::resource('purchase-orders', PurchaseOrderController::class)->except(['edit', 'update', 'destroy']);
-        Route::get('purchase-orders/{purchaseOrder}/print', [PurchaseOrderController::class, 'print'])->name('purchase-orders.print');
+        Route::get('purchase-orders/{purchaseOrder}/pdf', [PurchaseOrderController::class, 'downloadPDF'])->name('purchase-orders.pdf');
         Route::post('purchase-orders/{purchase_order}/approve', [PurchaseOrderController::class, 'approve'])->name('purchase-orders.approve');
         Route::post('purchase-orders/{purchase_order}/reject', [PurchaseOrderController::class, 'reject'])->name('purchase-orders.reject');
         Route::get('purchase_orders/{purchaseOrder}/details', [PurchaseOrderController::class, 'getPoDetailsApi'])->name('purchase_orders.details_api');
@@ -168,11 +168,11 @@
 
 
         // === API (untuk AJAX) ===
-        Route::get('api/gudangs/{gudang}/parts', [PenjualanController::class, 'getPartsByGudang'])->name('api.gudang.parts');
+        Route::get('api/lokasi/{lokasi}/parts-with-stock', [StockMutationController::class, 'getPartsWithStock'])->name('api.gudang.parts-with-stock');     
+        Route::get('api/lokasi/{lokasi}/parts', [PenjualanController::class, 'getPartsByGudang'])->name('api.gudang.parts');
         Route::get('api/parts/{part}/stock', [PenjualanController::class, 'getPartStockDetails'])->name('api.part.stock');
-        Route::get('api/gudangs/{gudang}/raks', [StockMutationController::class, 'getRaksByGudang'])->name('api.gudang.raks');
-        Route::get('api/gudangs/{gudang}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
-        Route::get('/api/gudangs/{gudang}/parts-with-stock', [StockMutationController::class, 'getPartsWithStock'])->name('api.gudang.parts-with-stock');
+        Route::get('api/lokasi/{lokasi}/raks', [StockMutationController::class, 'getRaksByGudang'])->name('api.gudang.raks');
+        Route::get('api/lokasi/{lokasi}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
         Route::get('api/receivings/{receiving}/failed-items', [PurchaseReturnController::class, 'getFailedItems'])->name('api.receivings.failed-items');
         Route::get('api/penjualans/{penjualan}/returnable-items', [SalesReturnController::class, 'getReturnableItems'])->name('api.penjualans.returnable-items');
         Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');

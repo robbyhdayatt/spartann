@@ -16,9 +16,6 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        /**
-         * Super Admin memiliki akses tak terbatas ke semua fitur.
-         */
         Gate::before(fn(User $user) => $user->hasRole('SA') ? true : null);
 
         // =================================================================
@@ -28,10 +25,10 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('is-pic', fn(User $user) => $user->hasRole('PIC'));
         Gate::define('is-manager', fn(User $user) => $user->hasRole('MA'));
 
-        // Cek apakah pengguna adalah staf di Gudang Pusat
-        Gate::define('is-pusat-staff', fn(User $user) => in_array($user->jabatan->singkatan, ['KG', 'AG', 'SLS', 'KSR']));
-        // Cek apakah pengguna adalah staf di Dealer
-        Gate::define('is-dealer-staff', fn(User $user) => in_array($user->jabatan->singkatan, ['KC', 'AD', 'CS']));
+        // Staf operasional di Gudang Pusat
+        Gate::define('is-pusat-staff', fn(User $user) => $user->hasRole(['KG', 'AG']));
+        // Staf operasional di Dealer
+        Gate::define('is-dealer-staff', fn(User $user) => $user->hasRole(['KC', 'AD']));
 
 
         // =================================================================
@@ -39,15 +36,15 @@ class AuthServiceProvider extends ServiceProvider
         // =================================================================
 
         // --- PENGATURAN & MASTER DATA ---
-        Gate::define('manage-users', fn(User $user) => $user->hasRole('SA')); // Hanya Super Admin
+        Gate::define('manage-users', fn(User $user) => $user->hasRole('SA'));
         Gate::define('manage-locations', fn(User $user) => $user->hasRole(['SA', 'PIC']));
         Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
 
         // --- PEMBELIAN (HANYA DI PUSAT) ---
-        Gate::define('access-po-module', fn(User $user) => $user->hasRole(['KG', 'AG']));
+        Gate::define('access-po-module', fn(User $user) => $user->hasRole('AG'));
         Gate::define('create-po', fn(User $user) => $user->hasRole('AG'));
         Gate::define('approve-po', function (User $user, $purchaseOrder) {
-            return $user->hasRole('KG') && $user->lokasi->tipe === 'PUSAT' && $user->gudang_id === $purchaseOrder->gudang_id;
+            return $user->hasRole('KG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT' && $user->gudang_id === $purchaseOrder->gudang_id;
         });
 
         // --- OPERASIONAL GUDANG & DEALER ---
@@ -55,12 +52,9 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('create-stock-transaction', fn(User $user) => $user->hasRole(['AG', 'AD']));
         Gate::define('approve-stock-transaction', function (User $user, $transaction) {
             $lokasiId = $transaction->gudang_id ?? $transaction->gudang_asal_id;
-            // Kepala Gudang hanya bisa approve transaksi di lokasinya (Gudang Pusat)
-            if ($user->hasRole('KG')) {
-                return $user->gudang_id === $lokasiId;
-            }
-            // Kepala Cabang hanya bisa approve transaksi di lokasinya (Dealer)
-            if ($user->hasRole('KC')) {
+            if (!$user->gudang_id) return false;
+
+            if ($user->hasRole('KG') || $user->hasRole('KC')) {
                 return $user->gudang_id === $lokasiId;
             }
             return false;
@@ -72,9 +66,8 @@ class AuthServiceProvider extends ServiceProvider
         // --- LAPORAN & MARKETING ---
         Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC']));
         Gate::define('manage-marketing', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
-
+        
         // --- AKSES KHUSUS KEPALA CABANG (READ-ONLY) ---
-        // Gate ini akan digunakan untuk menyembunyikan tombol aksi di view.
         Gate::define('is-read-only', fn(User $user) => $user->hasRole('KC'));
     }
 }

@@ -1,4 +1,3 @@
-{{-- resources/views/dashboards/_sales.blade.php --}}
 <div class="row">
     <div class="col-md-12">
         <div class="callout callout-info">
@@ -15,7 +14,7 @@
             <span class="info-box-icon bg-primary"><i class="fas fa-flag-checkered"></i></span>
             <div class="info-box-content">
                 <span class="info-box-text">Target Bulan Ini</span>
-                <span class="info-box-number">Rp {{ number_format($targetAmount, 0, ',', '.') }}</span>
+                <span class="info-box-number">Rp {{ number_format($data['targetAmount'], 0, ',', '.') }}</span>
             </div>
         </div>
     </div>
@@ -25,7 +24,7 @@
             <span class="info-box-icon bg-success"><i class="fas fa-trophy"></i></span>
             <div class="info-box-content">
                 <span class="info-box-text">Penjualan Tercapai</span>
-                <span class="info-box-number">Rp {{ number_format($achievedAmount, 0, ',', '.') }}</span>
+                <span class="info-box-number">Rp {{ number_format($data['achievedAmount'], 0, ',', '.') }}</span>
             </div>
         </div>
     </div>
@@ -36,8 +35,8 @@
             <div class="info-box-content">
                 <span class="info-box-text">Pencapaian Target</span>
                  <div class="progress" style="height: 20px;">
-                    <div class="progress-bar" role="progressbar" style="width: {{ $achievementPercentage }}%;" aria-valuenow="{{ $achievementPercentage }}" aria-valuemin="0" aria-valuemax="100">
-                        <strong>{{ number_format($achievementPercentage, 1) }}%</strong>
+                    <div class="progress-bar" role="progressbar" style="width: {{ $data['achievementPercentage'] }}%;" aria-valuenow="{{ $data['achievementPercentage'] }}" aria-valuemin="0" aria-valuemax="100">
+                        <strong>{{ number_format($data['achievementPercentage'], 1) }}%</strong>
                     </div>
                 </div>
             </div>
@@ -49,7 +48,7 @@
             <span class="info-box-icon"><i class="fas fa-gift"></i></span>
             <div class="info-box-content">
                 <span class="info-box-text">Perolehan Insentif</span>
-                <span class="info-box-number">Rp {{ number_format($incentiveAmount, 0, ',', '.') }}</span>
+                <span class="info-box-number">Rp {{ number_format($data['incentiveAmount'], 0, ',', '.') }}</span>
             </div>
         </div>
     </div>
@@ -73,7 +72,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($recentSales as $sale)
+                        @forelse($data['recentSales'] as $sale)
                             <tr>
                                 <td>{{ $sale->nomor_invoice }}</td>
                                 <td>{{ \Carbon\Carbon::parse($sale->tanggal_jual)->format('d M Y') }}</td>

@@ -14,23 +14,11 @@
             <h3 class="card-title">No. Penerimaan: {{ $receiving->nomor_penerimaan }}</h3>
         </div>
         <div class="card-body">
-            {{-- BLOK UNTUK MENAMPILKAN SEMUA JENIS ERROR --}}
             @if ($errors->any())
-                <div class="alert alert-danger">
-                    <ul class="mb-0">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
+                <div class="alert alert-danger"><ul class="mb-0">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
             @endif
             @if(session('error'))
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ session('error') }}
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+                <div class="alert alert-danger">{{ session('error') }}</div>
             @endif
 
             <p>Pilih rak tujuan untuk setiap item yang telah lolos QC.</p>

@@ -2,6 +2,9 @@
 
 @section('title', 'Catat Penerimaan Barang')
 
+{{-- PERBAIKAN 1: Menambahkan plugin Select2 --}}
+@section('plugins.Select2', true)
+
 @section('content_header')
     <h1>Catat Penerimaan Barang</h1>
 @stop
@@ -23,12 +26,13 @@
             <div class="row">
                 <div class="col-md-6 form-group">
                     <label>Pilih Purchase Order (PO)</label>
-                    {{-- ID Select diganti menjadi po-select agar sesuai dengan JS Anda --}}
                     <select id="po-select" name="purchase_order_id" class="form-control select2" required>
                         <option value="" disabled selected>--- Pilih PO yang sudah disetujui ---</option>
-                        @foreach($purchaseOrders as $po)
+                        @forelse($purchaseOrders as $po)
                         <option value="{{ $po->id }}">{{ $po->nomor_po }} - {{ $po->supplier->nama_supplier }}</option>
-                        @endforeach
+                        @empty
+                        <option value="" disabled>Tidak ada PO yang siap diterima di lokasi Anda.</option>
+                        @endforelse
                     </select>
                 </div>
                 <div class="col-md-6 form-group">
@@ -44,7 +48,6 @@
             <h5 class="mt-4">Item Diterima</h5>
             <p class="text-muted">Masukkan jumlah barang yang diterima secara fisik. Sistem akan otomatis menampilkan item yang kuantitasnya belum terpenuhi.</p>
 
-            {{-- PERUBAHAN 1: Menyesuaikan Header Tabel --}}
             <table class="table table-bordered">
                 <thead>
                     <tr>
@@ -55,9 +58,7 @@
                         <th style="width: 15%">Qty Diterima Saat Ini</th>
                     </tr>
                 </thead>
-                {{-- ID Tbody disesuaikan --}}
                 <tbody id="receiving-items-table">
-                    {{-- Baris akan diisi oleh JavaScript --}}
                     <tr>
                         <td colspan="5" class="text-center text-muted">Pilih PO untuk menampilkan item.</td>
                     </tr>
@@ -72,9 +73,9 @@
 </div>
 @stop
 
+{{-- PERBAIKAN 2: Menambahkan blok CSS kustom --}}
 @push('css')
 <style>
-    /* Menyesuaikan tinggi Select2 agar sama dengan input form lainnya */
     .select2-container .select2-selection--single {
         height: calc(2.25rem + 2px) !important;
     }
@@ -89,11 +90,10 @@
 </style>
 @endpush
 
+
 @section('js')
-{{-- PERUBAHAN 2: Menyesuaikan Blok JavaScript --}}
 <script>
 $(document).ready(function() {
-    // Inisialisasi Select2
     $('.select2').select2({
         placeholder: "--- Pilih PO yang sudah disetujui ---",
         allowClear: true
@@ -102,9 +102,7 @@ $(document).ready(function() {
     $('#po-select').on('change', function() {
         let poId = $(this).val();
         let tableBody = $('#receiving-items-table');
-
-        // Menggunakan route yang telah kita buat sebelumnya
-        let url = "{{ route('admin.purchase_orders.details_api', ['purchaseOrder' => ':poId']) }}";
+        let url = "{{ route('admin.api.po.details', ['purchaseOrder' => ':poId']) }}";
         url = url.replace(':poId', poId);
 
         tableBody.html('<tr><td colspan="5" class="text-center"><i class="fa fa-spinner fa-spin"></i> Memuat detail item...</td></tr>');
@@ -114,31 +112,30 @@ $(document).ready(function() {
                 url: url,
                 type: 'GET',
                 dataType: 'json',
-                success: function(details) {
+                success: function(response) {
                     tableBody.empty();
+                    let details = response.details;
                     if(details && details.length > 0) {
                         let hasItemsToShow = false;
                         details.forEach(function(item) {
-                            // HANYA TAMPILKAN JIKA MASIH ADA SISA BARANG
-                            if (item.qty_sisa > 0) {
+                            let qty_sisa = item.qty_pesan - item.qty_diterima;
+                            if (qty_sisa > 0) {
                                 hasItemsToShow = true;
                                 let row = `
                                     <tr>
                                         <td>
-                                            ${item.nama_part} (${item.kode_part})
-                                            {{-- Nama input disesuaikan dengan logika store Anda: items[part_id][...] --}}
-                                            <input type="hidden" name="items[${item.part_id}][po_detail_id]" value="${item.po_detail_id}">
+                                            ${item.part.nama_part} (${item.part.kode_part})
                                             <input type="hidden" name="items[${item.part_id}][part_id]" value="${item.part_id}">
                                         </td>
                                         <td><input type="text" class="form-control" value="${item.qty_pesan}" readonly></td>
-                                        <td><input type="text" class="form-control" value="${item.qty_sudah_diterima}" readonly></td>
-                                        <td><input type="text" class="form-control" value="${item.qty_sisa}" readonly></td>
+                                        <td><input type="text" class="form-control" value="${item.qty_diterima}" readonly></td>
+                                        <td><input type="text" class="form-control" value="${qty_sisa}" readonly></td>
                                         <td>
                                             <input type="number" name="items[${item.part_id}][qty_terima]"
                                                    class="form-control"
                                                    min="0"
-                                                   max="${item.qty_sisa}"  {{-- Atribut max untuk validasi --}}
-                                                   value="${item.qty_sisa}" {{-- Default value adalah sisa barang --}}
+                                                   max="${qty_sisa}"
+                                                   value="${qty_sisa}"
                                                    required>
                                         </td>
                                     </tr>
@@ -148,16 +145,14 @@ $(document).ready(function() {
                         });
 
                         if (!hasItemsToShow) {
-                           tableBody.html('<tr><td colspan="5" class="text-center text-success">Semua item dari PO ini sudah diterima.</td></tr>');
+                           tableBody.html('<tr><td colspan="5" class="text-center text-success">Semua item dari PO ini sudah diterima sepenuhnya.</td></tr>');
                         }
-
                     } else {
                         tableBody.html('<tr><td colspan="5" class="text-center text-danger">Tidak ada detail item pada PO ini.</td></tr>');
                     }
                 },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    console.error("AJAX Error:", textStatus, errorThrown, jqXHR.responseText);
-                    tableBody.html('<tr><td colspan="5" class="text-center text-danger">Gagal memuat data. Periksa console browser.</td></tr>');
+                error: function() {
+                    tableBody.html('<tr><td colspan="5" class="text-center text-danger">Gagal memuat data.</td></tr>');
                 }
             });
         } else {

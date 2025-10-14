@@ -3,37 +3,37 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Gudang;
+use App\Models\Lokasi; // DIUBAH: Menggunakan model Lokasi
 use App\Models\Rak;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 
 class RakController extends Controller
 {
     public function index()
     {
-        // Ambil data rak dengan relasi gudang (Eager Loading)
-        $raks = Rak::with('gudang')->latest()->get();
-        // Ambil data gudang yang aktif untuk form dropdown
-        $gudangs = Gudang::where('is_active', true)->orderBy('nama_gudang')->get();
+        $this->authorize('manage-locations'); // Menggunakan gate yang sama dengan lokasi
 
-        return view('admin.raks.index', compact('raks', 'gudangs'));
+        // PERUBAHAN: Mengambil data rak dengan relasi 'lokasi'
+        $raks = Rak::with('lokasi')->latest()->get();
+        
+        // PERUBAHAN: Mengambil data lokasi untuk dropdown form
+        $lokasi = Lokasi::where('is_active', true)->orderBy('nama_gudang')->get();
+
+        return view('admin.raks.index', compact('raks', 'lokasi'));
     }
 
     public function store(Request $request)
     {
-        $this->authorize('is-super-admin');
+        $this->authorize('manage-locations');
         $validated = $request->validate([
-            'gudang_id' => 'required|exists:gudangs,id',
+            'gudang_id' => 'required|exists:lokasi,id', // PERUBAHAN: validasi ke tabel lokasi
             'nama_rak' => 'required|string|max:100',
-            'tipe_rak' => 'required|in:PENYIMPANAN,KARANTINA', // Validasi baru
+            'tipe_rak' => 'required|in:PENYIMPANAN,KARANTINA',
             'kode_rak' => [
-                'required',
-                'string',
-                'max:20',
-                Rule::unique('raks')->where(function ($query) use ($request) {
-                    return $query->where('gudang_id', $request->gudang_id);
-                }),
+                'required', 'string', 'max:20',
+                Rule::unique('raks')->where(fn ($query) => $query->where('gudang_id', $request->gudang_id)),
             ],
         ]);
 
@@ -44,18 +44,14 @@ class RakController extends Controller
 
     public function update(Request $request, Rak $rak)
     {
-        $this->authorize('is-super-admin');
+        $this->authorize('manage-locations');
         $validated = $request->validate([
-            'gudang_id' => 'required|exists:gudangs,id',
+            'gudang_id' => 'required|exists:lokasi,id', // PERUBAHAN: validasi ke tabel lokasi
             'nama_rak' => 'required|string|max:100',
-            'tipe_rak' => 'required|in:PENYIMPANAN,KARANTINA', // Validasi baru
+            'tipe_rak' => 'required|in:PENYIMPANAN,KARANTINA',
             'kode_rak' => [
-                'required',
-                'string',
-                'max:20',
-                Rule::unique('raks')->where(function ($query) use ($request) {
-                    return $query->where('gudang_id', $request->gudang_id);
-                })->ignore($rak->id),
+                'required', 'string', 'max:20',
+                Rule::unique('raks')->where(fn ($query) => $query->where('gudang_id', $request->gudang_id))->ignore($rak->id),
             ],
             'is_active' => 'required|boolean',
         ]);
@@ -67,10 +63,10 @@ class RakController extends Controller
 
     public function destroy(Rak $rak)
     {
-        $this->authorize('is-super-admin');
+        $this->authorize('manage-locations');
 
-        // Tambahkan validasi: jangan hapus rak jika masih ada stok
-        if ($rak->inventories()->where('quantity', '>', 0)->exists()) {
+        // Validasi ini belum ada di kode Anda, tapi saya tambahkan untuk keamanan
+        if ($rak->inventoryBatches()->where('quantity', '>', 0)->exists()) {
             return redirect()->route('admin.raks.index')->with('error', 'Rak tidak dapat dihapus karena masih ada stok di dalamnya.');
         }
 

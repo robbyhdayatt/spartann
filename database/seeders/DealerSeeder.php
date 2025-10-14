@@ -3,16 +3,17 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\Dealer; // PERBAIKAN: Baris ini ditambahkan
+use App\Models\Dealer;
 use Illuminate\Support\Facades\DB;
 
 class DealerSeeder extends Seeder
 {
     public function run()
     {
+        // Mengosongkan tabel dealers sebelum diisi
         DB::table('dealers')->truncate();
 
-        $dealers = [
+        $dealersData = [
             ['kode_lks' => '9HL001', 'subyek' => 'LTI TANJUNG BINTANG', 'grup' => 'LT', 'singkatan' => 'TJB', 'kota' => 'Tanjung Bintang', 'nonaktif' => 0],
             ['kode_lks' => '9HL002', 'subyek' => 'LTI LIWA', 'grup' => 'LT', 'singkatan' => 'LWA', 'kota' => 'Liwa', 'nonaktif' => 0],
             ['kode_lks' => '9HL002A', 'subyek' => 'LTI KRUI', 'grup' => 'LT', 'singkatan' => 'KRI', 'kota' => 'Krui', 'nonaktif' => 0],
@@ -62,7 +63,7 @@ class DealerSeeder extends Seeder
             ['kode_lks' => 'UKUA001', 'subyek' => 'LTI BLAMBANGAN UMPU', 'grup' => 'LT', 'singkatan' => 'BMP', 'kota' => 'Blambangan Umpu', 'nonaktif' => 0],
         ];
 
-        foreach ($dealers as $dealer) {
+        foreach ($dealersData as $dealer) {
             if (strtoupper($dealer['grup']) === 'LT') {
                 Dealer::create([
                     'kode_dealer' => $dealer['kode_lks'],

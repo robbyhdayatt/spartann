@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Services\DiscountService;
+use PDF; // Pastikan package barryvdh/laravel-dompdf sudah terinstal
 
 class PurchaseOrderController extends Controller
 {
@@ -182,5 +183,18 @@ class PurchaseOrderController extends Controller
             ];
         });
         return response()->json($details);
+    }
+
+    public function downloadPDF(PurchaseOrder $purchaseOrder)
+    {
+        $this->authorize('access-po-module'); // Pastikan pengguna punya hak akses
+        
+        $purchaseOrder->load(['supplier', 'lokasi', 'details.part']);
+        $creatorName = User::find($purchaseOrder->created_by)->nama ?? 'N/A';
+
+        $pdf = PDF::loadView('admin.purchase_orders.print', compact('purchaseOrder', 'creatorName'));
+
+        $fileName = 'PO-' . $purchaseOrder->nomor_po . '.pdf';
+        return $pdf->stream($fileName);
     }
 }

@@ -38,7 +38,7 @@
         </div>
         <div class="col-sm-4 invoice-col">
             <b>Nomor PO:</b> {{ $purchaseOrder->nomor_po }}<br>
-            <b>Tujuan Gudang:</b> {{ $purchaseOrder->gudang->nama_gudang }}<br>
+            <b>Tujuan Gudang:</b> {{ $purchaseOrder->lokasi->nama_gudang }}<br>
             <b>Status:</b> <span class="badge {{ $purchaseOrder->status_class }}">{{ $purchaseOrder->status_badge }}</span><br>
             <b>Dibuat Oleh:</b> {{ $purchaseOrder->createdBy->nama ?? 'Tidak Ditemukan' }}
         </div>
@@ -116,23 +116,21 @@
     {{-- Baris Tombol Aksi --}}
     <div class="row no-print">
         <div class="col-12">
-            {{-- Tombol Approve dan Reject --}}
+            <a href="{{ route('admin.purchase-orders.index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kembali</a>
+            <a href="{{ route('admin.purchase-orders.pdf', $purchaseOrder) }}" class="btn btn-primary float-right"><i class="fas fa-download"></i> Generate PDF</a>
+
+            {{-- Tombol Approve dan Reject tetap di dalam kondisi --}}
             @if($purchaseOrder->status === 'PENDING_APPROVAL')
                 @can('approve-po', $purchaseOrder)
-                <form action="{{ route('admin.purchase-orders.approve', $purchaseOrder) }}" method="POST" class="d-inline">
-                    @csrf
-                    <button type="submit" class="btn btn-success float-right"><i class="far fa-credit-card"></i> Setujui</button>
-                </form>
                 <button type="button" class="btn btn-danger float-right" style="margin-right: 5px;" data-toggle="modal" data-target="#rejectModal">
                     <i class="fas fa-times"></i> Tolak
                 </button>
+                <form action="{{ route('admin.purchase-orders.approve', $purchaseOrder) }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-success float-right" style="margin-right: 5px;"><i class="far fa-credit-card"></i> Setujui</button>
+                </form>
                 @endcan
             @endif
-
-            {{-- !! TAMBAHKAN TOMBOL INI !! --}}
-            <a href="{{ route('admin.purchase-orders.pdf', $purchaseOrder) }}" class="btn btn-primary"><i class="fas fa-file-pdf"></i> Ekspor PDF</a>
-
-            <a href="{{ route('admin.purchase-orders.index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kembali</a>
         </div>
     </div>
 </div>

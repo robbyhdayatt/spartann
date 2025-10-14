@@ -361,7 +361,12 @@ return [
             'can'  => 'is-pusat-staff',
             'submenu' => [
                 ['text' => 'Purchase Order (PO)', 'route' => 'admin.purchase-orders.index', 'can' => 'access-po-module'],
+                
+                // PERBAIKAN: Hak akses disederhanakan di bawah ini
                 ['text' => 'Penerimaan Barang', 'route' => 'admin.receivings.index', 'can' => 'perform-warehouse-ops'],
+                ['text' => 'Quality Control (QC)', 'route' => 'admin.qc.index', 'can' => 'perform-warehouse-ops'],
+                ['text' => 'Penyimpanan (Putaway)', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'],
+                
                 ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index'],
                 ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index'],
                 ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index'],

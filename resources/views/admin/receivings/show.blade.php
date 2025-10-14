@@ -20,16 +20,16 @@
                     <div class="row">
                         <div class="col-md-4">
                             <strong>Nomor PO:</strong><br>
-                            <a
-                                href="{{ route('admin.purchase-orders.show', $receiving->purchase_order_id) }}">{{ $receiving->purchaseOrder->nomor_po }}</a>
+                            <a href="{{ route('admin.purchase-orders.show', $receiving->purchase_order_id) }}">{{ $receiving->purchaseOrder->nomor_po }}</a>
                         </div>
                         <div class="col-md-4">
                             <strong>Supplier:</strong><br>
                             {{ $receiving->purchaseOrder->supplier->nama_supplier }}
                         </div>
                         <div class="col-md-4">
-                            <strong>Gudang:</strong><br>
-                            {{ $receiving->gudang->nama_gudang }}
+                            <strong>Lokasi Tujuan:</strong><br>
+                            {{-- PERBAIKAN: Menggunakan relasi 'lokasi' --}}
+                            {{ $receiving->lokasi->nama_gudang }}
                         </div>
                     </div>
                     <hr>
@@ -42,10 +42,36 @@
                 </div>
             </div>
 
+            {{-- Detail Item yang Diterima --}}
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">Riwayat Penyimpanan (Putaway)</h3>
+                <div class="card-header"><h3 class="card-title">Item Diterima</h3></div>
+                <div class="card-body p-0">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Part</th>
+                                <th>Kode Part</th>
+                                <th class="text-center">Jumlah Diterima</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($receiving->details as $detail)
+                                <tr>
+                                    <td>{{ $detail->part->nama_part }}</td>
+                                    <td>{{ $detail->part->kode_part }}</td>
+                                    <td class="text-center">{{ $detail->qty_terima }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="3" class="text-center">Tidak ada item.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
+            </div>
+
+            {{-- Riwayat Putaway --}}
+            <div class="card">
+                <div class="card-header"><h3 class="card-title">Riwayat Penyimpanan (Putaway)</h3></div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-striped">
@@ -75,14 +101,11 @@
                     </div>
                 </div>
             </div>
-
         </div>
 
         <div class="col-md-4">
             <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">Status Proses</h3>
-                </div>
+                <div class="card-header"><h3 class="card-title">Status Proses</h3></div>
                 <div class="card-body">
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">

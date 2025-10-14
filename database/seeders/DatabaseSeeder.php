@@ -16,14 +16,14 @@ class DatabaseSeeder extends Seeder
         $this->call([
             // Urutan ini penting
             JabatanSeeder::class,
-            GudangSeeder::class, // Ini akan membuat 1 Gudang Pusat di tabel 'lokasi'
-            DealerSeeder::class, // Ini akan mengisi tabel 'dealers'
+            LokasiSeeder::class, // LokasiSeeder harus dijalankan sebelum UserSeeder
             RakSeeder::class,    // RakSeeder sekarang akan berjalan setelah lokasi dibuat
             BrandSeeder::class,
             CategorySeeder::class,
             SupplierSeeder::class,
             KonsumenSeeder::class,
-            UserSeeder::class, // Pastikan UserSeeder juga sudah disesuaikan jika perlu
+            UserSeeder::class, // Pastikan UserSeeder juga sudah disesuaikan jika perlu 
+            DealerSeeder::class, // Ini akan mengisi tabel ?dealers?
         ]);
     }
 }

@@ -1,7 +1,6 @@
 @extends('adminlte::page')
 
 @section('title', 'Buat Permintaan Mutasi')
-
 @section('plugins.Select2', true)
 
 @section('content_header')
@@ -13,61 +12,51 @@
     <form action="{{ route('admin.stock-mutations.store') }}" method="POST">
         @csrf
         <div class="card-body">
-            @if(session('error'))
-                <div class="alert alert-danger">{{ session('error') }}</div>
-            @endif
+            @if(session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
             @if ($errors->any())
-                <div class="alert alert-danger">
-                    <ul>
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
+                <div class="alert alert-danger"><ul class="mb-0">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
             @endif
 
             <div class="row">
                 <div class="col-md-4 form-group">
-                    <label>Gudang Asal</label>
-                    @php
-                        $user = Auth::user();
-                        $isGudangSpecific = !empty($user->gudang_id) && $gudangsAsal->count() === 1;
-                    @endphp
-
-                    @if ($isGudangSpecific)
-                        <input type="text" class="form-control" value="{{ $user->gudang->nama_gudang }}" readonly>
-                        <input type="hidden" id="gudang_asal_id" name="gudang_asal_id" value="{{ $user->gudang_id }}">
-                    @else
+                    <label>Lokasi Asal</label>
+                    {{-- PERBAIKAN: Logika untuk menampilkan dropdown atau input readonly --}}
+                    @if($lokasiAsal->count() > 1)
                         <select name="gudang_asal_id" id="gudang_asal_id" class="form-control select2" required>
-                            <option value="" selected>Pilih Gudang Asal</option>
-                            @foreach ($gudangsAsal as $gudang)
-                                <option value="{{ $gudang->id }}" {{ old('gudang_asal_id') == $gudang->id ? 'selected' : '' }}>{{ $gudang->nama_gudang }}</option>
+                            <option value="" selected>Pilih Lokasi Asal</option>
+                            @foreach ($lokasiAsal as $lokasi)
+                                <option value="{{ $lokasi->id }}" {{ old('gudang_asal_id') == $lokasi->id ? 'selected' : '' }}>
+                                    {{ $lokasi->nama_gudang }}
+                                </option>
                             @endforeach
                         </select>
+                    @else
+                        <input type="text" class="form-control" value="{{ $lokasiAsal->first()->nama_gudang }}" readonly>
+                        <input type="hidden" id="gudang_asal_id" name="gudang_asal_id" value="{{ $lokasiAsal->first()->id }}">
                     @endif
                 </div>
 
                 <div class="col-md-4 form-group">
                     <label>Part yang akan dimutasi</label>
                     <select name="part_id" id="part_id" class="form-control select2" required disabled>
-                        <option value="" selected>Pilih Gudang Asal Dahulu</option>
+                        <option value="">Pilih Lokasi Asal Dahulu</option>
                     </select>
                 </div>
-
                 <div class="col-md-4 form-group">
                     <label>Jumlah</label>
                     <input type="number" id="jumlah" name="jumlah" class="form-control" placeholder="Jumlah Mutasi" required min="1" value="{{ old('jumlah') }}">
                     <small id="stock-info" class="form-text text-muted"></small>
                 </div>
             </div>
-
             <div class="row">
                 <div class="col-md-4 form-group">
-                    <label>Gudang Tujuan</label>
+                    <label>Lokasi Tujuan</label>
                     <select name="gudang_tujuan_id" id="gudang_tujuan_id" class="form-control select2" required>
-                        <option value="" disabled selected>Pilih Gudang Tujuan</option>
-                        @foreach ($gudangsTujuan as $gudang)
-                            <option value="{{ $gudang->id }}" {{ old('gudang_tujuan_id') == $gudang->id ? 'selected' : '' }}>{{ $gudang->nama_gudang }}</option>
+                        <option value="" disabled selected>Pilih Lokasi Tujuan</option>
+                        @foreach ($lokasiTujuan as $lokasi)
+                            <option value="{{ $lokasi->id }}" {{ old('gudang_tujuan_id') == $lokasi->id ? 'selected' : '' }}>
+                                {{ $lokasi->nama_gudang }}
+                            </option>
                         @endforeach
                     </select>
                 </div>
@@ -102,17 +91,15 @@ $(document).ready(function() {
         jumlahInput.removeAttr('max');
 
         if (!gudangId) {
-            partSelect.html('<option value="">Pilih Gudang Asal Dahulu</option>');
+            partSelect.html('<option value="">Pilih Lokasi Asal Dahulu</option>');
             return;
         }
 
-        const url = "{{ url('admin/api/gudangs') }}/" + gudangId + "/parts-with-stock";
+        const url = "{{ url('admin/api/lokasi') }}/" + gudangId + "/parts-with-stock";
         $.getJSON(url, function(parts) {
             partSelect.prop('disabled', false).html('<option value="">Pilih Part</option>');
             if (parts.length > 0) {
-                parts.forEach(function(part) {
-                    partSelect.append(new Option(`${part.nama_part} (${part.kode_part})`, part.id));
-                });
+                parts.forEach(part => partSelect.append(new Option(`${part.nama_part} (${part.kode_part})`, part.id)));
             } else {
                 partSelect.html('<option value="">Tidak ada part tersedia</option>');
             }
@@ -132,21 +119,16 @@ $(document).ready(function() {
 
         const url = `{{ route('admin.api.part.stock-details') }}?gudang_id=${gudangId}&part_id=${partId}`;
         $.getJSON(url, function(data) {
+            stockInfo.text(`Stok tersedia: ${data.total_stock || 0}`);
             if (data.total_stock) {
-                stockInfo.text(`Stok tersedia: ${data.total_stock}`);
                 jumlahInput.attr('max', data.total_stock);
-            } else {
-                stockInfo.text('Stok tidak ditemukan.');
             }
-        }).fail(function() {
-            stockInfo.text('Gagal memuat info stok.');
-        });
+        }).fail(() => stockInfo.text('Gagal memuat info stok.'));
     }
 
     gudangAsalSelect.on('change', fetchParts);
     partSelect.on('change', fetchStock);
-
-    // Jika ada gudang asal yang sudah terpilih saat halaman dimuat
+    
     if (gudangAsalSelect.val()) {
         fetchParts();
     }
