@@ -11,12 +11,7 @@ class Penjualan extends Model
     use HasFactory;
     protected $guarded = ['id'];
 
-    /**
-     * Tambahkan properti casts ini untuk menangani tanggal secara otomatis.
-     */
-    protected $casts = [
-        'tanggal_jual' => 'date',
-    ];
+    protected $casts = [ 'tanggal_jual' => 'date', ];
 
     public function details()
     {
@@ -28,9 +23,9 @@ class Penjualan extends Model
         return $this->belongsTo(Konsumen::class);
     }
 
-    public function gudang()
+    public function lokasi()
     {
-        return $this->belongsTo(Gudang::class);
+        return $this->belongsTo(Lokasi::class, 'gudang_id');
     }
 
     public function sales()
@@ -38,24 +33,15 @@ class Penjualan extends Model
         return $this->belongsTo(User::class, 'sales_id');
     }
 
-    public static function generateNomorFaktur() // Nama fungsi diubah
+    public static function generateNomorFaktur()
     {
         $prefix = 'INV/' . date('Ym') . '/';
-
-        // PERBAIKAN: Menggunakan kolom 'nomor_faktur'
         $lastSale = DB::table('penjualans')
-                      ->where('nomor_faktur', 'like', $prefix . '%')
-                      ->orderBy('nomor_faktur', 'desc')
-                      ->first();
+                        ->where('nomor_faktur', 'like', $prefix . '%')
+                        ->orderBy('nomor_faktur', 'desc')
+                        ->first();
 
-        if ($lastSale) {
-            // PERBAIKAN: Mengambil dari kolom 'nomor_faktur'
-            $lastNumber = (int) substr($lastSale->nomor_faktur, -4);
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
-        }
-
+        $newNumber = $lastSale ? ((int) substr($lastSale->nomor_faktur, -4)) + 1 : 1;
         return $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
     }
 

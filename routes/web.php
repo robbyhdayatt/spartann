@@ -5,7 +5,7 @@
     use Illuminate\Support\Facades\Auth;
     use App\Http\Controllers\Admin\BrandController;
     use App\Http\Controllers\Admin\CategoryController;
-    use App\Http\Controllers\Admin\GudangController;
+    use App\Http\Controllers\Admin\LokasiController;
     use App\Http\Controllers\Admin\RakController;
     use App\Http\Controllers\Admin\SupplierController;
     use App\Http\Controllers\Admin\KonsumenController;
@@ -29,6 +29,7 @@
     use App\Http\Controllers\Admin\MutationReceivingController;
     use App\Http\Controllers\Admin\CustomerDiscountCategoryController;
     use App\Http\Controllers\Admin\ServiceController;
+    use App\Http\Controllers\Admin\DealerController;
 
     /*
     |--------------------------------------------------------------------------
@@ -50,7 +51,8 @@
         // === MASTER DATA & PRODUK ===
         Route::resource('brands', BrandController::class);
         Route::resource('categories', CategoryController::class);
-        Route::resource('gudangs', GudangController::class);
+        Route::resource('lokasi', LokasiController::class)->except(['show']);
+        Route::resource('dealers', DealerController::class)->except(['show']);
         Route::resource('raks', RakController::class);
         Route::resource('suppliers', SupplierController::class);
 

@@ -1,19 +1,29 @@
 <?php
 
 namespace Database\Seeders;
+
 use Illuminate\Database\Seeder;
+use App\Models\Lokasi; // Diubah dari Gudang
 use App\Models\Rak;
-use App\Models\Gudang;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class RakSeeder extends Seeder
 {
     public function run()
     {
-        Rak::query()->delete();
-        $gudangs = Gudang::all();
-        foreach ($gudangs as $gudang) {
-            Rak::create(['gudang_id' => $gudang->id, 'kode_rak' => $gudang->kode_gudang.'-A-01-01', 'nama_rak' => 'Rak A Baris 1']);
-            Rak::create(['gudang_id' => $gudang->id, 'kode_rak' => $gudang->kode_gudang.'-A-01-02', 'nama_rak' => 'Rak A Baris 2']);
+        Schema::disableForeignKeyConstraints();
+        DB::table('raks')->truncate();
+        Schema::enableForeignKeyConstraints();
+
+        // Ambil ID Gudang Pusat
+        $gudangPusat = Lokasi::where('tipe', 'PUSAT')->first();
+
+        if ($gudangPusat) {
+            Rak::create(['gudang_id' => $gudangPusat->id, 'kode_rak' => 'A-01-01', 'nama_rak' => 'Rak A-01-01', 'tipe_rak' => 'PENYIMPANAN']);
+            Rak::create(['gudang_id' => $gudangPusat->id, 'kode_rak' => 'A-01-02', 'nama_rak' => 'Rak A-01-02', 'tipe_rak' => 'PENYIMPANAN']);
+            Rak::create(['gudang_id' => $gudangPusat->id, 'kode_rak' => 'KRN-QC', 'nama_rak' => 'Rak Karantina QC', 'tipe_rak' => 'KARANTINA']);
+            Rak::create(['gudang_id' => $gudangPusat->id, 'kode_rak' => 'KRN-RT', 'nama_rak' => 'Rak Karantina Retur', 'tipe_rak' => 'KARANTINA']);
         }
     }
 }

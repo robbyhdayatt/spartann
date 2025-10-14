@@ -3,161 +3,78 @@
 namespace App\Providers;
 
 use App\Models\User;
-use App\Models\StockAdjustment;
-use App\Models\StockMutation;
-use App\Models\PurchaseOrder;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
 class AuthServiceProvider extends ServiceProvider
 {
-    /**
-     * The policy mappings for the application.
-     *
-     * @var array<class-string, class-string>
-     */
     protected $policies = [
         // 'App\Models\Model' => 'App\Policies\ModelPolicy',
     ];
 
-    /**
-     * Register any authentication / authorization services.
-     *
-     * @return void
-     */
     public function boot()
     {
         $this->registerPolicies();
 
         /**
-         * Gate `before` ini memberikan hak akses super admin.
-         * Pengguna dengan singkatan 'SA' akan selalu bisa mengakses semuanya.
+         * Super Admin memiliki akses tak terbatas ke semua fitur.
          */
-        Gate::before(function ($user, $ability) {
-            if ($user->jabatan->singkatan === 'SA') {
-                return true;
-            }
-        });
+        Gate::before(fn(User $user) => $user->hasRole('SA') ? true : null);
 
         // =================================================================
-        // DEFINISI GATE BERDASARKAN PERAN (ROLE-BASED)
+        // DEFINISI GATE BERDASARKAN PERAN (ROLE-BASED CHECKS)
         // =================================================================
+        Gate::define('is-super-admin', fn(User $user) => $user->hasRole('SA'));
+        Gate::define('is-pic', fn(User $user) => $user->hasRole('PIC'));
+        Gate::define('is-manager', fn(User $user) => $user->hasRole('MA'));
 
-        Gate::define('is-super-admin', fn(User $user) => $user->jabatan->singkatan === 'SA');
-        Gate::define('is-manager', fn(User $user) => $user->jabatan->singkatan === 'MA');
-        Gate::define('is-kepala-gudang', fn(User $user) => $user->jabatan->singkatan === 'KG');
-        Gate::define('is-pj-gudang', fn(User $user) => $user->jabatan->singkatan === 'PJG');
-        Gate::define('is-sales', fn(User $user) => $user->jabatan->singkatan === 'SLS');
+        // Cek apakah pengguna adalah staf di Gudang Pusat
+        Gate::define('is-pusat-staff', fn(User $user) => in_array($user->jabatan->singkatan, ['KG', 'AG', 'SLS', 'KSR']));
+        // Cek apakah pengguna adalah staf di Dealer
+        Gate::define('is-dealer-staff', fn(User $user) => in_array($user->jabatan->singkatan, ['KC', 'AD', 'CS']));
 
-        Gate::define('is-staff-gudang', function (User $user) {
-            return in_array($user->jabatan->singkatan, ['SR', 'QC', 'SP', 'SSC']);
-        });
 
         // =================================================================
         // DEFINISI GATE BERDASARKAN TUGAS (PERMISSION-BASED)
         // =================================================================
 
-        // Izin untuk melihat dashboard
-        Gate::define('view-dashboard', function (User $user) {
-            return in_array($user->jabatan->singkatan, [
-                'SA',
-                'MA',
-                'KG',
-                'SLS',
-                'SR',
-                'QC',
-                'SP',
-                'SSC',
-                'PJG'
-            ]);
+        // --- PENGATURAN & MASTER DATA ---
+        Gate::define('manage-users', fn(User $user) => $user->hasRole('SA')); // Hanya Super Admin
+        Gate::define('manage-locations', fn(User $user) => $user->hasRole(['SA', 'PIC']));
+        Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
+
+        // --- PEMBELIAN (HANYA DI PUSAT) ---
+        Gate::define('access-po-module', fn(User $user) => $user->hasRole(['KG', 'AG']));
+        Gate::define('create-po', fn(User $user) => $user->hasRole('AG'));
+        Gate::define('approve-po', function (User $user, $purchaseOrder) {
+            return $user->hasRole('KG') && $user->lokasi->tipe === 'PUSAT' && $user->gudang_id === $purchaseOrder->gudang_id;
         });
 
-        // Izin terkait Purchase Order
-        Gate::define('view-purchase-orders', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['MA', 'KG', 'PJG']);
+        // --- OPERASIONAL GUDANG & DEALER ---
+        Gate::define('perform-warehouse-ops', fn(User $user) => $user->hasRole(['AG', 'AD']));
+        Gate::define('create-stock-transaction', fn(User $user) => $user->hasRole(['AG', 'AD']));
+        Gate::define('approve-stock-transaction', function (User $user, $transaction) {
+            $lokasiId = $transaction->gudang_id ?? $transaction->gudang_asal_id;
+            // Kepala Gudang hanya bisa approve transaksi di lokasinya (Gudang Pusat)
+            if ($user->hasRole('KG')) {
+                return $user->gudang_id === $lokasiId;
+            }
+            // Kepala Cabang hanya bisa approve transaksi di lokasinya (Dealer)
+            if ($user->hasRole('KC')) {
+                return $user->gudang_id === $lokasiId;
+            }
+            return false;
         });
 
-        Gate::define('create-po', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['PJG']);
-        });
+        // --- PENJUALAN ---
+        Gate::define('access-sales-module', fn(User $user) => $user->hasRole(['SLS', 'KSR', 'CS']));
 
-        Gate::define('approve-po', function (User $user, PurchaseOrder $purchaseOrder) {
-            return $user->jabatan->singkatan === 'KG' && $user->gudang_id === $purchaseOrder->gudang_id;
-        });
+        // --- LAPORAN & MARKETING ---
+        Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC']));
+        Gate::define('manage-marketing', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
 
-        Gate::define('approve-adjustment', function (User $user, StockAdjustment $stockAdjustment) {
-            return $user->jabatan->singkatan === 'KG' && $user->gudang_id === $stockAdjustment->gudang_id;
-        });
-
-        // Izin untuk proses inbound (penerimaan barang)
-        Gate::define('can-receive', fn(User $user) => in_array($user->jabatan->singkatan, ['PJG', 'SR']));
-        Gate::define('can-receive-mutation', fn(User $user) => in_array($user->jabatan->singkatan, ['PJG', 'SR']));
-        Gate::define('can-qc', fn(User $user) => $user->jabatan->singkatan === 'QC');
-        Gate::define('can-putaway', fn(User $user) => $user->jabatan->singkatan ==='SP');
-
-        // Izin untuk mengelola stok internal
-        Gate::define('can-manage-stock', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['PJG', 'SSC']);
-        });
-
-        Gate::define('can-process-quarantine', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['PJG', 'SSC']);
-        });
-
-        Gate::define('view-stock-management', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['KG', 'PJG', 'SSC']);
-        });
-
-        // Izin untuk retur
-        Gate::define('manage-purchase-returns', fn(User $user) => in_array($user->jabatan->singkatan, ['PJG', 'SSC']));
-        Gate::define('manage-sales-returns', fn(User $user) => in_array($user->jabatan->singkatan, ['SLS']));
-
-        Gate::define('approve-mutation', function (User $user, StockMutation $stockMutation) {
-            return $user->jabatan->singkatan === 'KG' && $user->gudang_id === $stockMutation->gudang_asal_id;
-        });
-
-        Gate::define('view-reports', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['MA', 'KG', 'PJG']);
-        });
-
-        Gate::define('view-sales', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['MA', 'SLS']);
-        });
-
-        Gate::define('manage-sales', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['SLS']);
-        });
-
-        Gate::define('view-sales-returns', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['MA', 'SLS']);
-        });
-
-        // GATE BARU UNTUK GRUP MENU
-        Gate::define('access-master-data', function(User $user) {
-            // Hanya Super Admin dan Manajer Area yang bisa melihat master data
-            return in_array($user->jabatan->singkatan, ['SA', 'MA', 'KG', 'PJG', 'SLS']);
-        });
-
-        Gate::define('access-gudang-transaksi', function(User $user) {
-            // Semua peran gudang bisa mengakses menu ini
-            return in_array($user->jabatan->singkatan, ['KG', 'PJG', 'SR', 'QC', 'SP', 'SSC']);
-        });
-
-        Gate::define('access-penjualan-pelanggan', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['MA', 'SLS', 'SA']);
-        });
-
-        Gate::define('access-marketing', function(User $user) {
-            return in_array($user->jabatan->singkatan, ['MA']);
-        });
-
-        Gate::define('is-not-kepala-gudang', function ($user) {
-            return $user->jabatan->nama_jabatan !== 'Kepala Gudang';
-        });
-
-        Gate::define('is-kepala-gudang-only', function ($user) {
-            return $user->jabatan->nama_jabatan === 'Kepala Gudang';
-        });
-
+        // --- AKSES KHUSUS KEPALA CABANG (READ-ONLY) ---
+        // Gate ini akan digunakan untuk menyembunyikan tombol aksi di view.
+        Gate::define('is-read-only', fn(User $user) => $user->hasRole('KC'));
     }
 }

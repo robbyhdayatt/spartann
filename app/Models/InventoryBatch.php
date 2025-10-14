@@ -21,9 +21,9 @@ class InventoryBatch extends Model
         return $this->belongsTo(Rak::class);
     }
 
-    public function gudang()
+    public function lokasi()
     {
-        return $this->belongsTo(Gudang::class);
+        return $this->belongsTo(Lokasi::class, 'gudang_id');
     }
 
     public function receivingDetail()

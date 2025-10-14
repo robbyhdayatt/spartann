@@ -302,7 +302,7 @@ return [
 
     'menu' => [
         // Tombol search & fullscreen
-        ['search' => true, 'topnav' => true],
+        ['search' => false, 'topnav' => true],
         ['type' => 'fullscreen-widget', 'topnav_right' => true],
 
         // Menu Utama
@@ -317,99 +317,118 @@ return [
             'icon' => 'fas fa-fw fa-user',
         ],
 
-        // SUBMENU: Master Data & Produk
+        // ================== MENU PUSAT & GLOBAL ==================
+        [
+            'header' => 'MASTER & PENGATURAN',
+            'can' => 'manage-pic-level', // Hanya SA & PIC
+        ],
+        [
+            'text' => 'Manajemen Lokasi',
+            'icon' => 'fas fa-fw fa-map-marked-alt',
+            'can'  => 'manage-locations',
+            'submenu' => [
+                ['text' => 'Gudang & Dealer', 'icon' => 'fas fa-fw fa-warehouse', 'route' => 'admin.lokasi.index'],
+                ['text' => 'Master Dealer', 'icon' => 'fas fa-fw fa-store', 'route' => 'admin.dealers.index'],
+                ['text' => 'Rak', 'icon' => 'fas fa-fw fa-pallet', 'route' => 'admin.raks.index'],
+            ],
+        ],
         [
             'text'    => 'Master Data',
             'icon'    => 'fas fa-fw fa-database',
-            'can'     => 'access-master-data',
+            'can'     => 'view-master-data',
             'submenu' => [
-                ['text' => 'Brand', 'route'  => 'admin.brands.index', 'icon' => 'fas fa-fw fa-copyright', 'can' => 'is-super-admin'],
-                ['text' => 'Kategori', 'route'  => 'admin.categories.index', 'icon' => 'fas fa-fw fa-tags', 'can' => 'is-super-admin'],
-                ['text' => 'Gudang', 'route'  => 'admin.gudangs.index', 'icon' => 'fas fa-fw fa-warehouse', 'can' => 'is-super-admin'],
-                ['text' => 'Rak', 'route'  => 'admin.raks.index', 'icon' => 'fas fa-fw fa-pallet', 'can' => 'is-super-admin'],
-                ['text' => 'Supplier', 'route'  => 'admin.suppliers.index', 'icon' => 'fas fa-fw fa-truck', 'can' => 'is-super-admin'],
-                ['text' => 'Part', 'route'  => 'admin.parts.index', 'icon' => 'fas fa-fw fa-cogs', 'can' => 'access-master-data'],
+                ['text' => 'Brand', 'route' => 'admin.brands.index'],
+                ['text' => 'Kategori', 'route' => 'admin.categories.index'],
+                ['text' => 'Supplier', 'route' => 'admin.suppliers.index'],
+                ['text' => 'Part', 'route' => 'admin.parts.index'],
+                ['text' => 'Konsumen', 'route' => 'admin.konsumens.index'],
             ],
         ],
-
-        // SUBMENU: Transaksi Gudang
         [
-            'text'    => 'Transaksi Gudang',
-            'icon'    => 'fas fa-fw fa-exchange-alt',
-            'can'     => 'access-gudang-transaksi',
-            'submenu' => [
-                ['text' => 'Purchase Order (PO)', 'route' => 'admin.purchase-orders.index', 'icon' => 'fas fa-fw fa-shopping-cart', 'can' => 'view-purchase-orders'],
-                ['text' => 'Rekomendasi PO', 'route' => 'admin.reports.rekomendasi-po', 'icon' => 'fas fa-fw fa-magic', 'can' => 'view-purchase-orders'],
-                ['text' => 'Penerimaan Barang', 'route' => 'admin.receivings.index', 'icon' => 'fas fa-fw fa-box-open', 'can' => 'can-receive'],
-                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index', 'icon' => 'fas fa-fw fa-people-carry', 'can' => 'can-receive-mutation'],
-                ['text' => 'Quality Control (QC)', 'route' => 'admin.qc.index', 'icon' => 'fas fa-fw fa-check-circle', 'can' => 'can-qc'],
-                ['text' => 'Putaway / Penyimpanan', 'route' => 'admin.putaway.index', 'icon' => 'fas fa-fw fa-dolly-flatbed', 'can' => 'can-putaway'],
-                ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index', 'icon' => 'fas fa-fw fa-edit', 'can' => 'view-stock-management'],
-                ['text' => 'Mutasi Gudang', 'route' => 'admin.stock-mutations.index', 'icon' => 'fas fa-fw fa-truck-loading', 'can' => 'view-stock-management'],
-                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index', 'icon' => 'fas fa-fw fa-shield-virus', 'can' => 'can-process-quarantine'],
-                ['text' => 'Retur Pembelian', 'route' => 'admin.purchase-returns.index', 'icon' => 'fas fa-fw fa-undo', 'can' => 'manage-purchase-returns'],
-            ],
+            'text' => 'Pengguna',
+            'route'  => 'admin.users.index',
+            'icon' => 'fas fa-fw fa-users-cog',
+            'can' => 'manage-users', // Hanya Super Admin
         ],
 
-        // SUBMENU: Penjualan & Pelanggan
+        // ================== MENU OPERASIONAL ==================
         [
-            'text' => 'Penjualan & Pelanggan',
-            'icon' => 'fas fa-fw fa-users',
-            'can'  => 'access-penjualan-pelanggan',
+            'header' => 'OPERASIONAL',
+        ],
+        [
+            'text' => 'Transaksi Pusat',
+            'icon' => 'fas fa-fw fa-industry',
+            'can'  => 'is-pusat-staff',
             'submenu' => [
-                ['text' => 'Penjualan', 'route' => 'admin.penjualans.index', 'icon' => 'fas fa-fw fa-cash-register', 'can' => 'view-sales'],
-                ['text' => 'Retur Penjualan', 'route' => 'admin.sales-returns.index', 'icon' => 'fas fa-fw fa-undo', 'can' => 'view-sales-returns'],
-                ['text' => 'Konsumen', 'route' => 'admin.konsumens.index', 'icon' => 'fas fa-fw fa-address-book', 'can' => ['is-super-admin', 'is-sales']],
-                ['text' => 'Kategori Diskon Konsumen', 'route' => 'admin.customer-discount-categories.index', 'icon' => 'fas fa-fw fa-tags', 'can' => 'is-manager'],
+                ['text' => 'Purchase Order (PO)', 'route' => 'admin.purchase-orders.index', 'can' => 'access-po-module'],
+                ['text' => 'Penerimaan Barang', 'route' => 'admin.receivings.index', 'can' => 'perform-warehouse-ops'],
+                ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index'],
+                ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index'],
+                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index'],
+                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index'],
+                ['text' => 'Retur Pembelian', 'route' => 'admin.purchase-returns.index'],
             ],
         ],
-
-        // SUBMENU: Marketing
         [
-            'text' => 'Marketing',
-            'icon' => 'fas fa-fw fa-bullhorn',
-            'can'  => 'access-marketing',
+            'text' => 'Transaksi Dealer',
+            'icon' => 'fas fa-fw fa-store-alt',
+            'can'  => 'is-dealer-staff',
             'submenu' => [
-                ['text' => 'Manajemen Campaign', 'route' => 'admin.campaigns.index', 'can' => 'is-manager'],
+                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index'],
+                ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index'],
+                ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index'],
+                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index'],
+            ],
+        ],
+        [
+            'text'    => 'Penjualan',
+            'icon'    => 'fas fa-fw fa-cash-register',
+            'can'     => 'access-sales-module',
+            'submenu' => [
+                ['text' => 'Buat Transaksi', 'route' => 'admin.penjualans.create'],
+                ['text' => 'Riwayat Penjualan', 'route' => 'admin.penjualans.index'],
+                ['text' => 'Retur Penjualan', 'route' => 'admin.sales-returns.index'],
+            ],
+        ],
+        [
+            'text' => 'Data Service',
+            'route'  => 'admin.services.index',
+            'icon' => 'fas fa-fw fa-wrench',
+            'can'  => ['is-super-admin', 'is-pic', 'is-manager'] // Contoh, sesuaikan
+        ],
+
+        // ================== MENU ANALISIS ==================
+        [
+            'header' => 'ANALISIS & MARKETING',
+            'can' => ['is-manager', 'is-pic'],
+        ],
+        [
+            'text'    => 'Marketing',
+            'icon'    => 'fas fa-fw fa-bullhorn',
+            'can'     => 'manage-marketing',
+            'submenu' => [
+                ['text' => 'Manajemen Campaign', 'route' => 'admin.campaigns.index'],
+                ['text' => 'Kategori Diskon', 'route' => 'admin.customer-discount-categories.index'],
                 [
                     'text'    => 'Insentif Sales',
-                    'can'     => 'is-manager',
                     'submenu' => [
-                        ['text' => 'Set Target Penjualan', 'route' => 'admin.incentives.targets'],
+                        ['text' => 'Set Target', 'route' => 'admin.incentives.targets'],
                         ['text' => 'Laporan Insentif', 'route' => 'admin.incentives.report'],
                     ],
                 ],
             ],
         ],
-
-        // SUBMENU: Laporan
         [
             'text'    => 'Laporan',
             'icon'    => 'fas fa-fw fa-chart-pie',
             'can'     => 'view-reports',
             'submenu' => [
                 ['text' => 'Kartu Stok', 'route' => 'admin.reports.stock-card'],
-                ['text' => 'Stok Gudang', 'route' => 'admin.reports.stock-by-warehouse', 'can' => 'is-kepala-gudang-only'],
+                ['text' => 'Stok Per Lokasi', 'route' => 'admin.reports.stock-by-warehouse'],
+                ['text' => 'Laporan Stok Total', 'route' => 'admin.reports.stock-report'],
                 ['text' => 'Jurnal Penjualan', 'route' => 'admin.reports.sales-journal'],
                 ['text' => 'Jurnal Pembelian', 'route' => 'admin.reports.purchase-journal'],
                 ['text' => 'Nilai Persediaan', 'route' => 'admin.reports.inventory-value'],
-                ['text' => 'Analisis Penjualan', 'route' => 'admin.reports.sales-purchase-analysis'],
-                ['text' => 'Laporan Stok Keseluruhan', 'route' => 'admin.reports.stock-report', 'can' => 'is-not-kepala-gudang'],
-            ],
-        ],
-        [
-            'text' => 'Data Service',
-            'route'  => 'admin.services.index',
-            'icon' => 'fas fa-fw fa-wrench', // Ikon diubah agar lebih sesuai
-        ],
-
-        // SUBMENU: Pengaturan
-        [
-            'text'    => 'Pengaturan',
-            'icon'    => 'fas fa-fw fa-cogs',
-            'can'     => 'is-super-admin',
-            'submenu' => [
-                ['text' => 'Pengguna', 'route'  => 'admin.users.index', 'icon' => 'fas fa-fw fa-user-cog'],
             ],
         ],
     ],

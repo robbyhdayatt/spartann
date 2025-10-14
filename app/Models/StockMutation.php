@@ -12,39 +12,24 @@ class StockMutation extends Model
 
     protected $guarded = ['id'];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array
-     */
     protected $casts = [
         'approved_at' => 'datetime',
         'received_at' => 'datetime',
     ];
 
-    // Method untuk generate nomor mutasi (jika belum ada)
-    public static function generateMutationNumber()
-    {
-        $prefix = 'MUT/' . now()->format('Ymd') . '/';
-        $lastMutation = self::where('nomor_mutasi', 'like', $prefix . '%')->orderBy('id', 'desc')->first();
-        $number = $lastMutation ? ((int)substr($lastMutation->nomor_mutasi, -4)) + 1 : 1;
-        return $prefix . str_pad($number, 4, '0', STR_PAD_LEFT);
-    }
-
-    // Relationships
     public function part()
     {
         return $this->belongsTo(Part::class);
     }
 
-    public function gudangAsal()
+    public function lokasiAsal()
     {
-        return $this->belongsTo(Gudang::class, 'gudang_asal_id');
+        return $this->belongsTo(Lokasi::class, 'gudang_asal_id');
     }
 
-    public function gudangTujuan()
+    public function lokasiTujuan()
     {
-        return $this->belongsTo(Gudang::class, 'gudang_tujuan_id');
+        return $this->belongsTo(Lokasi::class, 'gudang_tujuan_id');
     }
 
     public function rakAsal()
@@ -71,17 +56,11 @@ class StockMutation extends Model
     {
         $prefix = 'MT-' . date('Ymd') . '-';
         $lastMutation = DB::table('stock_mutations')
-            ->where('nomor_mutasi', 'like', $prefix . '%')
-            ->orderBy('nomor_mutasi', 'desc')
-            ->first();
+                        ->where('nomor_mutasi', 'like', $prefix . '%')
+                        ->orderBy('nomor_mutasi', 'desc')
+                        ->first();
 
-        if ($lastMutation) {
-            $lastNumber = (int) substr($lastMutation->nomor_mutasi, -4);
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
-        }
-
+        $newNumber = $lastMutation ? ((int) substr($lastMutation->nomor_mutasi, -4)) + 1 : 1;
         return $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
     }
 }

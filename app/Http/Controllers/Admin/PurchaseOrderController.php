@@ -5,18 +5,18 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
-use App\Models\Gudang;
+use App\Models\Lokasi; // Menggunakan model Lokasi
 use App\Models\Part;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use App\Services\DiscountService; // <-- IMPORT SERVICE KITA
+use App\Services\DiscountService;
 
 class PurchaseOrderController extends Controller
 {
     protected $discountService;
 
-    // 1. Inject DiscountService melalui Constructor
     public function __construct(DiscountService $discountService)
     {
         $this->discountService = $discountService;
@@ -24,60 +24,43 @@ class PurchaseOrderController extends Controller
 
     public function index()
     {
-        $purchaseOrders = PurchaseOrder::with(['supplier', 'gudang', 'createdBy'])->latest()->get();
+        // PERUBAHAN: Menggunakan relasi 'lokasi' yang baru
+        $purchaseOrders = PurchaseOrder::with(['supplier', 'lokasi', 'createdBy'])->latest()->get();
         return view('admin.purchase_orders.index', compact('purchaseOrders'));
     }
 
     public function create()
     {
-        $this->authorize('create-po');
-        $user = auth()->user();
+        $this->authorize('create-po'); // Gate ini sudah benar (hanya untuk Admin Gudang)
+
         $suppliers = Supplier::where('is_active', true)->orderBy('nama_supplier')->get();
-
-        if ($user->jabatan->nama_jabatan === 'PJ Gudang') {
-            $gudangs = Gudang::where('id', $user->gudang_id)->get();
-        } else {
-            $gudangs = Gudang::where('is_active', true)->orderBy('nama_gudang')->get();
-        }
-
-        // Mengambil part sekarang lebih sederhana
         $parts = Part::where('is_active', true)->orderBy('nama_part')->get();
 
-        return view('admin.purchase_orders.create', compact('suppliers', 'gudangs', 'parts'));
+        // PERUBAHAN BESAR: Logika disederhanakan, PO hanya untuk Gudang Pusat.
+        $gudangPusat = Lokasi::where('tipe', 'PUSAT')->firstOrFail();
+
+        return view('admin.purchase_orders.create', compact('suppliers', 'gudangPusat', 'parts'));
     }
 
-    // 2. API BARU: Untuk mendapatkan harga beli part setelah diskon
-    public function getPartPurchaseDetails(Part $part, Request $request)
-    {
-        $validated = $request->validate([
-            'supplier_id' => 'required|exists:suppliers,id',
-        ]);
-
-        $supplier = Supplier::find($validated['supplier_id']);
-
-        // Panggil DiscountService untuk kalkulasi harga beli
-        $discountResult = $this->discountService->calculatePurchaseDiscount($part, $supplier, $part->harga_beli_default);
-
-        return response()->json([
-            'discount_result' => $discountResult,
-        ]);
-    }
-
-
-    // 3. MODIFIKASI BESAR: store() sekarang menghitung ulang semua harga di server
     public function store(Request $request)
     {
         $this->authorize('create-po');
         $validated = $request->validate([
             'tanggal_po' => 'required|date',
             'supplier_id' => 'required|exists:suppliers,id',
-            'gudang_id' => 'required|exists:gudangs,id',
+            'gudang_id' => 'required|exists:lokasi,id', // PERUBAHAN: Validasi ke tabel 'lokasi'
             'catatan' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.part_id' => 'required|exists:parts,id',
             'items.*.qty' => 'required|integer|min:1',
             'use_ppn' => 'nullable|boolean',
         ]);
+
+        // PERUBAHAN: Validasi tambahan untuk memastikan gudang_id adalah Gudang Pusat
+        $lokasi = Lokasi::find($validated['gudang_id']);
+        if (!$lokasi || $lokasi->tipe !== 'PUSAT') {
+            return back()->with('error', 'Purchase Order hanya dapat dibuat untuk Gudang Pusat.')->withInput();
+        }
 
         DB::beginTransaction();
         try {
@@ -88,8 +71,6 @@ class PurchaseOrderController extends Controller
             foreach ($validated['items'] as $itemData) {
                 $part = Part::find($itemData['part_id']);
                 $qty = (int)$itemData['qty'];
-
-                // HITUNG ULANG HARGA DI SERVER MENGGUNAKAN SERVICE
                 $discountResult = $this->discountService->calculatePurchaseDiscount($part, $supplier, $part->harga_beli_default);
                 $finalPrice = $discountResult['final_price'];
                 $itemSubtotal = $qty * $finalPrice;
@@ -103,16 +84,14 @@ class PurchaseOrderController extends Controller
                 ];
             }
 
-            // Hitung Pajak dan Total
             $pajak = ($request->has('use_ppn') && $request->use_ppn) ? $totalSubtotal * 0.11 : 0;
             $totalAmount = $totalSubtotal + $pajak;
 
-            // Buat Purchase Order
             $po = PurchaseOrder::create([
                 'nomor_po' => $this->generatePoNumber(),
                 'tanggal_po' => $validated['tanggal_po'],
                 'supplier_id' => $validated['supplier_id'],
-                'gudang_id' => $validated['gudang_id'],
+                'gudang_id' => $validated['gudang_id'], // Ini sudah pasti ID Gudang Pusat
                 'catatan' => $request->catatan,
                 'status' => 'PENDING_APPROVAL',
                 'created_by' => Auth::id(),
@@ -124,30 +103,24 @@ class PurchaseOrderController extends Controller
             $po->details()->createMany($itemsToSave);
 
             DB::commit();
-            return redirect()->route('admin.purchase-orders.index')->with('success', 'Purchase Order berhasil dibuat dengan harga terverifikasi.');
+            return redirect()->route('admin.purchase-orders.index')->with('success', 'Purchase Order berhasil dibuat.');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with('error', 'Terjadi kesalahan saat membuat PO: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage())->withInput();
         }
     }
 
     public function show(PurchaseOrder $purchaseOrder)
     {
-        // ... (fungsi show, generatePoNumber, approve, reject, getPoDetailsApi tetap sama) ...
-        $purchaseOrder->load(['supplier', 'gudang', 'details.part']);
-        $creatorName = \App\Models\User::find($purchaseOrder->created_by)->name ?? 'User Tidak Dikenal';
+        // PERUBAHAN: Menggunakan relasi 'lokasi'
+        $purchaseOrder->load(['supplier', 'lokasi', 'details.part']);
+        $creatorName = User::find($purchaseOrder->created_by)->nama ?? 'N/A';
         return view('admin.purchase_orders.show', compact('purchaseOrder', 'creatorName'));
     }
 
-    private function generatePoNumber()
-    {
-        $date = now()->format('Ymd');
-        $latestPo = PurchaseOrder::whereDate('created_at', today())->count();
-        $sequence = str_pad($latestPo + 1, 4, '0', STR_PAD_LEFT);
-        return "PO/{$date}/{$sequence}";
-    }
-
+    // Fungsi approve, reject, generatePoNumber, getPartPurchaseDetails, getPoDetailsApi tidak perlu diubah
+    // ... (salin sisa fungsi dari file lama Anda ke sini) ...
     public function approve(PurchaseOrder $purchaseOrder)
     {
         $this->authorize('approve-po', $purchaseOrder);
@@ -178,7 +151,22 @@ class PurchaseOrderController extends Controller
         return redirect()->route('admin.purchase-orders.show', $purchaseOrder)->with('success', 'Purchase Order berhasil ditolak.');
     }
 
-    // API lama untuk receiving, tetap dipertahankan
+    private function generatePoNumber()
+    {
+        $date = now()->format('Ymd');
+        $latestPo = PurchaseOrder::whereDate('created_at', today())->count();
+        $sequence = str_pad($latestPo + 1, 4, '0', STR_PAD_LEFT);
+        return "PO/{$date}/{$sequence}";
+    }
+
+    public function getPartPurchaseDetails(Part $part, Request $request)
+    {
+        $validated = $request->validate(['supplier_id' => 'required|exists:suppliers,id']);
+        $supplier = Supplier::find($validated['supplier_id']);
+        $discountResult = $this->discountService->calculatePurchaseDiscount($part, $supplier, $part->harga_beli_default);
+        return response()->json(['discount_result' => $discountResult]);
+    }
+
     public function getPoDetailsApi(PurchaseOrder $purchaseOrder)
     {
         $purchaseOrder->load('details.part');

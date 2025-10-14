@@ -3,15 +3,30 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\Gudang;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema; // 1. Tambahkan ini
 
 class GudangSeeder extends Seeder
 {
     public function run()
     {
-        Gudang::query()->delete();
-        Gudang::create(['kode_gudang' => 'BDL', 'nama_gudang' => 'Gudang Bandar Lampung']);
-        Gudang::create(['kode_gudang' => 'PWT', 'nama_gudang' => 'Gudang Poncowati']);
-        Gudang::create(['kode_gudang' => 'CKR', 'nama_gudang' => 'Gudang Cikarang']);
+        // 2. Nonaktifkan pengecekan foreign key
+        Schema::disableForeignKeyConstraints();
+
+        DB::table('lokasi')->truncate();
+
+        // 3. Aktifkan kembali pengecekan foreign key
+        Schema::enableForeignKeyConstraints();
+
+        // Buat Gudang Pusat
+        DB::table('lokasi')->insert([
+            'tipe' => 'PUSAT',
+            'kode_gudang' => 'GSP',
+            'nama_gudang' => 'Gudang Pusat (Sentral)',
+            'alamat' => 'Jl. Ikan Tenggiri No. 24, Bandar Lampung',
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }

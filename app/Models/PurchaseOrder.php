@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 
 class PurchaseOrder extends Model
 {
@@ -27,9 +26,9 @@ class PurchaseOrder extends Model
         return $this->belongsTo(Supplier::class);
     }
 
-    public function gudang()
+    public function lokasi()
     {
-        return $this->belongsTo(Gudang::class);
+        return $this->belongsTo(Lokasi::class, 'gudang_id');
     }
 
     public function createdBy()
@@ -41,24 +40,19 @@ class PurchaseOrder extends Model
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
-    // FUNGSI UNTUK TAMPILAN STATUS (WARNA BADGE)
+
     public function getStatusClassAttribute()
     {
         switch ($this->status) {
-            case 'PENDING_APPROVAL':
-                return 'badge-warning';
-            case 'APPROVED':
-                return 'badge-success';
-            case 'REJECTED':
-                return 'badge-danger';
-            case 'COMPLETED':
-                return 'badge-primary';
-            default:
-                return 'badge-secondary';
+            case 'PENDING_APPROVAL': return 'badge-warning';
+            case 'APPROVED': return 'badge-success';
+            case 'REJECTED': return 'badge-danger';
+            case 'PARTIALLY_RECEIVED': return 'badge-info';
+            case 'FULLY_RECEIVED': return 'badge-primary';
+            default: return 'badge-secondary';
         }
     }
 
-    // FUNGSI UNTUK TAMPILAN STATUS (TEKS)
     public function getStatusBadgeAttribute()
     {
         return str_replace('_', ' ', $this->status);

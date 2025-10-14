@@ -37,17 +37,8 @@
                     </div>
                     <div class="col-md-4 form-group">
                         <label>Tujuan Gudang</label>
-                        @if(count($gudangs) === 1)
-                            <input type="text" class="form-control" value="{{ $gudangs->first()->nama_gudang }}" readonly>
-                            <input type="hidden" name="gudang_id" value="{{ $gudangs->first()->id }}">
-                        @else
-                            <select class="form-control select2" name="gudang_id" required style="width: 100%;">
-                                <option value="" disabled selected>Pilih Gudang</option>
-                                @foreach($gudangs as $gudang)
-                                <option value="{{ $gudang->id }}">{{ $gudang->nama_gudang }}</option>
-                                @endforeach
-                            </select>
-                        @endif
+                            <input type="text" class="form-control" value="{{ $gudangPusat->nama_gudang }}" readonly>
+                            <input type="hidden" name="gudang_id" value="{{ $gudangPusat->id }}">
                     </div>
                 </div>
                  <div class="form-group">

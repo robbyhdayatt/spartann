@@ -12,58 +12,37 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
-        'nik',
-        'nama',
-        'username',
-        'email',
-        'password',
-        'gudang_id',
-        'jabatan_id',
-        'is_active',
+        'nik', 'nama', 'username', 'email', 'password', 'gudang_id', 'jabatan_id', 'is_active',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    protected $hidden = [ 'password', 'remember_token', ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
-    protected $casts = [
-        'email_verified_at' => 'datetime',
-    ];
+    protected $casts = [ 'email_verified_at' => 'datetime', ];
 
-    /**
-     * Get the jabatan that the user belongs to.
-     */
     public function jabatan()
     {
         return $this->belongsTo(Jabatan::class);
     }
 
     /**
-     * Get the gudang that the user is assigned to.
+     * Get the lokasi that the user is assigned to.
      */
-    public function gudang()
+    public function lokasi()
     {
-        return $this->belongsTo(Gudang::class);
+        return $this->belongsTo(Lokasi::class, 'gudang_id');
     }
+
     public function adminlte_desc()
     {
         return $this->jabatan->nama_jabatan ?? 'N/A';
+    }
+
+    public function hasRole($roles)
+    {
+        if (is_string($roles)) {
+            return $this->jabatan->singkatan === $roles;
+        }
+        return in_array($this->jabatan->singkatan, $roles);
     }
 }

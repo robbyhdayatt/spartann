@@ -15,9 +15,9 @@ class StockMovement extends Model
         return $this->belongsTo(Part::class);
     }
 
-    public function gudang()
+    public function lokasi()
     {
-        return $this->belongsTo(Gudang::class);
+        return $this->belongsTo(Lokasi::class, 'gudang_id');
     }
 
     public function user()
@@ -28,5 +28,13 @@ class StockMovement extends Model
     public function rak()
     {
         return $this->belongsTo(Rak::class);
+    }
+
+    /**
+     * Get the parent referensi model (PurchaseOrder, Penjualan, etc.).
+     */
+    public function referensi()
+    {
+        return $this->morphTo();
     }
 }
