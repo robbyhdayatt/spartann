@@ -398,6 +398,12 @@ return [
             ],
         ],
 
+        [
+            'text' => 'Daily Report',
+            'url'  => 'admin/daily-reports',
+            'icon' => 'fas fa-fw fa-file-excel',
+        ],
+
         // SUBMENU: Pengaturan
         [
             'text'    => 'Pengaturan',

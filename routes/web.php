@@ -157,6 +157,13 @@
         Route::get('mutation-receiving/{mutation}', [\App\Http\Controllers\Admin\MutationReceivingController::class, 'show'])->name('mutation-receiving.show');
         Route::post('mutation-receiving/{mutation}', [\App\Http\Controllers\Admin\MutationReceivingController::class, 'receive'])->name('mutation-receiving.receive');
 
+        // Rute untuk Daily Report
+        Route::get('daily-reports', [\App\Http\Controllers\Admin\DailyReportController::class, 'index'])->name('daily-reports.index');
+        Route::post('daily-reports/import', [\App\Http\Controllers\Admin\DailyReportController::class, 'import'])->name('daily-reports.import');
+        Route::get('daily-reports/{dailyReport}', [\App\Http\Controllers\Admin\DailyReportController::class, 'show'])->name('daily-reports.show');
+        Route::get('daily-reports/{id}/pdf', [\App\Http\Controllers\Admin\DailyReportController::class, 'downloadPDF'])->name('daily-reports.pdf');
+
+
         // === API (untuk AJAX) ===
         Route::get('api/gudangs/{gudang}/parts', [PenjualanController::class, 'getPartsByGudang'])->name('api.gudang.parts');
         Route::get('api/parts/{part}/stock', [PenjualanController::class, 'getPartStockDetails'])->name('api.part.stock');
