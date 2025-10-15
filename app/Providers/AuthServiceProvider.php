@@ -41,7 +41,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
 
         // --- PEMBELIAN (HANYA DI PUSAT) ---
-        Gate::define('access-po-module', fn(User $user) => $user->hasRole('AG'));
+        Gate::define('access-po-module', fn(User $user) => $user->hasRole(['KG', 'AG']));
         Gate::define('create-po', fn(User $user) => $user->hasRole('AG'));
         Gate::define('approve-po', function (User $user, $purchaseOrder) {
             return $user->hasRole('KG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT' && $user->gudang_id === $purchaseOrder->gudang_id;
@@ -66,7 +66,7 @@ class AuthServiceProvider extends ServiceProvider
         // --- LAPORAN & MARKETING ---
         Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC']));
         Gate::define('manage-marketing', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
-        
+
         // --- AKSES KHUSUS KEPALA CABANG (READ-ONLY) ---
         Gate::define('is-read-only', fn(User $user) => $user->hasRole('KC'));
     }

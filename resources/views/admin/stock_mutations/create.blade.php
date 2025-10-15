@@ -128,7 +128,7 @@ $(document).ready(function() {
 
     gudangAsalSelect.on('change', fetchParts);
     partSelect.on('change', fetchStock);
-    
+
     if (gudangAsalSelect.val()) {
         fetchParts();
     }

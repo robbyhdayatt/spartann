@@ -28,10 +28,9 @@
                 </ul>
             </div>
             <div class="col-md-6">
-                <h4>Detail Gudang</h4>
+                <h4>Detail Lokasi</h4>
                 <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><b>Gudang Asal:</b> {{ $stockMutation->gudangAsal->nama_gudang }}</li>
-                    {{-- PERBAIKAN LOGIKA DI SINI --}}
+                    <li class="list-group-item"><b>Lokasi Asal:</b> {{ $stockMutation->lokasiAsal->nama_gudang }}</li>
                     <li class="list-group-item"><b>Rak Asal:</b>
                         @if ($stockMutation->rakAsal)
                             {{ $stockMutation->rakAsal->nama_rak }} ({{ $stockMutation->rakAsal->kode_rak }})
@@ -39,7 +38,7 @@
                             <span class="text-muted">Ditentukan saat approval (FIFO)</span>
                         @endif
                     </li>
-                    <li class="list-group-item"><b>Gudang Tujuan:</b> {{ $stockMutation->gudangTujuan->nama_gudang }}</li>
+                    <li class="list-group-item"><b>Lokasi Tujuan:</b> {{ $stockMutation->lokasiTujuan->nama_gudang }}</li>
                     <li class="list-group-item"><b>Rak Tujuan:</b>
                         @if($stockMutation->rakTujuan)
                             {{ $stockMutation->rakTujuan->nama_rak }} ({{ $stockMutation->rakTujuan->kode_rak }})
@@ -57,8 +56,8 @@
                 <ul class="list-group list-group-flush">
                     <li class="list-group-item"><b>Dibuat Oleh:</b> {{ $stockMutation->createdBy->nama ?? 'N/A' }}</li>
                     <li class="list-group-item"><b>Tanggal Dibuat:</b> {{ $stockMutation->created_at->format('d M Y, H:i') }}</li>
-                    <li class="list-group-item"><b>Disetujui Oleh:</b> {{ optional($stockMutation->approvedBy)->nama ?? 'N/A' }}</li>
-                    <li class="list-group-item"><b>Tanggal Disetujui:</b> {{ $stockMutation->approved_at ? $stockMutation->approved_at->format('d M Y, H:i') : 'N/A' }}</li>
+                    <li class="list-group-item"><b>Disetujui/Ditolak Oleh:</b> {{ optional($stockMutation->approvedBy)->nama ?? 'N/A' }}</li>
+                    <li class="list-group-item"><b>Tanggal Proses:</b> {{ $stockMutation->approved_at ? $stockMutation->approved_at->format('d M Y, H:i') : 'N/A' }}</li>
                 </ul>
             </div>
              <div class="col-md-6">
@@ -84,8 +83,8 @@
     </div>
     <div class="card-footer">
         @if($stockMutation->status === 'PENDING_APPROVAL')
-            @can('approve-mutation', $stockMutation)
-                <form action="{{ route('admin.stock-mutations.approve', $stockMutation) }}" method="POST" class="d-inline">
+            @can('approve-stock-transaction', $stockMutation)
+                <form action="{{ route('admin.stock-mutations.approve', ['stock_mutation' => $stockMutation->id]) }}" method="POST" class="d-inline">
                     @csrf
                     <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> Setujui & Kirim</button>
                 </form>
@@ -102,17 +101,21 @@
 <div class="modal fade" id="rejectMutationModal" tabindex="-1" role="dialog" aria-labelledby="rejectModalLabel" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
-      <form action="{{ route('admin.stock-mutations.reject', $stockMutation) }}" method="POST">
+      <form action="{{ route('admin.stock-mutations.reject', ['stock_mutation' => $stockMutation->id]) }}" method="POST">
         @csrf
         <div class="modal-header">
           <h5 class="modal-title" id="rejectModalLabel">Alasan Penolakan Mutasi</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
         </div>
         <div class="modal-body">
+          {{-- PERBAIKAN: Menambahkan blok untuk menampilkan error di dalam modal --}}
+          @if ($errors->has('rejection_reason'))
+            <div class="alert alert-danger">
+                {{ $errors->first('rejection_reason') }}
+            </div>
+          @endif
           <div class="form-group">
-            <label for="rejection_reason">Mohon berikan alasan mengapa mutasi ini ditolak:</label>
+            <label for="rejection_reason">Mohon berikan alasan mengapa mutasi ini ditolak (min. 10 karakter):</label>
             <textarea class="form-control" id="rejection_reason" name="rejection_reason" rows="3" required></textarea>
           </div>
         </div>
@@ -124,4 +127,15 @@
     </div>
   </div>
 </div>
+@stop
+
+{{-- PERBAIKAN: Menambahkan JavaScript untuk membuka kembali modal jika ada error --}}
+@section('js')
+<script>
+    @if ($errors->has('rejection_reason'))
+        $(document).ready(function() {
+            $('#rejectMutationModal').modal('show');
+        });
+    @endif
+</script>
 @stop

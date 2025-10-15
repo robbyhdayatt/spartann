@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Lokasi; // DIUBAH
+use App\Models\Lokasi;
 use App\Models\Receiving;
 use App\Models\PurchaseOrder;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,11 +15,10 @@ class ReceivingController extends Controller
 {
     public function index()
     {
+        /** @var \App\Models\User $user */
         $user = Auth::user();
-        // PERUBAHAN: Menggunakan relasi 'lokasi'
         $query = Receiving::with(['purchaseOrder', 'lokasi', 'receivedBy']);
 
-        // Filter data berdasarkan lokasi pengguna, kecuali untuk Super Admin dan PIC
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('gudang_id', $user->gudang_id);
         }
@@ -29,26 +29,31 @@ class ReceivingController extends Controller
 
     public function create()
     {
-        // PERUBAHAN: Menggunakan gate baru 'perform-warehouse-ops'
-        $this->authorize('perform-warehouse-ops');
-        
+        /** @var \App\Models\User $user */
         $user = Auth::user();
-        
-        // Hanya Admin Gudang di Gudang Pusat yang bisa melakukan penerimaan dari PO
-        if ($user->lokasi && $user->lokasi->tipe === 'PUSAT') {
+
+        if ($user->hasRole(['SA', 'PIC', 'MA'])) {
             $query = PurchaseOrder::whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED']);
-            $query->where('gudang_id', $user->gudang_id); // Filter PO untuk lokasinya saja
-            $purchaseOrders = $query->orderBy('tanggal_po', 'desc')->get();
-        } else {
-            // Jika user bukan di Gudang Pusat, tidak ada PO yang bisa diterima
-            $purchaseOrders = collect(); 
         }
+        elseif ($user->hasRole('AG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT') {
+            $this->authorize('perform-warehouse-ops');
+            $query = PurchaseOrder::whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])
+                                  ->where('gudang_id', $user->gudang_id);
+        }
+        else {
+            $this->authorize('perform-warehouse-ops');
+            $purchaseOrders = collect();
+        }
+
+        $purchaseOrders = isset($query) ? $query->orderBy('tanggal_po', 'desc')->get() : collect();
 
         return view('admin.receivings.create', compact('purchaseOrders'));
     }
 
     public function store(Request $request)
     {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $this->authorize('perform-warehouse-ops');
 
         $request->validate([
@@ -64,8 +69,7 @@ class ReceivingController extends Controller
         try {
             $po = PurchaseOrder::with('details')->findOrFail($request->purchase_order_id);
 
-            // Pastikan hanya user dari lokasi yang sama dengan PO yang bisa membuat receiving
-            if (Auth::user()->gudang_id != $po->gudang_id) {
+            if ($user->gudang_id != $po->gudang_id && !$user->hasRole(['SA', 'PIC'])) {
                 return back()->with('error', 'Anda tidak berwenang menerima barang untuk lokasi ini.')->withInput();
             }
 
@@ -74,18 +78,17 @@ class ReceivingController extends Controller
                 'gudang_id' => $po->gudang_id,
                 'nomor_penerimaan' => Receiving::generateReceivingNumber(),
                 'tanggal_terima' => $request->tanggal_terima,
-                'status' => 'PENDING_QC', // Asumsi alur QC masih ada
+                'status' => 'PENDING_QC',
                 'catatan' => $request->catatan,
-                'received_by' => Auth::id(),
+                'received_by' => $user->id,
             ]);
 
             foreach ($request->items as $partId => $itemData) {
                 $qtyTerima = (int)$itemData['qty_terima'];
-                if ($qtyTerima > 0) { // Hanya proses jika ada barang yang diterima
+                if ($qtyTerima > 0) {
                     $poDetail = $po->details->firstWhere('part_id', $partId);
                     if ($poDetail) {
-                        $poDetail->qty_diterima += $qtyTerima;
-                        $poDetail->save();
+                        $poDetail->increment('qty_diterima', $qtyTerima);
                     }
                     $receiving->details()->create([
                         'part_id' => $partId,
@@ -112,13 +115,10 @@ class ReceivingController extends Controller
     public function show(Receiving $receiving)
     {
         $receiving->load('purchaseOrder.supplier', 'details.part', 'createdBy', 'receivedBy', 'qcBy', 'putawayBy', 'lokasi');
-
         $stockMovements = $receiving->stockMovements()->with(['rak', 'user'])->get();
-
         return view('admin.receivings.show', compact('receiving', 'stockMovements'));
     }
-    
-    // Fungsi getPoDetails tidak perlu diubah karena sudah benar
+
     public function getPoDetails(PurchaseOrder $purchaseOrder)
     {
         $purchaseOrder->load('details.part');

@@ -22,6 +22,7 @@ class StockMutation extends Model
         return $this->belongsTo(Part::class);
     }
 
+    // PERBAIKAN: Mengubah nama relasi dan menunjuk ke Model Lokasi
     public function lokasiAsal()
     {
         return $this->belongsTo(Lokasi::class, 'gudang_asal_id');
@@ -47,6 +48,11 @@ class StockMutation extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    public function receivedBy()
+    {
+        return $this->belongsTo(User::class, 'received_by');
+    }
+
     public function rakTujuan()
     {
         return $this->belongsTo(Rak::class, 'rak_tujuan_id');
@@ -55,11 +61,7 @@ class StockMutation extends Model
     public static function generateNomorMutasi()
     {
         $prefix = 'MT-' . date('Ymd') . '-';
-        $lastMutation = DB::table('stock_mutations')
-                        ->where('nomor_mutasi', 'like', $prefix . '%')
-                        ->orderBy('nomor_mutasi', 'desc')
-                        ->first();
-
+        $lastMutation = self::where('nomor_mutasi', 'like', $prefix . '%')->latest('id')->first();
         $newNumber = $lastMutation ? ((int) substr($lastMutation->nomor_mutasi, -4)) + 1 : 1;
         return $prefix . str_pad($newNumber, 4, '0', STR_PAD_LEFT);
     }
