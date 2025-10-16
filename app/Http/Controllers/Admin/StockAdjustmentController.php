@@ -8,7 +8,7 @@ use App\Models\InventoryBatch;
 use App\Models\Part;
 use App\Models\StockMovement;
 use App\Models\Lokasi;
-use App\Models\Rak; // <-- TAMBAHKAN ATAU PASTIKAN BARIS INI ADA
+use App\Models\Rak;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +17,23 @@ class StockAdjustmentController extends Controller
 {
     public function index()
     {
-        $adjustments = StockAdjustment::with(['part', 'lokasi', 'rak', 'createdBy', 'approvedBy'])->latest()->get();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $query = StockAdjustment::with(['part', 'lokasi', 'rak', 'createdBy', 'approvedBy']);
+
+        // ++ PERBAIKAN: Batasi data berdasarkan lokasi user ++
+        // Asumsi: Peran 'SA', 'PIC', 'MA' dapat melihat semua data. Sesuaikan jika perlu.
+        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
+            // Pastikan user memiliki gudang_id
+            if ($user->gudang_id) {
+                $query->where('gudang_id', $user->gudang_id);
+            } else {
+                // Jika user tidak punya lokasi, jangan tampilkan data apa pun untuk keamanan.
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        $adjustments = $query->latest()->get();
         return view('admin.stock_adjustments.index', compact('adjustments'));
     }
 
@@ -30,13 +46,14 @@ class StockAdjustmentController extends Controller
         $parts = Part::where('is_active', true)->orderBy('nama_part')->get();
         $lokasi = null;
 
-        // Logika ini sudah benar, tetapi perlu dipastikan ada di controller Anda.
-        // Admin Gudang/Dealer hanya bisa membuat adjustment untuk lokasinya sendiri
         if ($user->gudang_id) {
             $lokasi = Lokasi::where('id', $user->gudang_id)->first();
         }
 
-        // PERBAIKAN UTAMA: Kirim variabel '$lokasi' ke view, bukan '$gudangs'
+        if (!$lokasi) {
+             return redirect()->route('admin.stock-adjustments.index')->with('error', 'Akun Anda tidak terhubung ke lokasi manapun.');
+        }
+
         return view('admin.stock_adjustments.create', compact('lokasi', 'parts'));
     }
 
@@ -55,7 +72,7 @@ class StockAdjustmentController extends Controller
         $this->authorize('create-stock-adjustment');
         $validated = $request->validate([
             'part_id' => 'required|exists:parts,id',
-            'gudang_id' => 'required|exists:lokasi,id', // Diperbaiki
+            'gudang_id' => 'required|exists:lokasi,id',
             'rak_id' => 'required|exists:raks,id',
             'tipe' => 'required|in:TAMBAH,KURANG',
             'jumlah' => 'required|integer|min:1',
@@ -84,7 +101,6 @@ class StockAdjustmentController extends Controller
             return back()->with('error', 'Permintaan ini sudah diproses.');
         }
 
-        // Menggunakan DB Facade langsung untuk transaksi yang lebih aman
         try {
             DB::transaction(function () use ($stockAdjustment) {
                 $part_id = $stockAdjustment->part_id;
@@ -93,7 +109,6 @@ class StockAdjustmentController extends Controller
                 $jumlahToAdjust = $stockAdjustment->jumlah;
                 $tipe = $stockAdjustment->tipe;
 
-                // Dapatkan total stok saat ini dari semua batch untuk pencatatan
                 $stokSebelum = InventoryBatch::where('part_id', $part_id)
                     ->where('rak_id', $rak_id)
                     ->sum('quantity');
@@ -105,7 +120,6 @@ class StockAdjustmentController extends Controller
                         throw new \Exception('Stok tidak mencukupi. Stok tersedia: ' . $stokSebelum . ', dibutuhkan: ' . $jumlahToAdjust);
                     }
 
-                    // Ambil semua batch yang relevan, urutkan dari yang paling lama (FIFO)
                     $batches = InventoryBatch::where('part_id', $part_id)
                         ->where('rak_id', $rak_id)
                         ->where('quantity', '>', 0)
@@ -116,44 +130,35 @@ class StockAdjustmentController extends Controller
 
                     foreach ($batches as $batch) {
                         if ($remainingQtyToReduce <= 0) break;
-
                         $qtyInBatch = $batch->quantity;
 
                         if ($qtyInBatch >= $remainingQtyToReduce) {
-                            // Batch ini cukup untuk memenuhi sisa pengurangan
                             $batch->quantity -= $remainingQtyToReduce;
                             $remainingQtyToReduce = 0;
                         } else {
-                            // Habiskan batch ini dan lanjut ke batch berikutnya
                             $remainingQtyToReduce -= $qtyInBatch;
                             $batch->quantity = 0;
                         }
 
                         if ($batch->quantity == 0) {
-                            // Hapus batch jika stoknya habis
                             $batch->delete();
                         } else {
                             $batch->save();
                         }
                     }
-
                     $stokSesudah = $stokSebelum - $jumlahToAdjust;
 
                 } else { // Tipe 'TAMBAH'
-                    // Untuk penambahan, kita buat batch baru. Ini adalah pendekatan paling aman
-                    // untuk menjaga integritas data FIFO, meskipun tidak ada referensi ke penerimaan.
                     InventoryBatch::create([
                         'part_id' => $part_id,
                         'rak_id' => $rak_id,
                         'gudang_id' => $gudang_id,
                         'quantity' => $jumlahToAdjust,
-                        'receiving_detail_id' => null, // Tidak ada referensi penerimaan
+                        'receiving_detail_id' => null,
                     ]);
-
                     $stokSesudah = $stokSebelum + $jumlahToAdjust;
                 }
 
-                // Catat pergerakan stok
                 StockMovement::create([
                     'part_id' => $part_id,
                     'gudang_id' => $gudang_id,
@@ -167,7 +172,6 @@ class StockAdjustmentController extends Controller
                     'user_id' => $stockAdjustment->created_by,
                 ]);
 
-                // Update status permintaan adjustment
                 $stockAdjustment->status = 'APPROVED';
                 $stockAdjustment->approved_by = Auth::id();
                 $stockAdjustment->approved_at = now();

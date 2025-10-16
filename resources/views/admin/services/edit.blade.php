@@ -20,7 +20,7 @@
                     <div class="col-md-4"><strong>Pelanggan:</strong> {{ $service->customer_name }}</div>
                     <div class="col-md-4"><strong>Plat No:</strong> {{ $service->plate_no }}</div>
                     {{-- Input hidden untuk menyimpan ID lokasi service --}}
-                    <input type="hidden" id="service_lokasi_id" value="{{ $service->lokasi->id }}">
+                    <input type="hidden" id="service_lokasi_id" value="{{ optional($service->lokasi)->id }}">
                 </div>
             </div>
         </div>
@@ -80,7 +80,7 @@
                 </div>
                 <div class="card-footer">
                     <button type="submit" class="btn btn-success">Simpan Perubahan</button>
-                    <a href="{{ route('admin.services.show', $service) }}" class="btn btn-secondary">Batal</a>
+                    <a href="{{ route('admin.services.index', $service) }}" class="btn btn-secondary">Batal</a>
                 </div>
             </form>
         </div>

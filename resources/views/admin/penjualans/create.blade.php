@@ -13,7 +13,6 @@
     <form action="{{ route('admin.penjualans.store') }}" method="POST">
         @csrf
         <div class="card-body">
-            {{-- Blok Error --}}
             @if ($errors->any())
                 <div class="alert alert-danger">
                     <ul class="mb-0">
@@ -27,11 +26,9 @@
                  <div class="alert alert-danger">{{ session('error') }}</div>
             @endif
 
-            {{-- Header Form --}}
             <div class="row">
                 <div class="col-md-4 form-group">
                     <label for="gudang_id">Lokasi Penjualan</label>
-                    {{-- LOKASI SEKARANG READONLY BERDASARKAN USER LOGIN --}}
                     <input type="text" class="form-control" value="{{ $lokasi->nama_gudang }}" readonly>
                     <input type="hidden" id="gudang_id" name="gudang_id" value="{{ $lokasi->id }}">
                 </div>
@@ -49,15 +46,12 @@
                     <input type="date" class="form-control" id="tanggal_jual" name="tanggal_jual" value="{{ old('tanggal_jual', date('Y-m-d')) }}" required>
                 </div>
             </div>
-
             <hr>
-
-            {{-- Input Part --}}
             <div class="row align-items-end">
                 <div class="col-md-5 form-group">
                     <label for="part-selector">Pilih Part</label>
                     <select id="part-selector" class="form-control select2bs4" disabled>
-                        <option>Memuat Part...</option>
+                        <option>Pilih Lokasi & Konsumen dahulu</option>
                     </select>
                 </div>
                 <div class="col-md-2 form-group">
@@ -68,7 +62,6 @@
                     <button type="button" class="btn btn-primary" id="add-part-btn">Tambahkan</button>
                 </div>
             </div>
-
             <hr>
 
             <h5>Detail Part yang Akan Dijual</h5>
@@ -84,30 +77,22 @@
                             <th>Aksi</th>
                         </tr>
                     </thead>
-                    <tbody id="parts-container">
-                        {{-- Baris Part akan ditambahkan di sini oleh JavaScript --}}
-                    </tbody>
+                    <tbody id="parts-container"></tbody>
                 </table>
             </div>
 
-            {{-- Ringkasan Total --}}
             <div class="row mt-4">
                 <div class="col-md-6 offset-md-6">
                     <div class="table-responsive">
                         <table class="table">
+                            {{-- ++ PERUBAHAN: Tampilan total disederhanakan ++ --}}
                             <tr><th style="width:50%">Subtotal:</th><td class="text-right" id="subtotal-text">Rp 0</td></tr>
                             <tr><th>Total Diskon:</th><td class="text-right text-success" id="diskon-text">Rp 0</td></tr>
-                            <tr><th><div class="form-check"><input class="form-check-input" type="checkbox" id="ppn-checkbox" name="use_ppn" value="1" checked><label class="form-check-label" for="ppn-checkbox">PPN (11%)</label></div></th><td class="text-right" id="pajak-text">Rp 0</td></tr>
                             <tr><th>Total Keseluruhan:</th><td class="text-right h4" id="total-text">Rp 0</td></tr>
                         </table>
                     </div>
                 </div>
             </div>
-
-            <input type="hidden" name="subtotal" id="subtotal-input" value="0">
-            <input type="hidden" name="total_diskon" id="diskon-input" value="0">
-            <input type="hidden" name="pajak" id="pajak-input" value="0">
-            <input type="hidden" name="total_harga" id="total-harga-input" value="0">
         </div>
         <div class="card-footer text-right">
             <button type="submit" class="btn btn-primary">Simpan Penjualan</button>
@@ -117,8 +102,6 @@
 </div>
 @stop
 
-@section('plugins.Select2', true)
-
 @section('js')
 <script>
 $(document).ready(function() {
@@ -127,16 +110,7 @@ $(document).ready(function() {
     $('.select2bs4').select2({ theme: 'bootstrap4' });
 
     function formatRupiah(angka) {
-        let number_string = Math.round(angka).toString(),
-            split = number_string.split(','),
-            sisa = split[0].length % 3,
-            rupiah = split[0].substr(0, sisa),
-            ribuan = split[0].substr(sisa).match(/\d{3}/gi);
-        if (ribuan) {
-            separator = sisa ? '.' : '';
-            rupiah += separator + ribuan.join('.');
-        }
-        return 'Rp ' + (rupiah ? rupiah : '0');
+        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
     }
 
     function calculateTotal() {
@@ -144,47 +118,39 @@ $(document).ready(function() {
         let totalDiskon = 0;
         $('.part-row').each(function() {
             let hargaFinal = parseFloat($(this).find('.harga-final-input').val()) || 0;
-            let hargaOriginal = parseFloat($(this).find('.harga-original-input').val()) || hargaFinal;
             let qty = parseInt($(this).find('.qty-input').val()) || 0;
-            totalDiskon += (hargaOriginal - hargaFinal) * qty;
-            let subtotalRow = hargaFinal * qty;
-            $(this).find('.subtotal-row-text').text(formatRupiah(subtotalRow));
-            subtotal += subtotalRow;
+            subtotal += hargaFinal * qty;
         });
-        let pajak = 0;
-        if ($('#ppn-checkbox').is(':checked')) {
-            pajak = subtotal * 0.11;
-        }
-        let total = subtotal + pajak;
+        
+        // Pajak sudah tidak ada, total = subtotal
+        let total = subtotal;
+        
         $('#subtotal-text').text(formatRupiah(subtotal));
-        $('#diskon-text').text(formatRupiah(totalDiskon));
-        $('#pajak-text').text(formatRupiah(pajak));
+        $('#diskon-text').text(formatRupiah(0)); // Diskon di-nol-kan di tampilan
         $('#total-text').text(formatRupiah(total));
-        $('#subtotal-input').val(subtotal);
-        $('#diskon-input').val(totalDiskon);
-        $('#pajak-input').val(pajak);
-        $('#total-harga-input').val(total);
     }
 
     function loadParts() {
         let gudangId = $('#gudang_id').val();
+        let konsumenId = $('#konsumen_id').val();
         let partSelector = $('#part-selector');
         
-        partSelector.prop('disabled', true).html('<option>Memuat Part...</option>');
-        
-        if (!gudangId) {
-            partSelector.html('<option>Lokasi tidak valid</option>');
+        if (!gudangId || !konsumenId) {
+            partSelector.prop('disabled', true).html('<option>Pilih Lokasi & Konsumen dahulu</option>');
             return;
         }
 
+        partSelector.prop('disabled', true).html('<option>Memuat Part...</option>');
         let url = `{{ url('admin/api/lokasi') }}/${gudangId}/parts`;
 
         $.ajax({
             url: url,
             success: function(parts) {
-                partsData = parts;
+                partsData = {}; // Reset data
                 partSelector.prop('disabled', false).html('<option value="">Pilih Part</option>');
                 parts.forEach(part => {
+                    // Simpan data part lengkap, termasuk harga
+                    partsData[part.id] = part; 
                     partSelector.append(`<option value="${part.id}" data-total-stock="${part.total_stock}">${part.kode_part} - ${part.nama_part} (Stok: ${part.total_stock})</option>`);
                 });
             },
@@ -192,16 +158,17 @@ $(document).ready(function() {
         });
     }
 
-    loadParts(); // Panggil fungsi saat halaman dimuat
+    // Panggil loadParts saat konsumen atau lokasi berubah
+    $('#konsumen_id').on('change', loadParts);
+    loadParts();
 
     $('#add-part-btn').on('click', function() {
         let partId = $('#part-selector').val();
         let qtyJual = parseInt($('#qty-selector').val());
         let gudangId = $('#gudang_id').val();
-        let konsumenId = $('#konsumen_id').val();
 
-        if (!partId || !qtyJual || qtyJual <= 0 || !konsumenId) {
-            alert('Silakan pilih Konsumen, Part, dan isi jumlah yang valid.');
+        if (!partId || !qtyJual || qtyJual <= 0) {
+            alert('Silakan pilih Part dan isi jumlah yang valid.');
             return;
         }
 
@@ -210,57 +177,48 @@ $(document).ready(function() {
             return;
         }
 
+        let selectedPartData = partsData[partId];
+        let hargaFinal = selectedPartData.harga_satuan;
+
         $.ajax({
             url: `{{ route('admin.api.get-fifo-batches') }}`,
             data: { part_id: partId, gudang_id: gudangId },
             success: function(batches) {
-                $.ajax({
-                    url: '{{ route("admin.api.calculate-discount") }}',
-                    data: { part_id: partId, konsumen_id: konsumenId },
-                    success: function(response) {
-                        if (!response.success) {
-                            alert('Gagal menghitung harga diskon.');
-                            return;
-                        }
+                let sisaQty = qtyJual;
+                for (const batch of batches) {
+                    if (sisaQty <= 0) break;
+                    let qtyAmbil = Math.min(sisaQty, batch.quantity);
 
-                        let sisaQty = qtyJual;
-                        let hargaFinal = response.data.final_price;
-                        let hargaOriginal = response.data.original_price;
+                    let newRowHtml = `
+                        <tr class="part-row" data-part-id="${partId}">
+                            <td>
+                                ${selectedPartData.nama_part}
+                                <input type="hidden" name="items[${itemIndex}][part_id]" value="${partId}">
+                                <input type="hidden" name="items[${itemIndex}][batch_id]" value="${batch.id}">
+                                <input type="hidden" class="harga-final-input" value="${hargaFinal}">
+                            </td>
+                            <td>${batch.rak.kode_rak}</td>
+                            <td><input type="number" class="form-control qty-input" name="items[${itemIndex}][qty_jual]" value="${qtyAmbil}" readonly></td>
+                            <td class="text-right">${formatRupiah(hargaFinal)}</td>
+                            <td class="text-right subtotal-row-text">${formatRupiah(hargaFinal * qtyAmbil)}</td>
+                            <td><button type="button" class="btn btn-danger btn-sm remove-part-btn"><i class="fas fa-trash"></i></button></td>
+                        </tr>
+                    `;
+                    $('#parts-container').append(newRowHtml);
+                    sisaQty -= qtyAmbil;
+                    itemIndex++;
+                }
 
-                        for (const batch of batches) {
-                            if (sisaQty <= 0) break;
-                            let qtyAmbil = Math.min(sisaQty, batch.quantity);
+                if (sisaQty > 0) {
+                    alert(`Stok tidak mencukupi. Hanya tersedia ${qtyJual - sisaQty} unit.`);
+                }
 
-                            let newRowHtml = `
-                                <tr class="part-row" data-part-id="${partId}">
-                                    <td>
-                                        ${partsData.find(p => p.id == partId).nama_part}
-                                        <input type="hidden" name="items[${itemIndex}][part_id]" value="${partId}">
-                                        <input type="hidden" name="items[${itemIndex}][batch_id]" value="${batch.id}">
-                                        <input type="hidden" class="harga-original-input" value="${hargaOriginal}">
-                                        <input type="hidden" class="harga-final-input" value="${hargaFinal}">
-                                    </td>
-                                    <td>${batch.rak.kode_rak}</td>
-                                    <td><input type="number" class="form-control qty-input" name="items[${itemIndex}][qty_jual]" value="${qtyAmbil}" readonly></td>
-                                    <td class="text-right">${formatRupiah(hargaFinal)}</td>
-                                    <td class="text-right subtotal-row-text">${formatRupiah(hargaFinal * qtyAmbil)}</td>
-                                    <td><button type="button" class="btn btn-danger btn-sm remove-part-btn"><i class="fas fa-trash"></i></button></td>
-                                </tr>
-                            `;
-                            $('#parts-container').append(newRowHtml);
-                            sisaQty -= qtyAmbil;
-                            itemIndex++;
-                        }
-
-                        if (sisaQty > 0) {
-                            alert(`Stok tidak mencukupi. Hanya tersedia ${qtyJual - sisaQty} unit.`);
-                        }
-
-                        calculateTotal();
-                        $('#part-selector').val('').trigger('change');
-                        $('#qty-selector').val('');
-                    }
-                });
+                calculateTotal();
+                $('#part-selector').val('').trigger('change');
+                $('#qty-selector').val('');
+            },
+            error: function() {
+                alert('Gagal mengambil data batch stok.');
             }
         });
     });
@@ -270,8 +228,6 @@ $(document).ready(function() {
         $(`tr[data-part-id="${partId}"]`).remove();
         calculateTotal();
     });
-
-    $('#ppn-checkbox').on('change', calculateTotal);
 });
 </script>
 @stop

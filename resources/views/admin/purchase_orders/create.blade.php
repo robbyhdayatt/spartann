@@ -75,15 +75,7 @@
                                 <th>Subtotal</th>
                                 <td class="text-right" id="display-subtotal">Rp 0</td>
                             </tr>
-                            <tr>
-                                <th>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="ppn-checkbox" name="use_ppn" value="1">
-                                        <label class="form-check-label" for="ppn-checkbox">PPN (11%)</label>
-                                    </div>
-                                </th>
-                                <td class="text-right" id="display-ppn">Rp 0</td>
-                            </tr>
+                            {{-- ++ PERUBAHAN: Baris PPN dihapus ++ --}}
                             <tr>
                                 <th style="font-size: 1.2rem;">Grand Total</th>
                                 <td class="text-right font-weight-bold" style="font-size: 1.2rem;" id="display-grand-total">Rp 0</td>
@@ -106,14 +98,14 @@
                 <select class="form-control item-part" name="items[__INDEX__][part_id]" required style="width: 100%;">
                     <option value="" disabled selected>Pilih Part</option>
                     @foreach($parts as $part)
-                        <option value="{{ $part->id }}">{{ $part->nama_part }} ({{ $part->kode_part }})</option>
+                        {{-- ++ PERUBAHAN: Tambahkan data-harga pada option ++ --}}
+                        <option value="{{ $part->id }}" data-harga="{{ $part->harga_satuan }}">{{ $part->nama_part }} ({{ $part->kode_part }})</option>
                     @endforeach
                 </select>
             </td>
             <td><input type="number" class="form-control item-qty" name="items[__INDEX__][qty]" min="1" value="1" required></td>
             <td>
-                <input type="text" class="form-control item-harga text-right" name="items[__INDEX__][harga_display]" readonly>
-                <small class="form-text text-muted price-info"></small>
+                <input type="text" class="form-control item-harga text-right" readonly>
             </td>
             <td><input type="text" class="form-control item-subtotal text-right" readonly></td>
             <td><button type="button" class="btn btn-danger btn-sm remove-item-btn">&times;</button></td>
@@ -125,25 +117,15 @@
 
 @push('css')
 <style>
-    /* Menyesuaikan tinggi Select2 agar sama dengan input form lainnya */
-    .select2-container .select2-selection--single {
-        height: calc(2.25rem + 2px) !important;
-    }
-    .select2-container--default .select2-selection--single .select2-selection__rendered {
-        line-height: 1.5 !important;
-        padding-left: .75rem !important;
-        padding-top: .375rem !important;
-    }
-    .select2-container--default .select2-selection--single .select2-selection__arrow {
-        height: calc(2.25rem + 2px) !important;
-    }
+    .select2-container .select2-selection--single { height: calc(2.25rem + 2px) !important; }
+    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 1.5 !important; padding-left: .75rem !important; padding-top: .375rem !important; }
+    .select2-container--default .select2-selection--single .select2-selection__arrow { height: calc(2.25rem + 2px) !important; }
 </style>
 @endpush
 
 @section('js')
     <script>
         $(document).ready(function() {
-            // Inisialisasi Select2 untuk header
             $('.select2').select2({ placeholder: "Pilih Opsi" });
 
             let itemIndex = 0;
@@ -153,18 +135,16 @@
 
             const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 
-            // Aktifkan tombol "Tambah Item" hanya jika Supplier sudah dipilih
             supplierSelect.on('change', function() {
                 if ($(this).val()) {
                     addItemBtn.prop('disabled', false);
-                    itemsTable.empty(); // Reset item jika supplier diganti
+                    itemsTable.empty();
                     calculateAll();
                 } else {
                     addItemBtn.prop('disabled', true);
                 }
             });
 
-            // Tambah baris item baru
             addItemBtn.on('click', function() {
                 let template = $('#po-item-template').html().replace(/__INDEX__/g, itemIndex);
                 itemsTable.append(template);
@@ -172,45 +152,21 @@
                 itemIndex++;
             });
 
-            // Hapus baris item
             itemsTable.on('click', '.remove-item-btn', function() {
                 $(this).closest('tr').remove();
                 calculateAll();
             });
-
-            // Event utama: Saat Part dipilih
+            
+            // ++ PERUBAHAN UTAMA: Logika AJAX diganti, harga diambil dari data-attribute ++
             itemsTable.on('change', '.item-part', function() {
                 let row = $(this).closest('tr');
-                let partId = $(this).val();
-                let supplierId = supplierSelect.val();
-                let hargaDisplay = row.find('.item-harga');
-                let priceInfo = row.find('.price-info');
-
-                priceInfo.text('Loading harga...');
-                hargaDisplay.val('');
-
-                if (!partId || !supplierId) return;
-
-                let url = "{{ route('admin.api.part.purchase-details', ['part' => ':partId']) }}"
-                    .replace(':partId', partId) + `?supplier_id=${supplierId}`;
-
-                $.getJSON(url, function(response) {
-                    const discount = response.discount_result;
-                    hargaDisplay.val(formatRupiah(discount.final_price));
-
-                    if (discount.applied_discounts.length > 0) {
-                        priceInfo.html(`Asli: <del>${formatRupiah(discount.original_price)}</del> <br> <span class="text-success">${discount.applied_discounts.join(', ')}</span>`);
-                    } else {
-                        priceInfo.text('');
-                    }
-                    updateSubtotal(row);
-                }).fail(() => {
-                    alert('Gagal memuat detail harga part.');
-                    priceInfo.text('Error');
-                });
+                let selectedOption = $(this).find('option:selected');
+                let harga = parseFloat(selectedOption.data('harga')) || 0;
+                
+                row.find('.item-harga').val(formatRupiah(harga));
+                updateSubtotal(row);
             });
 
-            // Update subtotal saat qty berubah
             itemsTable.on('keyup change', '.item-qty', function() {
                 updateSubtotal($(this).closest('tr'));
             });
@@ -223,6 +179,7 @@
                 calculateAll();
             }
 
+            // ++ PERUBAHAN: Fungsi kalkulasi disederhanakan (tanpa PPN) ++
             function calculateAll() {
                 let subtotalTotal = 0;
                 itemsTable.find('tr').each(function() {
@@ -230,15 +187,10 @@
                     subtotalTotal += parseFloat(subtotalText) || 0;
                 });
 
-                let ppnAmount = $('#ppn-checkbox').is(':checked') ? subtotalTotal * 0.11 : 0;
-                let grandTotal = subtotalTotal + ppnAmount;
-
                 $('#display-subtotal').text(formatRupiah(subtotalTotal));
-                $('#display-ppn').text(formatRupiah(ppnAmount));
-                $('#display-grand-total').text(formatRupiah(grandTotal));
+                // Grand total sama dengan subtotal
+                $('#display-grand-total').text(formatRupiah(subtotalTotal));
             }
-
-            $('#ppn-checkbox').on('change', calculateAll);
         });
     </script>
 @stop

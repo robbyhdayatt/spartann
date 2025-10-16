@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Penjualan;
 use App\Models\Konsumen;
-use App\Models\Lokasi; // DIUBAH DARI GUDANG
+use App\Models\Lokasi;
 use App\Models\User;
 use App\Models\Part;
 use App\Models\InventoryBatch;
@@ -32,7 +32,6 @@ class PenjualanController extends Controller
         $user = Auth::user();
         $query = Penjualan::with(['konsumen', 'sales', 'lokasi'])->latest();
 
-        // Filter penjualan berdasarkan lokasi user, kecuali untuk SA/PIC/MA
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('gudang_id', $user->gudang_id);
         }
@@ -48,8 +47,6 @@ class PenjualanController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $konsumens = Konsumen::where('is_active', true)->orderBy('nama_konsumen')->get();
-
-        // Lokasi penjualan ditentukan oleh lokasi user yang login
         $lokasi = Lokasi::find($user->gudang_id);
 
         if (!$lokasi) {
@@ -64,7 +61,7 @@ class PenjualanController extends Controller
         $this->authorize('create-sale');
 
         $validated = $request->validate([
-            'gudang_id' => 'required|exists:lokasi,id', // DIUBAH
+            'gudang_id' => 'required|exists:lokasi,id',
             'konsumen_id' => 'required|exists:konsumens,id',
             'tanggal_jual' => 'required|date',
             'items' => 'required|array|min:1',
@@ -75,7 +72,6 @@ class PenjualanController extends Controller
         
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        // Validasi tambahan: pastikan user hanya bisa menjual dari lokasinya sendiri
         if ($user->gudang_id != $validated['gudang_id']) {
             abort(403, 'Aksi tidak diizinkan. Anda hanya dapat membuat penjualan dari lokasi Anda.');
         }
@@ -84,7 +80,8 @@ class PenjualanController extends Controller
         try {
             $konsumen = Konsumen::find($validated['konsumen_id']);
             $totalSubtotalServer = 0;
-            $totalDiskonServer = 0;
+            // Total diskon tidak lagi relevan karena kita pakai harga_satuan
+            $totalDiskonServer = 0; 
 
             $penjualan = Penjualan::create([
                 'nomor_faktur' => Penjualan::generateNomorFaktur(),
@@ -92,7 +89,7 @@ class PenjualanController extends Controller
                 'gudang_id' => $validated['gudang_id'],
                 'konsumen_id' => $validated['konsumen_id'],
                 'sales_id' => $user->id,
-                'created_by' => $user->id, // Tambahkan created_by jika belum ada
+                'created_by' => $user->id,
             ]);
 
             foreach ($validated['items'] as $item) {
@@ -104,12 +101,14 @@ class PenjualanController extends Controller
                     throw new \Exception("Stok di batch untuk part '{$part->nama_part}' tidak mencukupi.");
                 }
 
-                $discountResult = $this->discountService->calculateSalesDiscount($part, $konsumen, $part->harga_jual_default);
-                $finalPrice = $discountResult['final_price'];
+                // ++ PERUBAHAN UTAMA: Gunakan 'harga_satuan' langsung sebagai harga jual ++
+                $finalPrice = $part->harga_satuan;
                 $itemSubtotal = $finalPrice * $qty;
-
                 $totalSubtotalServer += $itemSubtotal;
-                $totalDiskonServer += ($part->harga_jual_default - $finalPrice) * $qty;
+                
+                // Kalkulasi diskon (jika ada) hanya untuk laporan, tidak mempengaruhi total
+                $discountResult = $this->discountService->calculateSalesDiscount($part, $konsumen, $part->harga_satuan);
+                $totalDiskonServer += ($part->harga_satuan - $discountResult['final_price']) * $qty;
 
                 $stokSebelum = $batch->quantity;
                 $batch->decrement('quantity', $qty);
@@ -122,7 +121,6 @@ class PenjualanController extends Controller
                     'subtotal' => $itemSubtotal,
                 ]);
 
-                // Gunakan relasi untuk membuat stock movement
                 $penjualan->stockMovements()->create([
                     'part_id' => $part->id,
                     'gudang_id' => $penjualan->gudang_id,
@@ -137,13 +135,14 @@ class PenjualanController extends Controller
 
             InventoryBatch::where('quantity', '<=', 0)->delete();
 
-            $pajak = ($request->use_ppn == 1) ? $totalSubtotalServer * 0.11 : 0;
-            $totalHarga = $totalSubtotalServer + $pajak;
+            // ++ PERUBAHAN: Pajak di-nol-kan dan total disesuaikan ++
+            $pajak = 0;
+            $totalHarga = $totalSubtotalServer;
 
             $penjualan->update([
                 'subtotal' => $totalSubtotalServer,
-                'total_diskon' => $totalDiskonServer,
-                'pajak' => $pajak,
+                'total_diskon' => $totalDiskonServer, // Tetap simpan diskon untuk laporan
+                'pajak' => $pajak, // Pajak akan selalu 0
                 'total_harga' => $totalHarga,
             ]);
 
@@ -159,12 +158,12 @@ class PenjualanController extends Controller
     public function show(Penjualan $penjualan)
     {
         $this->authorize('view-sales');
-        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.part', 'details.rak']); // DIUBAH GUDANG -> LOKASI
+        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.part', 'details.rak']);
         return view('admin.penjualans.show', compact('penjualan'));
     }
 
     // --- API Methods ---
-    public function getPartsByLokasi(Lokasi $lokasi) // DIUBAH
+    public function getPartsByLokasi(Lokasi $lokasi)
     {
         $this->authorize('create-sale');
         $parts = Part::whereHas('inventoryBatches', function ($query) use ($lokasi) {
@@ -181,6 +180,8 @@ class PenjualanController extends Controller
                 'kode_part' => $part->kode_part,
                 'nama_part' => $part->nama_part,
                 'total_stock' => (int) $part->inventory_batches_sum_quantity,
+                // ++ PERUBAHAN: Kirim harga_satuan ke frontend ++
+                'harga_satuan' => $part->harga_satuan,
             ];
         });
 
@@ -192,7 +193,7 @@ class PenjualanController extends Controller
         $this->authorize('create-sale');
         $validated = $request->validate([
             'part_id' => 'required|exists:parts,id',
-            'gudang_id' => 'required|exists:lokasi,id', // DIUBAH
+            'gudang_id' => 'required|exists:lokasi,id',
         ]);
 
         $batches = InventoryBatch::where('part_id', $validated['part_id'])
@@ -200,29 +201,31 @@ class PenjualanController extends Controller
             ->where('quantity', '>', 0)
             ->with(['rak', 'receivingDetail.receiving'])
             ->get()
-            // Urutkan berdasarkan tanggal dibuatnya batch (jika tidak ada referensi receiving)
-            // atau tanggal terima barang jika ada referensi.
             ->sortBy(function($batch) {
                 if ($batch->receivingDetail && $batch->receivingDetail->receiving) {
-                    return $batch->receivingDetail->receiving->tanggal_terima->format('Y-m-d H:i:s');
+                    return $batch->receivingDetail->receiving->tanggal_terima;
                 }
-                return $batch->created_at->format('Y-m-d H:i:s');
+                return $batch->created_at;
             });
             
         return response()->json($batches->values()->all());
     }
 
+    // ++ PERUBAHAN: Fungsi ini sekarang hanya mengembalikan harga_satuan (untuk konsistensi) ++
     public function calculateDiscount(Request $request)
     {
-        $request->validate(['part_id' => 'required|exists:parts,id', 'konsumen_id' => 'required|exists:konsumens,id']);
+        $request->validate(['part_id' => 'required|exists:parts,id']);
         try {
             $part = Part::findOrFail($request->part_id);
-            $konsumen = Konsumen::findOrFail($request->konsumen_id);
-            $basePrice = $part->harga_jual_default;
-            $discountResult = $this->discountService->calculateSalesDiscount($part, $konsumen, $basePrice);
-            return response()->json(['success' => true, 'data' => $discountResult]);
+            // Anda bisa tambahkan lagi logika diskon di sini jika diperlukan di masa depan
+            // Untuk sekarang, kita kembalikan harga asli dan harga final yang sama
+            return response()->json(['success' => true, 'data' => [
+                'original_price' => $part->harga_satuan,
+                'final_price' => $part->harga_satuan, // Harga final sama dengan harga satuan
+                'applied_discounts' => []
+            ]]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal menghitung diskon: ' . $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Gagal mengambil harga: ' . $e->getMessage()], 500);
         }
     }
 }

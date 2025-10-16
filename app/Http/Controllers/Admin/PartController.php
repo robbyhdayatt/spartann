@@ -107,33 +107,29 @@ class PartController extends Controller
     }
 public function search(Request $request)
     {
-        $query = $request->get('q');
-        $lokasiId = $request->get('lokasi_id'); // Ambil ID lokasi dari request
+        $query = $request->input('q');
+        $lokasiId = $request->input('lokasi_id');
 
         $parts = Part::where('is_active', true)
-            ->where(function($q) use ($query) {
+            ->where(function ($q) use ($query) {
                 $q->where('nama_part', 'like', "%{$query}%")
-                  ->orWhere('kode_part', 'like', "%{$query}%");
+                    ->orWhere('kode_part', 'like', "%{$query}%");
             })
-            // Tambahkan withSum dengan kondisi berdasarkan lokasi
-            ->when($lokasiId, function ($q) use ($lokasiId) {
-                $q->withSum(['inventoryBatches' => function ($query) use ($lokasiId) {
-                    $query->where('gudang_id', $lokasiId);
-                }], 'quantity');
-            })
-            ->limit(20)
+            ->limit(50)
             ->get();
 
-        // Mengubah format output JSON agar sesuai dengan kebutuhan Select2
-        return response()->json($parts->map(function($part) {
+        $results = $parts->map(function ($part) use ($lokasiId) {
+            $stock = $lokasiId ? $part->getStockByGudang($lokasiId) : 0;
             return [
                 'id' => $part->id,
-                'text' => "{$part->kode_part} - {$part->nama_part}",
-                'harga_satuan' => $part->harga_satuan,
-                'satuan' => $part->satuan,
-                // Kirim data stok ke frontend
-                'total_stock' => (int) $part->inventory_batches_sum_quantity ?? 0,
+                'text' => "{$part->nama_part} ({$part->kode_part})",
+                'total_stock' => $stock,
+                
+                // ++ TAMBAHKAN BARIS INI ++
+                'harga_satuan' => $part->harga_satuan, // Menggunakan kolom harga_jual dari tabel parts
             ];
-        }));
+        });
+
+        return response()->json($results);
     }
 }

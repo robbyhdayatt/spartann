@@ -6,12 +6,6 @@ return [
     |--------------------------------------------------------------------------
     | Title
     |--------------------------------------------------------------------------
-    |
-    | Here you can change the default title of your admin panel.
-    |
-    | For detailed instructions you can look the title section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
     'title' => 'SPARTAN',
@@ -22,12 +16,6 @@ return [
     |--------------------------------------------------------------------------
     | Favicon
     |--------------------------------------------------------------------------
-    |
-    | Here you can activate the favicon.
-    |
-    | For detailed instructions you can look the favicon section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
     'use_ico_only' => false,
@@ -37,14 +25,6 @@ return [
     |--------------------------------------------------------------------------
     | Google Fonts
     |--------------------------------------------------------------------------
-    |
-    | Here you can allow or not the use of external google fonts. Disabling the
-    | google fonts may be useful if your admin panel internet access is
-    | restricted somehow.
-    |
-    | For detailed instructions you can look the google fonts section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
     'google_fonts' => [
@@ -55,16 +35,10 @@ return [
     |--------------------------------------------------------------------------
     | Admin Panel Logo
     |--------------------------------------------------------------------------
-    |
-    | Here you can change the logo of your admin panel.
-    |
-    | For detailed instructions you can look the logo section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
     'logo' => '<b>SPARTAN</b>',
-    'logo_img' => 'img/SPARTAN.png', // Ganti dengan nama file logo Anda
+    'logo_img' => 'img/SPARTAN.png',
     'logo_img_class' => 'brand-image img-circle elevation-3',
     'logo_img_xl' => null,
     'logo_img_xl_class' => 'brand-image-xs',
@@ -74,23 +48,16 @@ return [
     |--------------------------------------------------------------------------
     | Authentication Logo
     |--------------------------------------------------------------------------
-    |
-    | Here you can setup an alternative logo to use on your login and register
-    | screens. When disabled, the admin panel logo will be used instead.
-    |
-    | For detailed instructions you can look the auth logo section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
     'auth_logo' => [
-        'enabled' => false, // Aktifkan
+        'enabled' => true,
         'img' => [
-            'path' => 'img/SPARTAN.png', // Ganti dengan logo yang lebih besar
+            'path' => 'img/SPARTAN.png',
             'alt' => 'SPARTAN Logo',
             'class' => '',
-            'width' => 200, // Sesuaikan ukurannya
-            'height' => 100, // Sesuaikan ukurannya
+            'width' => 200,
+            'height' => 100,
         ],
     ],
 
@@ -98,15 +65,6 @@ return [
     |--------------------------------------------------------------------------
     | Preloader Animation
     |--------------------------------------------------------------------------
-    |
-    | Here you can change the preloader animation configuration. Currently, two
-    | modes are supported: 'fullscreen' for a fullscreen preloader animation
-    | and 'cwrapper' to attach the preloader animation into the content-wrapper
-    | element and avoid overlapping it with the sidebars and the top navbar.
-    |
-    | For detailed instructions you can look the preloader section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
     'preloader' => [
@@ -125,37 +83,24 @@ return [
     |--------------------------------------------------------------------------
     | User Menu
     |--------------------------------------------------------------------------
-    |
-    | Here you can activate and change the user menu.
-    |
-    | For detailed instructions you can look the user menu section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
-    'usermenu_enabled' => false,
+    'usermenu_enabled' => true, // Diaktifkan untuk menampilkan nama user & logout
     'usermenu_header' => false,
     'usermenu_header_class' => 'bg-primary',
     'usermenu_image' => false,
     'usermenu_desc' => true,
 
-
     /*
     |--------------------------------------------------------------------------
     | Layout
     |--------------------------------------------------------------------------
-    |
-    | Here we change the layout of your admin panel.
-    |
-    | For detailed instructions you can look the layout section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Layout-and-Styling-Configuration
-    |
     */
 
     'layout_topnav' => null,
     'layout_boxed' => null,
-    'layout_fixed_sidebar' => null,
-    'layout_fixed_navbar' => null,
+    'layout_fixed_sidebar' => true, // Dibuat fixed agar tidak ikut scroll
+    'layout_fixed_navbar' => true, // Dibuat fixed agar tidak ikut scroll
     'layout_fixed_footer' => null,
     'layout_dark_mode' => null,
 
@@ -163,12 +108,6 @@ return [
     |--------------------------------------------------------------------------
     | Authentication Views Classes
     |--------------------------------------------------------------------------
-    |
-    | Here you can change the look and behavior of the authentication views.
-    |
-    | For detailed instructions you can look the auth classes section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Layout-and-Styling-Configuration
-    |
     */
 
     'classes_auth_card' => '',
@@ -182,12 +121,6 @@ return [
     |--------------------------------------------------------------------------
     | Admin Panel Classes
     |--------------------------------------------------------------------------
-    |
-    | Here you can change the look and behavior of the admin panel.
-    |
-    | For detailed instructions you can look the admin panel classes here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Layout-and-Styling-Configuration
-    |
     */
 
     'classes_body' => '',
@@ -196,7 +129,7 @@ return [
     'classes_content_wrapper' => '',
     'classes_content_header' => '',
     'classes_content' => '',
-    'classes_sidebar' => 'sidebar-light-yamaha elevation-4',
+    'classes_sidebar' => 'sidebar-light-primary elevation-4', // Warna disesuaikan
     'classes_sidebar_nav' => '',
     'classes_topnav'  => 'navbar-white navbar-light',
     'classes_topnav_nav' => 'navbar-expand',
@@ -206,12 +139,6 @@ return [
     |--------------------------------------------------------------------------
     | Sidebar
     |--------------------------------------------------------------------------
-    |
-    | Here we can modify the sidebar of the admin panel.
-    |
-    | For detailed instructions you can look the sidebar section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Layout-and-Styling-Configuration
-    |
     */
 
     'sidebar_mini' => 'lg',
@@ -228,12 +155,6 @@ return [
     |--------------------------------------------------------------------------
     | Control Sidebar (Right Sidebar)
     |--------------------------------------------------------------------------
-    |
-    | Here we can modify the right sidebar aka control sidebar of the admin panel.
-    |
-    | For detailed instructions you can look the right sidebar section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Layout-and-Styling-Configuration
-    |
     */
 
     'right_sidebar' => false,
@@ -248,16 +169,10 @@ return [
     |--------------------------------------------------------------------------
     | URLs
     |--------------------------------------------------------------------------
-    |
-    | Here we can modify the url settings of the admin panel.
-    |
-    | For detailed instructions you can look the urls section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Basic-Configuration
-    |
     */
 
     'use_route_url' => false,
-    'dashboard_url' => '#',
+    'dashboard_url' => 'admin/home',
     'logout_url' => 'logout',
     'login_url' => 'login',
     'register_url' => 'register',
@@ -270,16 +185,6 @@ return [
     |--------------------------------------------------------------------------
     | Laravel Asset Bundling
     |--------------------------------------------------------------------------
-    |
-    | Here we can enable the Laravel Asset Bundling option for the admin panel.
-    | Currently, the next modes are supported: 'mix', 'vite' and 'vite_js_only'.
-    | When using 'vite_js_only', it's expected that your CSS is imported using
-    | JavaScript. Typically, in your application's 'resources/js/app.js' file.
-    | If you are not using any of these, leave it as 'false'.
-    |
-    | For detailed instructions you can look the asset bundling section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Other-Configuration
-    |
     */
 
     'laravel_asset_bundling' => false,
@@ -290,22 +195,13 @@ return [
     |--------------------------------------------------------------------------
     | Menu Items
     |--------------------------------------------------------------------------
-    |
-    | Here we can modify the sidebar/top navigation of the admin panel.
-    |
-    | For detailed instructions you can look here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Menu-Configuration
-    |
     */
 
-    // config/adminlte.php
-
     'menu' => [
-        // Tombol search & fullscreen
-        ['search' => false, 'topnav' => true],
+        // Navbar items:
         ['type' => 'fullscreen-widget', 'topnav_right' => true],
 
-        // Menu Utama
+        // Sidebar items:
         [
             'text' => 'Dashboard',
             'route'  => 'admin.home',
@@ -314,13 +210,13 @@ return [
         [
             'text' => 'Profil Saya',
             'route'  => 'admin.profile.show',
-            'icon' => 'fas fa-fw fa-user',
+            'icon' => 'fas fa-fw fa-user-circle',
         ],
 
         // ================== MENU PUSAT & GLOBAL ==================
         [
             'header' => 'MASTER & PENGATURAN',
-            'can' => 'manage-pic-level', // Hanya SA & PIC
+            'can' => 'view-master-data', 
         ],
         [
             'text' => 'Manajemen Lokasi',
@@ -337,18 +233,18 @@ return [
             'icon'    => 'fas fa-fw fa-database',
             'can'     => 'view-master-data',
             'submenu' => [
-                ['text' => 'Brand', 'route' => 'admin.brands.index'],
-                ['text' => 'Kategori', 'route' => 'admin.categories.index'],
-                ['text' => 'Supplier', 'route' => 'admin.suppliers.index'],
-                ['text' => 'Part', 'route' => 'admin.parts.index'],
-                ['text' => 'Konsumen', 'route' => 'admin.konsumens.index'],
+                ['text' => 'Brand', 'icon' => 'far fa-fw fa-copyright', 'route' => 'admin.brands.index'],
+                ['text' => 'Kategori', 'icon' => 'far fa-fw fa-folder-open', 'route' => 'admin.categories.index'],
+                ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index'],
+                ['text' => 'Part', 'icon' => 'fas fa-fw fa-cogs', 'route' => 'admin.parts.index'],
+                ['text' => 'Konsumen', 'icon' => 'fas fa-fw fa-user-friends', 'route' => 'admin.konsumens.index'],
             ],
         ],
         [
             'text' => 'Pengguna',
             'route'  => 'admin.users.index',
             'icon' => 'fas fa-fw fa-users-cog',
-            'can' => 'manage-users', // Hanya Super Admin
+            'can' => 'manage-users',
         ],
 
         // ================== MENU OPERASIONAL ==================
@@ -360,44 +256,37 @@ return [
             'icon' => 'fas fa-fw fa-industry',
             'can'  => 'is-pusat-staff',
             'submenu' => [
-                ['text' => 'Purchase Order (PO)', 'route' => 'admin.purchase-orders.index', 'can' => 'access-po-module'],
-                
-                // PERBAIKAN: Hak akses disederhanakan di bawah ini
-                ['text' => 'Penerimaan Barang', 'route' => 'admin.receivings.index', 'can' => 'perform-warehouse-ops'],
-                ['text' => 'Quality Control (QC)', 'route' => 'admin.qc.index', 'can' => 'perform-warehouse-ops'],
-                ['text' => 'Penyimpanan (Putaway)', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'],     
-                ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index'],
-                ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index'],
-                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'],
-                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index', 'can' => 'view-quarantine-stock'],
-                ['text' => 'Retur Pembelian', 'route' => 'admin.purchase-returns.index', 'can' => 'manage-purchase-returns'],
-            ],  
+                ['text' => 'Purchase Order (PO)', 'icon' => 'fas fa-fw fa-shopping-cart', 'route' => 'admin.purchase-orders.index', 'can' => 'access-po-module'],
+                ['text' => 'Penerimaan Barang', 'icon' => 'fas fa-fw fa-box-open', 'route' => 'admin.receivings.index', 'can' => 'perform-warehouse-ops'],
+                ['text' => 'Quality Control (QC)', 'icon' => 'fas fa-fw fa-check-double', 'route' => 'admin.qc.index', 'can' => 'perform-warehouse-ops'],
+                ['text' => 'Penyimpanan (Putaway)', 'icon' => 'fas fa-fw fa-dolly', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'],      
+                ['text' => 'Adjusment Stok', 'icon' => 'fas fa-fw fa-sliders-h', 'route' => 'admin.stock-adjustments.index'],
+                ['text' => 'Mutasi Stok', 'icon' => 'fas fa-fw fa-people-arrows', 'route' => 'admin.stock-mutations.index'],
+                ['text' => 'Penerimaan Mutasi', 'icon' => 'fas fa-fw fa-truck-loading', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'],
+                ['text' => 'Stok Karantina', 'icon' => 'fas fa-fw fa-biohazard', 'route' => 'admin.quarantine-stock.index', 'can' => 'view-quarantine-stock'],
+                ['text' => 'Retur Pembelian', 'icon' => 'fas fa-fw fa-undo-alt', 'route' => 'admin.purchase-returns.index', 'can' => 'manage-purchase-returns'],
+            ],   
         ],
         [
             'text' => 'Transaksi Dealer',
             'icon' => 'fas fa-fw fa-store-alt',
             'can'  => 'is-dealer-staff',
             'submenu' => [
-                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'],
-                ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index', 'can' => 'create-stock-adjustment'],
-                ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index', 'can' => 'create-stock-adjustment'],
-                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index', 'can' => 'manage-quarantine-stock'],
-                ['text' => 'Data Service', 'route'  => 'admin.services.index', 'icon' => 'fas fa-fw fa-wrench', 'can'  => 'view-service'],
+                ['text' => 'Penerimaan Mutasi', 'icon' => 'fas fa-fw fa-truck-loading', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'],
+                ['text' => 'Adjusment Stok', 'icon' => 'fas fa-fw fa-sliders-h', 'route' => 'admin.stock-adjustments.index', 'can' => 'create-stock-adjustment'],
+                ['text' => 'Mutasi Stok', 'icon' => 'fas fa-fw fa-people-arrows', 'route' => 'admin.stock-mutations.index', 'can' => 'create-stock-adjustment'],
+                ['text' => 'Stok Karantina', 'icon' => 'fas fa-fw fa-biohazard', 'route' => 'admin.quarantine-stock.index', 'can' => 'manage-quarantine-stock'],
+                ['text' => 'Data Service', 'icon' => 'fas fa-fw fa-wrench', 'route' => 'admin.services.index', 'can' => 'view-service'],
             ],
         ],
         [
             'text'    => 'Penjualan',
             'icon'    => 'fas fa-fw fa-cash-register',
-            'can'     => 'view-sales', // Induk menu bisa dilihat oleh semua yang berhak melihat
+            'can'     => 'view-sales',
             'submenu' => [
-                // PERUBAHAN: Tambahkan 'can' => 'create-sale'
-                ['text' => 'Buat Transaksi', 'route' => 'admin.penjualans.create', 'can' => 'create-sale'],
-                
-                // Riwayat bisa dilihat oleh semua yang punya akses 'view-sales'
-                ['text' => 'Riwayat Penjualan', 'route' => 'admin.penjualans.index'],
-                
-                // Asumsi retur juga hanya bisa dibuat oleh Sales/Counter
-                ['text' => 'Retur Penjualan', 'route' => 'admin.sales-returns.index', 'can' => 'create-sale'],
+                ['text' => 'Buat Transaksi', 'icon' => 'fas fa-fw fa-plus-circle', 'route' => 'admin.penjualans.create', 'can' => 'create-sale'],
+                ['text' => 'Riwayat Penjualan', 'icon' => 'fas fa-fw fa-history', 'route' => 'admin.penjualans.index'],
+                ['text' => 'Retur Penjualan', 'icon' => 'fas fa-fw fa-exchange-alt', 'route' => 'admin.sales-returns.index', 'can' => 'create-sale'],
             ],
         ],
 
@@ -411,13 +300,14 @@ return [
             'icon'    => 'fas fa-fw fa-bullhorn',
             'can'     => 'manage-marketing',
             'submenu' => [
-                ['text' => 'Manajemen Campaign', 'route' => 'admin.campaigns.index'],
-                ['text' => 'Kategori Diskon', 'route' => 'admin.customer-discount-categories.index'],
+                ['text' => 'Manajemen Campaign', 'icon' => 'fas fa-fw fa-tags', 'route' => 'admin.campaigns.index'],
+                ['text' => 'Kategori Diskon', 'icon' => 'fas fa-fw fa-percent', 'route' => 'admin.customer-discount-categories.index'],
                 [
                     'text'    => 'Insentif Sales',
+                    'icon'    => 'fas fa-fw fa-gift',
                     'submenu' => [
-                        ['text' => 'Set Target', 'route' => 'admin.incentives.targets'],
-                        ['text' => 'Laporan Insentif', 'route' => 'admin.incentives.report'],
+                        ['text' => 'Set Target', 'icon' => 'fas fa-fw fa-bullseye', 'route' => 'admin.incentives.targets'],
+                        ['text' => 'Laporan Insentif', 'icon' => 'fas fa-fw fa-file-invoice-dollar', 'route' => 'admin.incentives.report'],
                     ],
                 ],
             ],
@@ -427,12 +317,12 @@ return [
             'icon'    => 'fas fa-fw fa-chart-pie',
             'can'     => 'view-reports',
             'submenu' => [
-                ['text' => 'Kartu Stok', 'route' => 'admin.reports.stock-card'],
-                ['text' => 'Stok Per Lokasi', 'route' => 'admin.reports.stock-by-warehouse'],
-                ['text' => 'Laporan Stok Total', 'route' => 'admin.reports.stock-report'],
-                ['text' => 'Jurnal Penjualan', 'route' => 'admin.reports.sales-journal'],
-                ['text' => 'Jurnal Pembelian', 'route' => 'admin.reports.purchase-journal'],
-                ['text' => 'Nilai Persediaan', 'route' => 'admin.reports.inventory-value'],
+                ['text' => 'Kartu Stok', 'icon' => 'fas fa-fw fa-clipboard-list', 'route' => 'admin.reports.stock-card'],
+                ['text' => 'Stok Per Lokasi', 'icon' => 'fas fa-fw fa-boxes', 'route' => 'admin.reports.stock-by-warehouse'],
+                ['text' => 'Laporan Stok Total', 'icon' => 'fas fa-fw fa-archive', 'route' => 'admin.reports.stock-report'],
+                ['text' => 'Jurnal Penjualan', 'icon' => 'fas fa-fw fa-book-open', 'route' => 'admin.reports.sales-journal'],
+                ['text' => 'Jurnal Pembelian', 'icon' => 'fas fa-fw fa-book', 'route' => 'admin.reports.purchase-journal'],
+                ['text' => 'Nilai Persediaan', 'icon' => 'fas fa-fw fa-dollar-sign', 'route' => 'admin.reports.inventory-value'],
             ],
         ],
     ],
@@ -441,12 +331,6 @@ return [
     |--------------------------------------------------------------------------
     | Menu Filters
     |--------------------------------------------------------------------------
-    |
-    | Here we can modify the menu filters of the admin panel.
-    |
-    | For detailed instructions you can look the menu filters section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Menu-Configuration
-    |
     */
 
     'filters' => [
@@ -463,114 +347,57 @@ return [
     |--------------------------------------------------------------------------
     | Plugins Initialization
     |--------------------------------------------------------------------------
-    |
-    | Here we can modify the plugins used inside the admin panel.
-    |
-    | For detailed instructions you can look the plugins section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Plugins-Configuration
-    |
     */
 
     'plugins' => [
         'Datatables' => [
-            'active' => true,
+            'active' => false,
             'files' => [
-                [
-                    'type' => 'js',
-                    'asset' => false,
-                    'location' => '//cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js',
-                ],
-                [
-                    'type' => 'js',
-                    'asset' => false,
-                    'location' => '//cdn.datatables.net/1.10.19/js/dataTables.bootstrap4.min.js',
-                ],
-                [
-                    'type' => 'css',
-                    'asset' => false,
-                    'location' => '//cdn.datatables.net/1.10.19/css/dataTables.bootstrap4.min.css',
-                ],
+                ['type' => 'js', 'asset' => true, 'location' => 'vendor/datatables/js/jquery.dataTables.min.js'],
+                ['type' => 'js', 'asset' => true, 'location' => 'vendor/datatables/js/dataTables.bootstrap4.min.js'],
+                ['type' => 'css', 'asset' => true, 'location' => 'vendor/datatables/css/dataTables.bootstrap4.min.css'],
             ],
         ],
         'Select2' => [
             'active' => true,
             'files' => [
-                [
-                    'type' => 'js',
-                    'asset' => false,
-                    'location' => '//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/js/select2.min.js',
-                ],
-                [
-                    'type' => 'css',
-                    'asset' => false,
-                    'location' => '//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/css/select2.css',
-                ],
-                [
-                    'type' => 'css',
-                    'asset' => true, // Ganti dari false ke true jika sebelumnya false
-                    'location' => 'vendor/select2-bootstrap4-theme/select2-bootstrap4.min.css',
-                ],
+                ['type' => 'js', 'asset' => true, 'location' => 'vendor/select2/js/select2.full.min.js'],
+                ['type' => 'css', 'asset' => true, 'location' => 'vendor/select2/css/select2.min.css'],
+                ['type' => 'css', 'asset' => true, 'location' => 'vendor/select2-bootstrap4-theme/select2-bootstrap4.min.css'],
             ],
         ],
         'BsCustomFileInput' => [
             'active' => true,
             'files' => [
-                [
-                    'type' => 'js',
-                    'asset' => true,
-                    'location' => 'vendor/bs-custom-file-input/bs-custom-file-input.min.js',
-                ],
+                ['type' => 'js', 'asset' => true, 'location' => 'vendor/bs-custom-file-input/bs-custom-file-input.min.js'],
             ],
         ],
         'Chartjs' => [
-            'active' => true,
+            'active' => false,
             'files' => [
-                [
-                    'type' => 'js',
-                    'asset' => false,
-                    'location' => '//cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.0/Chart.bundle.min.js',
-                ],
+                ['type' => 'js', 'asset' => true, 'location' => 'vendor/chart.js/Chart.bundle.min.js'],
             ],
         ],
         'Sweetalert2' => [
-            'active' => true,
+            'active' => false,
             'files' => [
-                [
-                    'type' => 'js',
-                    'asset' => false,
-                    'location' => '//cdn.jsdelivr.net/npm/sweetalert2@8',
-                ],
+                ['type' => 'js', 'asset' => true, 'location' => 'vendor/sweetalert2/sweetalert2.min.js'],
+                ['type' => 'css', 'asset' => true, 'location' => 'vendor/sweetalert2-theme-bootstrap-4/bootstrap-4.min.css'],
             ],
         ],
         'Pace' => [
             'active' => false,
             'files' => [
-                [
-                    'type' => 'css',
-                    'asset' => false,
-                    'location' => '//cdnjs.cloudflare.com/ajax/libs/pace/1.0.2/themes/blue/pace-theme-center-radar.min.css',
-                ],
-                [
-                    'type' => 'js',
-                    'asset' => false,
-                    'location' => '//cdnjs.cloudflare.com/ajax/libs/pace/1.0.2/pace.min.js',
-                ],
+                ['type' => 'css', 'asset' => true, 'location' => 'vendor/pace-progress/themes/blue/pace-theme-center-radar.min.css'],
+                ['type' => 'js', 'asset' => true, 'location' => 'vendor/pace-progress/pace.min.js'],
             ],
         ],
-
     ],
 
     /*
     |--------------------------------------------------------------------------
     | IFrame
     |--------------------------------------------------------------------------
-    |
-    | Here we change the IFrame mode configuration. Note these changes will
-    | only apply to the view that extends and enable the IFrame mode.
-    |
-    | For detailed instructions you can look the iframe mode section here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/IFrame-Mode-Configuration
-    |
     */
 
     'iframe' => [
@@ -597,14 +424,7 @@ return [
     |--------------------------------------------------------------------------
     | Livewire
     |--------------------------------------------------------------------------
-    |
-    | Here we can enable the Livewire support.
-    |
-    | For detailed instructions you can look the livewire here:
-    | https://github.com/jeroennoten/Laravel-AdminLTE/wiki/Other-Configuration
-    |
     */
 
     'livewire' => false,
-
 ];

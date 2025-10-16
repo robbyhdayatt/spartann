@@ -3,125 +3,133 @@
 namespace App\Imports;
 
 use App\Models\Service;
-use Illuminate\Support\Collection;
-use Maatwebsite\Excel\Concerns\ToCollection;
+use App\Models\ServiceDetail;
+use App\Models\Lokasi;
+use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\WithBatchInserts;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
+use Illuminate\Support\Facades\Log;
 
-class ServiceImport implements ToCollection
+class ServiceImport implements ToModel, WithHeadingRow, WithBatchInserts, WithChunkReading
 {
-    private $currentService = null;
     private $importedCount = 0;
     private $skippedCount = 0;
+    private $skippedDealerCount = 0; // ++ Counter baru untuk dealer yang tidak cocok
 
-    public function collection(Collection $rows)
+    // ++ Variabel untuk menyimpan kode dealer user
+    private $userDealerCode;
+    private $lokasiMapping = [];
+
+    // ++ Constructor untuk menerima kode dealer dari controller
+    public function __construct(string $userDealerCode)
     {
-        $dataRows = $rows->slice(2);
-        $headers = [
-            1 => 'yss', 2 => 'dealer', 3 => 'point', 4 => 'reg_date', 5 => 'service_order',
-            6 => 'plate_no', 7 => 'no_work_order', 8 => 'status_work_order', 9 => 'invoice_no',
-            10 => 'nama', 11 => 'ktp', 12 => 'no_npwp', 13 => 'name_npwp', 14 => 'telepon_no',
-            15 => 'brand', 16 => 'model_name', 17 => 'frame_no', 18 => 'service_category',
-            21 => 'service_package', 22 => 'labor_cost_service', 23 => 'parts_no',
-            24 => 'parts_name', 25 => 'parts_qty', 26 => 'parts_price', 27 => 'payment_type',
-            28 => 'transaction_code', 29 => 'amount', 30 => 'e_payment_amount',
-            31 => 'cash_amount', 32 => 'debit_amount', 33 => 'down_payment_dp',
-            34 => 'total_labor', 35 => 'total_part_service', 36 => 'total_oil_service',
-            37 => 'total_retail_parts', 38 => 'total_retail_oil', 39 => 'total_amount',
-            40 => 'benefit_amount', 41 => 'total_payment', 42 => 'balance', 43 => 'technician_name'
-        ];
-
-        foreach ($dataRows as $row) {
-            $rowData = new Collection();
-            foreach ($headers as $index => $headerName) {
-                if (isset($row[$index])) {
-                    $rowData->put($headerName, $row[$index]);
-                }
-            }
-
-            if ($rowData->filter()->isEmpty()) {
-                continue;
-            }
-
-            if (!empty($rowData->get('invoice_no')) && !empty($rowData->get('dealer'))) {
-                $exists = Service::where('invoice_no', $rowData->get('invoice_no'))
-                                 ->where('dealer_code', $rowData->get('dealer'))
-                                 ->exists();
-
-                if ($exists) {
-                    $this->currentService = null;
-                    $this->skippedCount++;
-                    continue;
-                }
-
-                $regDate = is_numeric($rowData->get('reg_date')) ? Date::excelToDateTimeObject($rowData->get('reg_date'))->format('Y-m-d') : null;
-
-                $this->currentService = Service::create([
-                    'invoice_no' => $rowData->get('invoice_no'),
-                    'dealer_code' => $rowData->get('dealer'),
-                    'yss' => $rowData->get('yss'),
-                    'point' => $rowData->get('point'),
-                    'reg_date' => $regDate,
-                    'service_order' => $rowData->get('service_order'),
-                    'plate_no' => $rowData->get('plate_no'),
-                    'work_order_no' => $rowData->get('no_work_order'),
-                    'work_order_status' => $rowData->get('status_work_order'),
-                    'customer_name' => $rowData->get('nama'),
-                    'customer_ktp' => $rowData->get('ktp'),
-                    'customer_npwp_no' => $rowData->get('no_npwp'),
-                    'customer_npwp_name' => $rowData->get('name_npwp'),
-                    'customer_phone' => $rowData->get('telepon_no'),
-                    'mc_brand' => $rowData->get('brand'),
-                    'mc_model_name' => $rowData->get('model_name'),
-                    'mc_frame_no' => $rowData->get('frame_no'),
-                    'technician_name' => $rowData->get('technician_name'),
-                    'payment_type' => $rowData->get('payment_type'),
-                    'transaction_code' => $rowData->get('transaction_code'),
-                    'e_payment_amount' => $rowData->get('e_payment_amount', 0),
-                    'cash_amount' => $rowData->get('cash_amount', 0),
-                    'debit_amount' => $rowData->get('debit_amount', 0),
-                    'total_down_payment' => $rowData->get('down_payment_dp', 0),
-                    'total_labor' => $rowData->get('total_labor', 0),
-                    'total_part_service' => $rowData->get('total_part_service', 0),
-                    'total_oil_service' => $rowData->get('total_oil_service', 0),
-                    'total_retail_parts' => $rowData->get('total_retail_parts', 0),
-                    'total_retail_oil' => $rowData->get('total_retail_oil', 0),
-                    'total_amount' => $rowData->get('total_amount', 0),
-                    'benefit_amount' => $rowData->get('benefit_amount', 0),
-                    'total_payment' => $rowData->get('total_payment', 0),
-                    'balance' => $rowData->get('balance', 0),
-                ]);
-
-                $this->importedCount++;
-            }
-
-            if (!$this->currentService) {
-                continue;
-            }
-
-            if (!empty($rowData->get('labor_cost_service')) && is_numeric($rowData->get('labor_cost_service'))) {
-                $this->currentService->details()->updateOrCreate(
-                    ['item_category' => 'JASA', 'item_name' => $rowData->get('service_package')],
-                    ['service_category_code' => $rowData->get('service_category'), 'service_package_name' => $rowData->get('service_package'), 'quantity' => 1, 'price' => $rowData->get('labor_cost_service')]
-                );
-            }
-
-            if (!empty($rowData->get('parts_no')) && !empty($rowData->get('parts_name'))) {
-                $category = (stripos($rowData->get('parts_name'), 'oil') !== false || stripos($rowData->get('parts_name'), 'lube') !== false) ? 'OLI' : 'PART';
-                $this->currentService->details()->updateOrCreate(
-                    ['item_category' => $category, 'item_code' => $rowData->get('parts_no')],
-                    ['item_name' => $rowData->get('parts_name'), 'quantity' => $rowData->get('parts_qty'), 'price' => $rowData->get('parts_price')]
-                );
-            }
-        }
+        $this->userDealerCode = $userDealerCode;
+        // Pre-load lokasi mapping untuk efisiensi
+        $this->lokasiMapping = Lokasi::pluck('id', 'kode_gudang')->toArray();
     }
 
-    public function getImportedCount()
+    public function model(array $row)
+    {
+        // Normalisasi dan validasi input
+        $invoiceNo = trim($row['invoice_no']);
+        $dealerCode = trim($row['dealer']);
+
+        // ++ VALIDASI 1: Cek apakah dealer code di file cocok dengan dealer code user
+        if ($dealerCode !== $this->userDealerCode) {
+            $this->skippedDealerCount++;
+            return null; // Lewati baris ini
+        }
+
+        // VALIDASI 2: Cek duplikat berdasarkan invoice_no
+        $existingService = Service::where('invoice_no', $invoiceNo)->first();
+        if ($existingService) {
+            $this->skippedCount++;
+            return null; // Lewati baris ini jika sudah ada
+        }
+
+        // VALIDASI 3: Pastikan dealer code ada di tabel lokasi
+        if (!isset($this->lokasiMapping[$dealerCode])) {
+            Log::warning("Skipping invoice {$invoiceNo}: Dealer code '{$dealerCode}' not found in 'lokasi' table.");
+            $this->skippedCount++;
+            return null;
+        }
+
+        DB::transaction(function () use ($row, $invoiceNo, $dealerCode) {
+            try {
+                // Konversi tanggal Excel
+                $regDate = is_numeric($row['reg_date']) ? Date::excelToDateTimeObject($row['reg_date'])->format('Y-m-d') : null;
+
+                $service = Service::create([
+                    'invoice_no' => $invoiceNo,
+                    'reg_date' => $regDate,
+                    'dealer_code' => $dealerCode,
+                    'lokasi_id' => $this->lokasiMapping[$dealerCode] ?? null, // Tambahkan lokasi_id
+                    'customer_name' => $row['customer_name'],
+                    'plate_no' => $row['plate_no'],
+                    'total_labor' => $row['total_labor'] ?? 0,
+                    'total_part_service' => $row['total_part_service'] ?? 0,
+                    'total_oil_service' => $row['total_oil_service'] ?? 0,
+                    'total_retail_parts' => $row['total_retail_parts'] ?? 0,
+                    'total_retail_oil' => $row['total_retail_oil'] ?? 0,
+                    'benefit_amount' => $row['benefit_amount'] ?? 0,
+                    'total_amount' => $row['total_amount'] ?? 0,
+                    'e_payment_amount' => $row['e_payment_amount'] ?? 0,
+                    'cash_amount' => $row['cash_amount'] ?? 0,
+                    'debit_amount' => $row['debit_amount'] ?? 0,
+                    'total_payment' => $row['total_payment'] ?? 0,
+                    'balance' => $row['balance'] ?? 0,
+                ]);
+
+                // Proses detail jika ada
+                if (!empty($row['item_code'])) {
+                    $service->details()->create([
+                        'item_category' => $row['item_category'],
+                        'item_code' => $row['item_code'],
+                        'item_name' => $row['item_name'],
+                        'quantity' => $row['quantity'],
+                        'price' => $row['price'],
+                    ]);
+                }
+
+                $this->importedCount++;
+            } catch (\Exception $e) {
+                // Log error jika terjadi kegagalan dalam transaksi
+                Log::error("Failed to import service invoice {$invoiceNo}. Error: " . $e->getMessage());
+                $this->skippedCount++;
+            }
+        });
+
+        // Karena ToModel harus return model, kita return null di sini karena
+        // pembuatan model sudah ditangani dalam DB::transaction
+        return null;
+    }
+
+    public function getImportedCount(): int
     {
         return $this->importedCount;
     }
 
-    public function getSkippedCount()
+    public function getSkippedCount(): int
     {
         return $this->skippedCount;
+    }
+
+    // ++ Fungsi baru untuk mendapatkan jumlah data yang dilewati karena salah dealer
+    public function getSkippedDealerCount(): int
+    {
+        return $this->skippedDealerCount;
+    }
+
+    public function batchSize(): int
+    {
+        return 200;
+    }
+
+    public function chunkSize(): int
+    {
+        return 200;
     }
 }

@@ -7,136 +7,48 @@
 @stop
 
 @section('content')
-<div class="invoice p-3 mb-3">
-    {{-- Baris Info Utama --}}
-    <div class="row">
-        <div class="col-12">
-            <h4>
-                <i class="fas fa-globe"></i> SpartanApp
-                <small class="float-right">Tanggal: {{ $purchaseOrder->tanggal_po->format('d/m/Y') }}</small>
-            </h4>
-        </div>
-    </div>
-    <div class="row invoice-info">
-        <div class="col-sm-4 invoice-col">
-            Dari
-            <address>
-                <strong>PT. Lautan Teduh Interniaga</strong><br>
-                Jl. Ikan Tenggiri, Pesawahan<br>
-                Bandar Lampung, Indonesia<br>
-                Website: www.yamaha-lampung.com
-            </address>
-        </div>
-        <div class="col-sm-4 invoice-col">
-            Kepada
-            <address>
-                <strong>{{ $purchaseOrder->supplier->nama_supplier }}</strong><br>
-                {{ $purchaseOrder->supplier->alamat }}<br>
-                Phone: {{ $purchaseOrder->supplier->telepon }}<br>
-                Email: {{ $purchaseOrder->supplier->email }}
-            </address>
-        </div>
-        <div class="col-sm-4 invoice-col">
-            <b>Nomor PO:</b> {{ $purchaseOrder->nomor_po }}<br>
-            <b>Tujuan Gudang:</b> {{ $purchaseOrder->lokasi->nama_gudang }}<br>
-            <b>Status:</b> <span class="badge {{ $purchaseOrder->status_class }}">{{ $purchaseOrder->status_badge }}</span><br>
-            <b>Dibuat Oleh:</b> {{ $purchaseOrder->createdBy->nama ?? 'Tidak Ditemukan' }}
-        </div>
-    </div>
-
-    {{-- Tampilkan Alasan Penolakan JIKA ADA --}}
-    @if($purchaseOrder->status === 'REJECTED' && $purchaseOrder->rejection_reason)
-    <div class="row mt-3">
-        <div class="col-12">
-            <div class="alert alert-danger">
-                <h5><i class="icon fas fa-ban"></i> Alasan Penolakan</h5>
-                {{ $purchaseOrder->rejection_reason }}
+<div class="card">
+    <div class="card-header no-print">
+        <div class="d-flex justify-content-between">
+            <div>
+                <a href="{{ route('admin.purchase-orders.index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kembali</a>
+            </div>
+            <div>
+                @if($purchaseOrder->status === 'PENDING_APPROVAL')
+                    @can('approve-po', $purchaseOrder)
+                    <form action="{{ route('admin.purchase-orders.approve', $purchaseOrder) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-success"><i class="far fa-credit-card"></i> Setujui</button>
+                    </form>
+                    <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#rejectModal">
+                        <i class="fas fa-times"></i> Tolak
+                    </button>
+                    @endcan
+                @endif
+                <a href="{{ route('admin.purchase-orders.pdf', $purchaseOrder) }}" target="_blank" class="btn btn-primary"><i class="fas fa-download"></i> Generate PDF</a>
             </div>
         </div>
     </div>
-    @endif
-
-    {{-- Tabel Item --}}
-    <div class="row">
-        <div class="col-12 table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Qty</th>
-                        <th>Part</th>
-                        <th>Kode Part</th>
-                        <th>Harga Satuan</th>
-                        <th>Subtotal</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($purchaseOrder->details as $detail)
-                    <tr>
-                        <td>{{ $detail->qty_pesan }}</td>
-                        <td>{{ $detail->part->nama_part }}</td>
-                        <td>{{ $detail->part->kode_part }}</td>
-                        <td>{{ 'Rp ' . number_format($detail->harga_beli, 0, ',', '.') }}</td>
-                        <td>{{ 'Rp ' . number_format($detail->subtotal, 0, ',', '.') }}</td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    {{-- Baris Total dan Catatan --}}
-    <div class="row">
-        <div class="col-6">
-            <p class="lead">Catatan Pembuat PO:</p>
-            <p class="text-muted well well-sm shadow-none" style="margin-top: 10px;">
-                {{ $purchaseOrder->catatan ?? 'Tidak ada catatan.' }}
-            </p>
-        </div>
-        <div class="col-6">
-            <p class="lead">Detail Pembayaran</p>
-            <div class="table-responsive">
-                <table class="table">
-                    <tr>
-                        <th style="width:50%">Subtotal:</th>
-                        <td>{{ 'Rp ' . number_format($purchaseOrder->subtotal, 0, ',', '.') }}</td>
-                    </tr>
-                    <tr>
-                        <th>PPN (11%):</th>
-                        <td>{{ 'Rp ' . number_format($purchaseOrder->pajak, 0, ',', '.') }}</td>
-                    </tr>
-                    <tr>
-                        <th>Grand Total:</th>
-                        <td><strong>{{ 'Rp ' . number_format($purchaseOrder->total_amount, 0, ',', '.') }}</strong></td>
-                    </tr>
-                </table>
+    <div class="card-body">
+        {{-- Tampilkan Alasan Penolakan JIKA ADA --}}
+        @if($purchaseOrder->status === 'REJECTED' && $purchaseOrder->rejection_reason)
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-danger">
+                    <h5><i class="icon fas fa-ban"></i> Alasan Penolakan</h5>
+                    {{ $purchaseOrder->rejection_reason }}
+                </div>
             </div>
         </div>
-    </div>
+        @endif
 
-    {{-- Baris Tombol Aksi --}}
-    <div class="row no-print">
-        <div class="col-12">
-            <a href="{{ route('admin.purchase-orders.index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kembali</a>
-            <a href="{{ route('admin.purchase-orders.pdf', $purchaseOrder) }}" class="btn btn-primary float-right"><i class="fas fa-download"></i> Generate PDF</a>
-
-            {{-- Tombol Approve dan Reject tetap di dalam kondisi --}}
-            @if($purchaseOrder->status === 'PENDING_APPROVAL')
-                @can('approve-po', $purchaseOrder)
-                <button type="button" class="btn btn-danger float-right" style="margin-right: 5px;" data-toggle="modal" data-target="#rejectModal">
-                    <i class="fas fa-times"></i> Tolak
-                </button>
-                <form action="{{ route('admin.purchase-orders.approve', $purchaseOrder) }}" method="POST" class="d-inline">
-                    @csrf
-                    <button type="submit" class="btn btn-success float-right" style="margin-right: 5px;"><i class="far fa-credit-card"></i> Setujui</button>
-                </form>
-                @endcan
-            @endif
-        </div>
+        {{-- Menggunakan file po_content.blade.php untuk menampilkan detail --}}
+        @include('admin.purchase_orders.po_content', ['purchaseOrder' => $purchaseOrder])
     </div>
 </div>
 
 {{-- MODAL UNTUK ALASAN PENOLAKAN --}}
-<div class="modal fade" id="rejectModal" tabindex="-1" role="dialog" aria-labelledby="rejectModalLabel" aria-hidden="true">
+<div class="modal fade no-print" id="rejectModal" tabindex="-1" role="dialog" aria-labelledby="rejectModalLabel" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <form action="{{ route('admin.purchase-orders.reject', $purchaseOrder) }}" method="POST">
@@ -162,3 +74,17 @@
   </div>
 </div>
 @stop
+
+@push('css')
+<style>
+    /* CSS untuk menyembunyikan elemen saat mencetak dari browser */
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+        .main-footer, .content-header {
+            display: none !important;
+        }
+    }
+</style>
+@endpush

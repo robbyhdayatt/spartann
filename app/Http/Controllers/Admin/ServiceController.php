@@ -19,7 +19,20 @@ class ServiceController extends Controller
     public function index(Request $request)
     {
         $this->authorize('view-service');
-        $services = Service::latest()->paginate(25);
+
+        $user = Auth::user();
+        $query = Service::query();
+
+        // Batasi data berdasarkan dealer user, kecuali untuk Superadmin
+        if ($user->jabatan && $user->jabatan->nama_jabatan !== 'Superadmin') {
+            if ($user->lokasi && $user->lokasi->kode_gudang) {
+                $query->where('dealer_code', $user->lokasi->kode_gudang);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        $services = $query->latest()->paginate(25);
 
         return view('admin.services.index', compact('services'));
     }
@@ -32,23 +45,42 @@ class ServiceController extends Controller
         ]);
 
         try {
-            $import = new ServiceImport;
+            $user = Auth::user();
+            if (!$user->lokasi || !$user->lokasi->kode_gudang) {
+                return redirect()->back()->with('error', 'Gagal mengimpor: Akun Anda tidak terasosiasi dengan dealer manapun.');
+            }
+            $userDealerCode = $user->lokasi->kode_gudang;
+
+            $import = new ServiceImport($userDealerCode);
             Excel::import($import, $request->file('file'));
 
             $importedCount = $import->getImportedCount();
             $skippedCount = $import->getSkippedCount();
+            $skippedDealerCount = $import->getSkippedDealerCount();
 
             if ($importedCount > 0) {
                 $message = "Data service berhasil diimpor! {$importedCount} data baru ditambahkan.";
                 if ($skippedCount > 0) {
                     $message .= " {$skippedCount} data duplikat dilewati.";
                 }
+                if ($skippedDealerCount > 0) {
+                    $message .= " {$skippedDealerCount} data ditolak karena tidak sesuai dengan dealer Anda.";
+                }
                 return redirect()->back()->with('success', $message);
-            } elseif ($skippedCount > 0) {
-                return redirect()->back()->with('error', "Impor gagal. Semua data ({$skippedCount} baris) merupakan duplikat dari data yang sudah ada.");
-            } else {
-                return redirect()->back()->with('error', 'Tidak ada data yang ditemukan di dalam file.');
             }
+            
+            $errorMessage = 'Impor gagal.';
+            if ($skippedDealerCount > 0) {
+                 $errorMessage .= " {$skippedDealerCount} baris data ditolak karena tidak sesuai dengan dealer Anda.";
+            }
+            if ($skippedCount > 0) {
+                $errorMessage .= " {$skippedCount} baris data merupakan duplikat.";
+            }
+            if ($importedCount == 0 && $skippedCount == 0 && $skippedDealerCount == 0) {
+                $errorMessage = 'Tidak ada data yang ditemukan di dalam file.';
+            }
+
+            return redirect()->back()->with('error', $errorMessage);
 
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Terjadi kesalahan saat mengimpor file: ' . $e->getMessage());
@@ -58,36 +90,27 @@ class ServiceController extends Controller
     public function show(Service $service)
     {
         $this->authorize('view-service');
-        // Tambahkan 'lokasi' di sini juga untuk konsistensi
         $service->load('details', 'lokasi');
         return view('admin.services.show', compact('service'));
     }
 
-    /**
-     * Menampilkan form untuk mengedit data service.
-     */
     public function edit(Service $service)
     {
         $this->authorize('manage-service');
-        
-        // PERBAIKAN: Eager load relasi 'lokasi' yang baru
         $service->load('details.part', 'lokasi');
 
-        // Tambahan: Kirim juga daftar part untuk pencarian
-        $parts = Part::where('is_active', true)->orderBy('nama_part')->get();
+        // ++ PERBAIKAN 1: Gunakan kolom 'gudang_id' dari User ++
+        $userLokasiId = Auth::user()->gudang_id;
 
-        return view('admin.services.edit', compact('service', 'parts'));
+        return view('admin.services.edit', compact('service', 'userLokasiId'));
     }
 
-    /**
-     * Memperbarui data service, khususnya menambah part baru.
-     */
     public function update(Request $request, Service $service)
     {
         $this->authorize('manage-service');
 
         $validated = $request->validate([
-            'items' => 'sometimes|array', // 'sometimes' agar tidak error jika hanya edit data lain
+            'items' => 'sometimes|array',
             'items.*.part_id' => 'required|exists:parts,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
@@ -96,33 +119,38 @@ class ServiceController extends Controller
         try {
             DB::transaction(function () use ($validated, $service) {
                 
-                // Cari lokasi berdasarkan service, bukan user yang login
-                if (!$service->lokasi) {
-                    throw new \Exception("Data service ini tidak terhubung dengan lokasi dealer yang valid (dealer_code: {$service->dealer_code}).");
+                $user = Auth::user();
+                // ++ PERBAIKAN 2: Cek dan gunakan 'gudang_id' dari User ++
+                if (!$user->gudang_id) {
+                    throw new \Exception("Gagal menyimpan: Akun Anda tidak terhubung dengan lokasi manapun.");
                 }
-                $lokasiId = $service->lokasi->id;
+                $lokasiId = $user->gudang_id;
                 
                 if (isset($validated['items'])) {
                     foreach ($validated['items'] as $item) {
                         $part = Part::find($item['part_id']);
                         $quantity = (int)$item['quantity'];
 
-                        // 1. Kurangi stok dari inventaris (FIFO)
+                        // 1. Validasi stok dari inventaris (FIFO) berdasarkan lokasi PENGGUNA
                         $remainingQtyToReduce = $quantity;
                         $batches = InventoryBatch::where('part_id', $part->id)
-                            ->where('gudang_id', $lokasiId)
+                            ->where('gudang_id', $lokasiId) // <- Menggunakan lokasi pengguna ($lokasiId dari $user->gudang_id)
                             ->where('quantity', '>', 0)
                             ->orderBy('created_at', 'asc')
                             ->get();
-
+                        
+                        // Pesan error yang lebih jelas
                         if ($batches->sum('quantity') < $remainingQtyToReduce) {
-                            throw new \Exception("Stok untuk part '{$part->nama_part}' tidak mencukupi di lokasi service.");
+                            $namaLokasi = $user->lokasi->nama_lokasi ?? 'gudang Anda';
+                            throw new \Exception("Stok untuk part '{$part->nama_part}' tidak mencukupi di {$namaLokasi}.");
                         }
 
+                        // Lanjutkan proses pengurangan stok
                         foreach ($batches as $batch) {
                             if ($remainingQtyToReduce <= 0) break;
                             $qtyToTake = min($batch->quantity, $remainingQtyToReduce);
                             $stokTotalSebelum = InventoryBatch::where('part_id', $part->id)->where('gudang_id', $lokasiId)->sum('quantity');
+                            
                             $batch->decrement('quantity', $qtyToTake);
                             $remainingQtyToReduce -= $qtyToTake;
 
@@ -145,7 +173,7 @@ class ServiceController extends Controller
                 }
 
                 // 4. Hitung ulang total pada tabel services
-                $service->refresh()->load('details'); // Muat ulang detail terbaru
+                $service->refresh()->load('details');
                 $totalPartService = $service->details()->where('item_category', 'PART')->sum(DB::raw('quantity * price'));
                 $totalOilService = $service->details()->where('item_category', 'OLI')->sum(DB::raw('quantity * price'));
 
@@ -166,28 +194,31 @@ class ServiceController extends Controller
         
         return redirect()->route('admin.services.show', $service)->with('success', 'Part baru berhasil ditambahkan ke data service.');
     }
-    public function downloadPDF($id)
+
+public function downloadPDF($id)
     {
         $this->authorize('view-service');
-        $service = Service::with('details')->findOrFail($id); // Diubah dari DailyReport
+        $service = Service::with('details')->findOrFail($id);
         $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
 
-        $width = 24 * 28.3465;
-        $height = 14 * 28.3465;
-        $customPaper = [0, 0, $height, $width];
+        // Konversi ukuran dari cm ke points (1 cm = 28.3465 points)
+        $widthInPoints = 24 * 28.3465;
+        $heightInPoints = 14 * 28.3465;
+        $customPaper = [0, 0, $heightInPoints, $widthInPoints];
 
-        // Nama variabel diubah menjadi 'service'
         $pdf = PDF::loadView('admin.services.pdf', compact('service'))
+            // Atur ukuran kertas kustom (landscape)
             ->setPaper($customPaper)
+            // Atur opsi untuk menghilangkan margin
             ->setOptions([
                 'isHtml5ParserEnabled' => true,
                 'isRemoteEnabled' => true,
                 'dpi' => 150,
-                'margin-top' => 0,
-                'margin-right' => 0,
+                'defaultFont' => 'Courier', // Opsional: pastikan font konsisten
+                'margin-top'    => 0,
+                'margin-right'  => 0,
                 'margin-bottom' => 0,
-                'margin-left' => 0,
-                'defaultPaperSize' => 'custom',
+                'margin-left'   => 0,
             ]);
 
         return $pdf->stream($fileName);

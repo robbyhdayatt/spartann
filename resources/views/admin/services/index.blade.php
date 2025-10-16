@@ -1,128 +1,166 @@
 @extends('adminlte::page')
 
-@section('plugins.Datatables', true)
-@section('plugins.BsCustomFileInput', true)
+@section('title', 'Manajemen Service')
 
-@section('title', 'Data Service')
+{{-- ++ MODIFIKASI 1: Tambahkan plugin DataTables ++ --}}
+@section('plugins.Datatables', true)
 
 @section('content_header')
-    <h1>Data Service</h1>
+    <h1>Manajemen Service</h1>
 @stop
 
 @section('content')
-
-    {{-- Notifikasi --}}
-    @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            {{ session('success') }}
-            <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            {{ session('error') }}
-            <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        </div>
-    @endif
-
-    {{-- Kotak Impor --}}
-    @can('manage-service')
-    <div class="card">
-        <div class="card-header"><h3 class="card-title">Impor Data Service</h3></div>
-        <div class="card-body">
-             <div class="callout callout-info">
-                <h5><i class="fas fa-info-circle"></i> Petunjuk Impor Data</h5>
-                <ol>
-                    <li>Unduh template Excel yang sudah disediakan dengan menekan tombol <strong>"Download Template"</strong>.</li>
-                    <li>Isi data sesuai dengan format pada template. Pastikan kolom terisi dengan benar.</li>
-                    <li>Sistem akan secara otomatis memeriksa duplikasi data berdasarkan kombinasi <strong>Dealer</strong> dan <strong>No. Invoice</strong>.</li>
-                    <li>Data yang sudah ada di database akan dilewati dan tidak akan diimpor kembali.</li>
-                    <li>Pilih file yang sudah diisi, lalu tekan tombol <strong>"Impor"</strong>.</li>
-                </ol>
+<div class="row">
+    <div class="col-12">
+        @if (session('success'))
+            <div class="alert alert-success alert-dismissible">
+                <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                <i class="icon fas fa-check"></i>{{ session('success') }}
             </div>
-            <form action="{{ route('admin.services.import') }}" method="POST" enctype="multipart/form-data">
-                @csrf
-                <div class="form-group">
-                    <label for="file">Pilih File Excel (.xls, .xlsx)</label>
-                    <div class="input-group"><div class="custom-file">
-                        <input type="file" class="custom-file-input" id="file" name="file" required accept=".xls,.xlsx">
-                        <label class="custom-file-label" for="file">Pilih file...</label>
-                    </div></div>
-                </div>
-                <div class="mt-3">
-                    <button class="btn btn-primary" type="submit"><i class="fas fa-upload"></i> Impor</button>
-                    <a href="{{ asset('templates/template_service.xlsx') }}" class="btn btn-success" download><i class="fas fa-download"></i> Download Template</a>
-                </div>
-            </form>
-        </div>
-    </div>
-    @endcan
+        @endif
+        @if (session('error'))
+            <div class="alert alert-danger alert-dismissible">
+                <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                <i class="icon fas fa-ban"></i>{{ session('error') }}
+            </div>
+        @endif
 
-    {{-- Tabel Data --}}
-    <div class="card">
-        <div class="card-header"><h3 class="card-title">Data Service Terimpor</h3></div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table id="servicesTable" class="table table-bordered table-striped">
+        {{-- ++ MODIFIKASI 2: Bungkus Card Impor dengan @can ++ --}}
+        {{-- Card ini hanya akan muncul untuk user yang memiliki izin 'manage-service' --}}
+        @can('manage-service')
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Import Data Service</h3>
+                <div class="card-tools">
+                    <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="alert alert-info">
+                            <h5><i class="icon fas fa-info"></i> Petunjuk Import File Excel</h5>
+                            <p>Pastikan file Excel Anda memiliki kolom-kolom berikut dengan urutan yang sesuai:</p>
+                            <ol>
+                                <li><strong>invoice_no</strong></li>
+                                <li><strong>reg_date</strong> (Format: YYYY-MM-DD)</li>
+                                <li><strong>dealer</strong></li>
+                                <li><strong>customer_name</strong></li>
+                                <li><strong>plate_no</strong></li>
+                                <li><strong>total_labor</strong></li>
+                                <li><strong>total_part_service</strong></li>
+                                <li><strong>total_oil_service</strong></li>
+                                <li><strong>total_retail_parts</strong></li>
+                                <li><strong>total_retail_oil</strong></li>
+                                <li><strong>benefit_amount</strong></li>
+                                <li><strong>total_amount</strong></li>
+                                <li><strong>e_payment_amount</strong></li>
+                                <li><strong>cash_amount</strong></li>
+                                <li><strong>debit_amount</strong></li>
+                                <li><strong>total_payment</strong></li>
+                                <li><strong>balance</strong></li>
+                                <li><strong>item_category</strong></li>
+                                <li><strong>item_code</strong></li>
+                                <li><strong>item_name</strong></li>
+                                <li><strong>quantity</strong></li>
+                                <li><strong>price</strong></li>
+                            </ol>
+                            <p><strong>Penting:</strong> Kolom `dealer` harus sesuai dengan kode dealer akun Anda.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <form action="{{ route('admin.services.import') }}" method="POST" enctype="multipart/form-data">
+                            @csrf
+                            <div class="form-group">
+                                <label for="file">Pilih File Excel untuk Diimpor</label>
+                                <div class="input-group">
+                                    <div class="custom-file">
+                                        <input type="file" class="custom-file-input" id="file" name="file" required>
+                                        <label class="custom-file-label" for="file">Pilih file</label>
+                                    </div>
+                                    <div class="input-group-append">
+                                        <button class="btn btn-primary" type="submit">
+                                            <i class="fas fa-upload"></i> Import
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endcan
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Daftar Transaksi Service</h3>
+            </div>
+            <div class="card-body">
+                {{-- ID tabel tetap sama untuk JavaScript DataTables --}}
+                <table id="services-table" class="table table-bordered table-striped table-hover">
                     <thead>
                         <tr>
-                            <th>Tgl. Registrasi</th>
+                            <th>No.</th>
                             <th>No. Invoice</th>
+                            <th>Dealer</th>
+                            <th>Tanggal Registrasi</th>
                             <th>Pelanggan</th>
-                            <th>Plat No.</th>
-                            <th class="text-right">Total Pembayaran</th>
-                            <th>Teknisi</th>
-                            <th>Tgl. Impor</th>
-                            <th style="width: 80px;">Aksi</th>
+                            <th>Plat Nomor</th>
+                            <th class="text-right">Total Tagihan</th>
+                            <th>Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($services as $service)
+                        @foreach ($services as $service)
                             <tr>
-                                <td>{{ \Carbon\Carbon::parse($service->reg_date)->format('d M Y') }}</td>
+                                <td>{{ $loop->iteration }}</td>
                                 <td>{{ $service->invoice_no }}</td>
+                                <td><span class="badge badge-secondary">{{ $service->dealer_code }}</span></td>
+                                <td>{{ \Carbon\Carbon::parse($service->reg_date)->isoFormat('D MMMM YYYY') }}</td>
                                 <td>{{ $service->customer_name }}</td>
                                 <td>{{ $service->plate_no }}</td>
-                                <td class="text-right">Rp {{ number_format($service->total_payment, 0, ',', '.') }}</td>
-                                <td>{{ $service->technician_name }}</td>
-                                <td>{{ $service->created_at->format('d M Y, H:i') }}</td>
+                                <td class="text-right">@rupiah($service->total_amount)</td>
                                 <td>
-                                    <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-sm btn-info" title="Lihat Detail">
+                                    <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-xs btn-info" title="Lihat Detail">
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     @can('manage-service')
-                                    <a href="{{ route('admin.services.edit', $service->id) }}" class="btn btn-sm btn-warning" title="Edit / Tambah Part"><i class="fas fa-edit"></i></a>
+                                        <a href="{{ route('admin.services.edit', $service->id) }}" class="btn btn-xs btn-warning" title="Edit Service">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
                                     @endcan
                                 </td>
                             </tr>
-                        @empty
-                            <tr>
-                                <td colspan="8" class="text-center">Tidak ada data ditemukan.</td>
-                            </tr>
-                        @endforelse
+                        @endforeach
                     </tbody>
                 </table>
             </div>
-        </div>
-        <div class="card-footer clearfix">
-            {{ $services->links() }}
+            {{-- Footer card dihapus karena paginasi akan ditangani DataTables --}}
         </div>
     </div>
+</div>
 @stop
 
-@section('js')
+@push('js')
 <script>
-    $(document).ready(function() {
+    $(function () {
+        // Inisialisasi bs-custom-file-input
         bsCustomFileInput.init();
-        $('#servicesTable').DataTable({
-            "paging": false,
-            "lengthChange": false,
-            "searching": true,
-            "ordering": true,
-            "info": false,
-            "autoWidth": false,
+
+        // ++ MODIFIKASI 3: Inisialisasi DataTables ++
+        $('#services-table').DataTable({
             "responsive": true,
+            "lengthChange": true,
+            "autoWidth": false,
+            "paging": true,
+            "info": true,
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
+            }
         });
     });
 </script>
-@stop
+@endpush

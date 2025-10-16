@@ -18,8 +18,16 @@ class Service extends Model
     {
         return $this->hasMany(ServiceDetail::class);
     }
+
+    /**
+     * PERBAIKAN: Relasi ke Lokasi harus menggunakan foreign key 'lokasi_id'
+     * dan terhubung ke primary key 'id' di tabel lokasi.
+     *
+     * Asumsi: tabel 'services' memiliki kolom 'lokasi_id'.
+     */
     public function lokasi()
     {
-        return $this->belongsTo(Lokasi::class, 'dealer_code', 'kode_gudang');
+        // Gunakan relasi yang sudah standar berbasis ID
+        return $this->belongsTo(Lokasi::class, 'lokasi_id');
     }
 }
