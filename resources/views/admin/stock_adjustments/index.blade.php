@@ -10,11 +10,11 @@
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">Daftar Permintaan Adjusment</h3>
-        <div class="card-tools">
-            @can('can-manage-stock')
-            <a href="{{ route('admin.stock-adjustments.create') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Buat Adjusment Baru</a>
-            @endcan
-        </div>
+            <div class="card-tools">
+                @can('create-stock-adjustment')
+                <a href="{{ route('admin.stock-adjustments.create') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Buat Adjusment Baru</a>
+                @endcan
+            </div>
     </div>
     <div class="card-body">
          @if(session('success'))
@@ -42,7 +42,7 @@
                         <strong>{{ $adj->part->nama_part }}</strong><br>
                         <small class="text-muted">{{ $adj->created_at->format('d M Y H:i') }}</small>
                     </td>
-                    <td>{{ $adj->gudang->nama_gudang }} / {{ $adj->rak->nama_rak ?? 'N/A' }}</td>
+                    <td>{{ $adj->lokasi->nama_gudang }} / {{ $adj->rak->nama_rak ?? 'N/A' }}</td>
                     <td class="text-center">
                         @if($adj->tipe == 'TAMBAH')
                             <span class="badge badge-success">TAMBAH</span>
@@ -68,7 +68,7 @@
                     </td>
                     <td class="text-center">
                         @if($adj->status === 'PENDING_APPROVAL')
-                            @can('approve-adjustment', $adj)
+                            @can('approve-stock-adjustment', $adj)
                                 <form action="{{ route('admin.stock-adjustments.approve', $adj->id) }}" method="POST" class="d-inline">
                                     @csrf
                                     <button type="submit" class="btn btn-success btn-xs" title="Approve">

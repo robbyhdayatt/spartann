@@ -12,6 +12,11 @@ $subTotal = 0;
     <div class="d-flex justify-content-between align-items-center">
         <h1>Faktur Service: {{ $service->invoice_no }}</h1>
         <div>
+            @can('manage-service')
+                <a href="{{ route('admin.services.edit', $service->id) }}" class="btn btn-warning">
+                    <i class="fas fa-edit"></i> Edit / Tambah Part
+                </a>
+            @endcan
             <a href="{{ route('admin.services.pdf', $service->id) }}" class="btn btn-danger">
                 <i class="fas fa-file-pdf"></i> Export PDF
             </a>

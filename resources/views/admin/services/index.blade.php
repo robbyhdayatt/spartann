@@ -26,6 +26,7 @@
     @endif
 
     {{-- Kotak Impor --}}
+    @can('manage-service')
     <div class="card">
         <div class="card-header"><h3 class="card-title">Impor Data Service</h3></div>
         <div class="card-body">
@@ -55,6 +56,7 @@
             </form>
         </div>
     </div>
+    @endcan
 
     {{-- Tabel Data --}}
     <div class="card">
@@ -88,6 +90,9 @@
                                     <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-sm btn-info" title="Lihat Detail">
                                         <i class="fas fa-eye"></i>
                                     </a>
+                                    @can('manage-service')
+                                    <a href="{{ route('admin.services.edit', $service->id) }}" class="btn btn-sm btn-warning" title="Edit / Tambah Part"><i class="fas fa-edit"></i></a>
+                                    @endcan
                                 </td>
                             </tr>
                         @empty

@@ -4,12 +4,7 @@
 
 @section('plugins.Datatables', true)
 @section('plugins.Select2', true)
-{{-- SweetAlert bisa tetap ada untuk notifikasi sukses, tapi tidak untuk konfirmasi hapus --}}
 @section('plugins.Sweetalert2', true)
-
-@section('content_header')
-    <h1>Manajemen Part</h1>
-@stop
 
 @push('css')
 <style>
@@ -28,6 +23,10 @@
 </style>
 @endpush
 
+@section('content_header')
+    <h1>Manajemen Part</h1>
+@stop
+
 @section('content')
     <div class="card">
         <div class="card-header">
@@ -44,7 +43,7 @@
             </div>
         </div>
         <div class="card-body">
-            {{-- Menggunakan alert biasa untuk notifikasi agar konsisten --}}
+            {{-- Notifikasi --}}
             @if(session('success'))
                 <div class="alert alert-success">{{ session('success') }}</div>
             @endif
@@ -72,9 +71,10 @@
                         <th>Nama Part</th>
                         <th>Brand</th>
                         <th>Kategori</th>
-                        <th>Harga Beli</th>
-                        <th>Harga Jual</th>
-                        <th>Stok Min</th>
+                        {{-- PERBAIKAN: Header tabel diubah --}}
+                        <th>DPP</th>
+                        <th>PPN</th>
+                        <th>Harga Satuan</th>
                         <th>Status</th>
                         @can('is-super-admin')
                         <th>Aksi</th>
@@ -88,9 +88,10 @@
                         <td>{{ $part->nama_part }}</td>
                         <td>{{ $part->brand->nama_brand ?? 'N/A' }}</td>
                         <td>{{ $part->category->nama_kategori ?? 'N/A' }}</td>
-                        <td>Rp {{ number_format($part->harga_beli_default, 0, ',', '.') }}</td>
-                        <td>Rp {{ number_format($part->harga_jual_default, 0, ',', '.') }}</td>
-                        <td>{{ $part->stok_minimum }}</td>
+                        {{-- PERBAIKAN: Data harga diubah --}}
+                        <td>@rupiah($part->dpp)</td>
+                        <td>@rupiah($part->ppn)</td>
+                        <td>@rupiah($part->harga_satuan)</td>
                         <td>
                             @if($part->is_active)
                                 <span class="badge badge-success">Aktif</span>
@@ -102,8 +103,6 @@
                         <td>
                             <a href="{{ route('admin.reports.stock-card', ['part_id' => $part->id]) }}" class="btn btn-info btn-xs" title="Lihat Kartu Stok"><i class="fas fa-file-alt"></i></a>
                             <button class="btn btn-warning btn-xs edit-btn" data-id="{{ $part->id }}" data-part='@json($part)' data-toggle="modal" data-target="#editModal" title="Edit Part"><i class="fas fa-edit"></i></button>
-
-                            {{-- MENGEMBALIKAN FUNGSI HAPUS KE KONFIRMASI BAWAAN BROWSER --}}
                             <form action="{{ route('admin.parts.destroy', $part->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus part ini?');">
                                 @csrf
                                 @method('DELETE')
@@ -122,14 +121,12 @@
     @include('admin.parts.modal_import')
 
     {{-- Modal Create --}}
-    <div class="modal fade" id="createModal" tabindex="-1" role="dialog" aria-labelledby="createModalLabel" aria-hidden="true">
+<div class="modal fade" id="createModal" tabindex="-1" role="dialog" aria-labelledby="createModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="createModalLabel">Tambah Part Baru</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <form action="{{ route('admin.parts.store') }}" method="POST">
                     @csrf
@@ -181,17 +178,23 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6">
+<div class="row">
+                            <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="harga_beli_default">Harga Beli Default</label>
-                                    <input type="number" class="form-control" id="harga_beli_default" name="harga_beli_default" required>
+                                    <label for="dpp">DPP</label>
+                                    <input type="number" class="form-control price-input" id="dpp" name="dpp" step="0.01" required>
                                 </div>
                             </div>
-                             <div class="col-md-6">
+                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="harga_jual_default">Harga Jual Default</label>
-                                    <input type="number" class="form-control" id="harga_jual_default" name="harga_jual_default" required>
+                                    <label for="ppn">PPN</label>
+                                    <input type="number" class="form-control price-input" id="ppn" name="ppn" step="0.01" required>
+                                </div>
+                            </div>
+                             <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="harga_satuan">Harga Satuan (Otomatis)</label>
+                                    <input type="number" class="form-control" id="harga_satuan" name="harga_satuan" step="0.01" readonly required>
                                 </div>
                             </div>
                         </div>
@@ -211,14 +214,11 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="editModalLabel">Edit Part</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <form id="editForm" method="POST">
                     @csrf
                     @method('PUT')
-                    <input type="hidden" name="id" id="edit_id">
                     <div class="modal-body">
                         {{-- Isi Modal Edit --}}
                         <div class="row">
@@ -265,17 +265,23 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6">
+<div class="row">
+                            <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="edit_harga_beli_default">Harga Beli Default</label>
-                                    <input type="number" class="form-control" id="edit_harga_beli_default" name="harga_beli_default" required>
+                                    <label for="edit_dpp">DPP</label>
+                                    <input type="number" class="form-control price-input-edit" id="edit_dpp" name="dpp" step="0.01" required>
                                 </div>
                             </div>
-                             <div class="col-md-6">
+                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="edit_harga_jual_default">Harga Jual Default</label>
-                                    <input type="number" class="form-control" id="edit_harga_jual_default" name="harga_jual_default" required>
+                                    <label for="edit_ppn">PPN</label>
+                                    <input type="number" class="form-control price-input-edit" id="edit_ppn" name="ppn" step="0.01" required>
+                                </div>
+                            </div>
+                             <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="edit_harga_satuan">Harga Satuan (Otomatis)</label>
+                                    <input type="number" class="form-control" id="edit_harga_satuan" name="harga_satuan" step="0.01" readonly required>
                                 </div>
                             </div>
                         </div>
@@ -300,43 +306,52 @@
 
 @push('js')
 <script>
-    $(document).ready(function() {
-        $('#parts-table').DataTable({
-            "responsive": true,
+$(document).ready(function() {
+    $('#parts-table').DataTable({ "responsive": true });
+
+    @can('is-super-admin')
+        // Inisialisasi Select2
+        $('#createModal .select2').select2({ theme: 'bootstrap4', dropdownParent: $('#createModal') });
+        $('#editModal .select2').select2({ theme: 'bootstrap4', dropdownParent: $('#editModal') });
+
+        // --- SCRIPT BARU UNTUK KALKULASI HARGA ---
+        function calculateHargaSatuan(dpp, ppn) {
+            return (parseFloat(dpp) || 0) + (parseFloat(ppn) || 0);
+        }
+
+        // Untuk Modal Create
+        $('#createModal').on('input', '.price-input', function() {
+            let dpp = $('#dpp').val();
+            let ppn = $('#ppn').val();
+            $('#harga_satuan').val(calculateHargaSatuan(dpp, ppn));
         });
 
-        @can('is-super-admin')
-            // Inisialisasi Select2
-            $('#createModal .select2').select2({ theme: 'bootstrap4', dropdownParent: $('#createModal') });
-            $('#editModal .select2').select2({ theme: 'bootstrap4', dropdownParent: $('#editModal') });
+        // Untuk Modal Edit
+        $('#editModal').on('input', '.price-input-edit', function() {
+            let dpp = $('#edit_dpp').val();
+            let ppn = $('#edit_ppn').val();
+            $('#edit_harga_satuan').val(calculateHargaSatuan(dpp, ppn));
+        });
 
-            // Delegasi event untuk tombol Edit
-            $('#parts-table tbody').on('click', '.edit-btn', function() {
-                var part = $(this).data('part');
-                var url = "{{ url('admin/parts') }}/" + part.id;
-                $('#editForm').attr('action', url);
+        // Delegasi event untuk tombol Edit
+        $('#parts-table tbody').on('click', '.edit-btn', function() {
+            var part = $(this).data('part');
+            var url = "{{ url('admin/parts') }}/" + part.id;
+            $('#editForm').attr('action', url);
 
-                $('#edit_id').val(part.id);
-                $('#edit_kode_part').val(part.kode_part);
-                $('#edit_nama_part').val(part.nama_part);
-                $('#edit_brand_id').val(part.brand_id).trigger('change');
-                $('#edit_category_id').val(part.category_id).trigger('change');
-                $('#edit_satuan').val(part.satuan);
-                $('#edit_stok_minimum').val(part.stok_minimum);
-                $('#edit_harga_beli_default').val(part.harga_beli_default);
-                $('#edit_harga_jual_default').val(part.harga_jual_default);
-                $('#edit_is_active').val(part.is_active ? '1' : '0');
-            });
-
-            // Logika untuk menampilkan modal jika ada error validasi
-            @if ($errors->any())
-                @if (old('id'))
-                    $('#editModal').modal('show');
-                @else
-                    $('#createModal').modal('show');
-                @endif
-            @endif
-        @endcan
-    });
+            // PERBAIKAN: Isi form edit dengan data baru
+            $('#edit_kode_part').val(part.kode_part);
+            $('#edit_nama_part').val(part.nama_part);
+            $('#edit_brand_id').val(part.brand_id).trigger('change');
+            $('#edit_category_id').val(part.category_id).trigger('change');
+            $('#edit_satuan').val(part.satuan);
+            $('#edit_stok_minimum').val(part.stok_minimum);
+            $('#edit_dpp').val(part.dpp);
+            $('#edit_ppn').val(part.ppn);
+            $('#edit_harga_satuan').val(part.harga_satuan);
+            $('#edit_is_active').val(part.is_active ? '1' : '0');
+        });
+    @endcan
+});
 </script>
 @endpush

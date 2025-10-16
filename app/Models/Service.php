@@ -9,11 +9,17 @@ class Service extends Model
 {
     use HasFactory;
 
-    protected $table = 'services'; // Menyesuaikan dengan nama tabel baru
     protected $guarded = ['id'];
 
+    protected $casts = [
+        'reg_date' => 'date',
+    ];
     public function details()
     {
         return $this->hasMany(ServiceDetail::class);
+    }
+    public function lokasi()
+    {
+        return $this->belongsTo(Lokasi::class, 'dealer_code', 'kode_gudang');
     }
 }

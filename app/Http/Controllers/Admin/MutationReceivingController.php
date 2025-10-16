@@ -19,11 +19,11 @@ class MutationReceivingController extends Controller
     public function index()
     {
         $user = Auth::user();
-        $this->authorize('can-receive'); // Memakai izin yang sama dengan penerimaan PO
+        $this->authorize('view-mutation-receiving');
 
         $pendingMutations = StockMutation::where('gudang_tujuan_id', $user->gudang_id)
             ->where('status', 'IN_TRANSIT')
-            ->with(['part', 'gudangAsal', 'createdBy'])
+            ->with(['part', 'lokasiAsal', 'createdBy'])
             ->latest('approved_at')
             ->paginate(15);
 
@@ -35,13 +35,13 @@ class MutationReceivingController extends Controller
      */
     public function show(StockMutation $mutation)
     {
-        $this->authorize('can-receive');
+        $this->authorize('receive-mutation');
 
         if ($mutation->gudang_tujuan_id !== Auth::user()->gudang_id) {
             abort(403, 'AKSI TIDAK DIIZINKAN.');
         }
 
-        $mutation->load(['part', 'gudangAsal', 'createdBy', 'approvedBy']);
+        $mutation->load(['part', 'lokasiAsal', 'createdBy', 'approvedBy']);
         $raks = Rak::where('gudang_id', $mutation->gudang_tujuan_id)
                     ->where('is_active', true)
                     ->where('tipe_rak', 'PENYIMPANAN')
@@ -56,7 +56,7 @@ class MutationReceivingController extends Controller
      */
     public function receive(Request $request, StockMutation $mutation)
     {
-        $this->authorize('can-receive');
+        $this->authorize('receive-mutation');
 
         if ($mutation->gudang_tujuan_id !== Auth::user()->gudang_id) {
             abort(403, 'AKSI TIDAK DIIZINKAN.');
@@ -97,7 +97,7 @@ class MutationReceivingController extends Controller
                     'stok_sesudah' => $stokSesudahTotal, // Stok total di gudang setelah ditambah
                     'referensi_type' => get_class($mutation), // Menggunakan polymorphic relation
                     'referensi_id' => $mutation->id,           // Menggunakan polymorphic relation
-                    'keterangan' => 'Mutasi Masuk dari ' . $mutation->gudangAsal->kode_gudang,
+                    'keterangan' => 'Mutasi Masuk dari ' . $mutation->lokasiAsal->kode_gudang,
                     'user_id' => Auth::id(),
                 ]);
 

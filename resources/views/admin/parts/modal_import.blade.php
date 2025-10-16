@@ -14,7 +14,8 @@
                     </div>
                     <p class="text-muted">
                         Pastikan file Excel Anda memiliki header kolom berikut: <br>
-                        `kode_part`, `nama_part`, `brand`, `kategori`, `satuan`, `stok_minimum`, `harga_beli_default`, `harga_jual_default`
+                        {{-- PERBAIKAN: Teks petunjuk diubah --}}
+                        <strong>`kode_part`, `nama_part`, `brand`, `kategori`, `satuan`, `stok_minimum`, `dpp`, `ppn`, `harga_satuan`</strong>
                     </p>
                     <a href="{{ asset('templates/template_import_part.xlsx') }}" download>Unduh Template</a>
                 </div>

@@ -35,12 +35,14 @@
                                 <td>{{ $mutation->approved_at->format('d M Y H:i') }}</td>
                                 <td>{{ $mutation->part->nama_part }}</td>
                                 <td>{{ $mutation->jumlah }}</td>
-                                <td>{{ $mutation->gudangAsal->nama_gudang }}</td>
+                                <td>{{ $mutation->lokasiAsal->nama_gudang }}</td>
                                 <td>{{ $mutation->createdBy->nama }}</td>
                                 <td class="text-center">
+                                    @can('receive-mutation')
                                     <a href="{{ route('admin.mutation-receiving.show', $mutation) }}" class="btn btn-sm btn-primary">
                                         <i class="fas fa-box-open"></i> Terima Barang
                                     </a>
+                                    @endcan
                                 </td>
                             </tr>
                         @empty

@@ -6,7 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\SalesReturn;
 use App\Models\Penjualan;
 use App\Models\PenjualanDetail;
-use App\Models\InventoryBatch; // DIUBAH
+use App\Models\InventoryBatch;
+use App\Models\Lokasi; // DIUBAH
 use App\Models\Rak;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
@@ -15,26 +16,47 @@ use Illuminate\Support\Facades\DB;
 
 class SalesReturnController extends Controller
 {
-    public function index()
+public function index()
     {
-        $this->authorize('view-sales-returns');
-        $returns = SalesReturn::with(['konsumen', 'penjualan'])->latest()->get();
+        // PERBAIKAN: Menggunakan gate yang sudah ada
+        $this->authorize('view-sales');
+        
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $query = SalesReturn::with(['konsumen', 'penjualan', 'lokasi'])->latest();
+
+        // Filter data berdasarkan lokasi user
+        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
+            $query->where('gudang_id', $user->gudang_id);
+        }
+
+        $returns = $query->get();
         return view('admin.sales_returns.index', compact('returns'));
     }
 
     public function create()
     {
-        $this->authorize('manage-sales-returns');
-        $penjualans = Penjualan::whereHas('details', function ($query) {
-            $query->where(DB::raw('qty_jual - qty_diretur'), '>', 0);
-        })->latest()->get();
+        // PERBAIKAN: Menggunakan gate yang sudah ada
+        $this->authorize('create-sale');
+        
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $query = Penjualan::whereHas('details', function ($q) {
+            $q->where(DB::raw('qty_jual - qty_diretur'), '>', 0);
+        });
 
+        // Filter faktur penjualan berdasarkan lokasi user
+        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
+            $query->where('gudang_id', $user->gudang_id);
+        }
+        
+        $penjualans = $query->latest()->get();
         return view('admin.sales_returns.create', compact('penjualans'));
     }
 
     public function store(Request $request)
     {
-        $this->authorize('manage-sales-returns');
+        $this->authorize('create-sale');
         $request->validate([
             'penjualan_id' => 'required|exists:penjualans,id',
             'tanggal_retur' => 'required|date',
@@ -131,7 +153,7 @@ class SalesReturnController extends Controller
 
     public function show(SalesReturn $salesReturn)
     {
-        $this->authorize('view-sales-returns');
+        $this->authorize('view-sales');
         $salesReturn->load(['konsumen', 'penjualan', 'details.part']);
         return view('admin.sales_returns.show', compact('salesReturn'));
     }

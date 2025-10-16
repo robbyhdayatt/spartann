@@ -38,7 +38,7 @@
             </div>
             <div class="col-md-4">
                 <strong>Gudang:</strong><br>
-                {{ $penjualan->gudang->nama_gudang }}
+                {{ $penjualan->lokasi->nama_gudang }}
             </div>
         </div>
         <hr>

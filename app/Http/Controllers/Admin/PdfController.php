@@ -11,7 +11,7 @@ class PdfController extends Controller
 {
     public function purchaseOrder(PurchaseOrder $purchaseOrder)
     {
-        $purchaseOrder->load(['supplier', 'gudang', 'details.part', 'createdBy']);
+        $purchaseOrder->load(['supplier', 'lokasi', 'details.part', 'createdBy']);
         $data = ['purchaseOrder' => $purchaseOrder];
 
         // Ukuran standar 9.5 x 5.5 inci (landscape)
@@ -23,7 +23,7 @@ class PdfController extends Controller
 
     public function penjualan(Penjualan $penjualan)
     {
-        $penjualan->load(['konsumen', 'gudang', 'sales', 'details.part']);
+        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.part']);
         $data = ['penjualan' => $penjualan];
 
         // Ukuran standar 9.5 x 5.5 inci (landscape)

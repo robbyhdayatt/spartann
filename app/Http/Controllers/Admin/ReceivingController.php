@@ -119,9 +119,19 @@ class ReceivingController extends Controller
         return view('admin.receivings.show', compact('receiving', 'stockMovements'));
     }
 
-    public function getPoDetails(PurchaseOrder $purchaseOrder)
+    public function getPurchaseOrderDetails(PurchaseOrder $purchaseOrder)
     {
+        // Pastikan hanya user yang berhak yang bisa mengakses API ini
+        $this->authorize('perform-warehouse-ops');
+
+        // Load relasi 'details' beserta relasi 'part' di dalamnya
         $purchaseOrder->load('details.part');
-        return response()->json($purchaseOrder);
+
+        // Filter detail untuk hanya menampilkan item yang belum diterima sepenuhnya
+        $itemsToReceive = $purchaseOrder->details->filter(function ($detail) {
+            return $detail->qty_pesan > $detail->qty_diterima;
+        });
+
+        return response()->json($itemsToReceive->values());
     }
 }

@@ -20,7 +20,7 @@
                         <li class="list-group-item"><b>Nomor Mutasi:</b> {{ $mutation->nomor_mutasi }}</li>
                         <li class="list-group-item"><b>Part:</b> {{ $mutation->part->nama_part }} ({{$mutation->part->kode_part}})</li>
                         <li class="list-group-item"><b>Jumlah Dikirim:</b> <span class="badge badge-primary">{{ $mutation->jumlah }} {{ $mutation->part->satuan }}</span></li>
-                        <li class="list-group-item"><b>Dari Gudang:</b> {{ $mutation->gudangAsal->nama_gudang }}</li>
+                        <li class="list-group-item"><b>Dari Gudang:</b> {{ $mutation->lokasiAsal->nama_gudang }}</li>
                         <li class="list-group-item"><b>Rak Asal:</b> <span class="text-muted">Diambil dari batch tertua (FIFO)</span></li>
                         <li class="list-group-item"><b>Tanggal Kirim:</b> {{ $mutation->approved_at->format('d M Y, H:i') }}</li>
                         <li class="list-group-item"><b>Keterangan:</b> {{ $mutation->keterangan ?? '-' }}</li>

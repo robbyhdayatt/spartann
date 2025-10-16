@@ -7,7 +7,7 @@ use App\Models\StockAdjustment;
 use App\Models\InventoryBatch;
 use App\Models\Part;
 use App\Models\StockMovement;
-use App\Models\Gudang;
+use App\Models\Lokasi;
 use App\Models\Rak; // <-- TAMBAHKAN ATAU PASTIKAN BARIS INI ADA
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,28 +17,33 @@ class StockAdjustmentController extends Controller
 {
     public function index()
     {
-        $adjustments = StockAdjustment::with(['part', 'gudang', 'rak', 'createdBy', 'approvedBy'])->latest()->get();
+        $adjustments = StockAdjustment::with(['part', 'lokasi', 'rak', 'createdBy', 'approvedBy'])->latest()->get();
         return view('admin.stock_adjustments.index', compact('adjustments'));
     }
 
     public function create()
     {
+        $this->authorize('create-stock-adjustment');
+        
+        /** @var \App\Models\User $user */
         $user = auth()->user();
-        $parts = \App\Models\Part::where('is_active', true)->get();
+        $parts = Part::where('is_active', true)->orderBy('nama_part')->get();
+        $lokasi = null;
 
+        // Logika ini sudah benar, tetapi perlu dipastikan ada di controller Anda.
+        // Admin Gudang/Dealer hanya bisa membuat adjustment untuk lokasinya sendiri
         if ($user->gudang_id) {
-            $gudangs = \App\Models\Gudang::where('id', $user->gudang_id)->get();
-        } else {
-            $gudangs = \App\Models\Gudang::where('is_active', true)->get();
+            $lokasi = Lokasi::where('id', $user->gudang_id)->first();
         }
 
-        return view('admin.stock_adjustments.create', compact('gudangs', 'parts'));
+        // PERBAIKAN UTAMA: Kirim variabel '$lokasi' ke view, bukan '$gudangs'
+        return view('admin.stock_adjustments.create', compact('lokasi', 'parts'));
     }
 
     // Fungsi API untuk mengambil data rak
-    public function getRaksByGudang(Gudang $gudang)
+    public function getRaksByLokasi(Lokasi $lokasi)
     {
-        $raks = Rak::where('gudang_id', $gudang->id)
+        $raks = Rak::where('gudang_id', $lokasi->id)
                    ->whereIn('tipe_rak', ['PENYIMPANAN', 'KARANTINA'])
                    ->where('is_active', true)
                    ->get();
@@ -47,10 +52,10 @@ class StockAdjustmentController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorize('can-manage-stock');
+        $this->authorize('create-stock-adjustment');
         $validated = $request->validate([
             'part_id' => 'required|exists:parts,id',
-            'gudang_id' => 'required|exists:gudangs,id',
+            'gudang_id' => 'required|exists:lokasi,id', // Diperbaiki
             'rak_id' => 'required|exists:raks,id',
             'tipe' => 'required|in:TAMBAH,KURANG',
             'jumlah' => 'required|integer|min:1',
@@ -73,7 +78,7 @@ class StockAdjustmentController extends Controller
 
     public function approve(StockAdjustment $stockAdjustment)
     {
-        $this->authorize('approve-adjustment', $stockAdjustment);
+        $this->authorize('approve-stock-adjustment', $stockAdjustment);
 
         if ($stockAdjustment->status !== 'PENDING_APPROVAL') {
             return back()->with('error', 'Permintaan ini sudah diproses.');
@@ -178,7 +183,7 @@ class StockAdjustmentController extends Controller
 
     public function reject(Request $request, StockAdjustment $stockAdjustment)
     {
-        $this->authorize('approve-adjustment', $stockAdjustment);
+        $this->authorize('approve-stock-adjustment', $stockAdjustment);
         $request->validate(['rejection_reason' => 'required|string|min:10']);
 
         if ($stockAdjustment->status !== 'PENDING_APPROVAL') {

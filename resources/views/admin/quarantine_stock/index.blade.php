@@ -45,10 +45,11 @@
                 @forelse($quarantineItems as $item)
                 <tr>
                     <td>{{ $item->part->nama_part }} <br><small class="text-muted">{{ $item->part->kode_part }}</small></td>
-                    <td>{{ $item->gudang->nama_gudang }}</td>
+                    <td>{{ $item->lokasi->nama_gudang }}</td>
                     <td>{{ $item->rak->kode_rak }}</td>
                     <td class="text-right font-weight-bold">{{ $item->total_quantity }}</td>
                     <td>
+                        @can('manage-quarantine-stock')
                         <button class="btn btn-primary btn-xs process-btn"
                                 data-part-id="{{ $item->part_id }}"
                                 data-rak-id="{{ $item->rak_id }}"
@@ -58,6 +59,7 @@
                                 data-toggle="modal" data-target="#processModal">
                             Proses
                         </button>
+                        @endcan
                     </td>
                 </tr>
                 @empty

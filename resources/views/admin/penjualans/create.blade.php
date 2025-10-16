@@ -1,9 +1,11 @@
 @extends('adminlte::page')
 
-@section('title', 'Buat Penjualan Baru (FIFO)')
+@section('title', 'Buat Penjualan Baru')
+
+@section('plugins.Select2', true)
 
 @section('content_header')
-    <h1>Buat Penjualan Baru (FIFO)</h1>
+    <h1>Buat Penjualan Baru</h1>
 @stop
 
 @section('content')
@@ -28,13 +30,10 @@
             {{-- Header Form --}}
             <div class="row">
                 <div class="col-md-4 form-group">
-                    <label for="gudang_id">Gudang <span class="text-danger">*</span></label>
-                    <select class="form-control select2bs4" id="gudang_id" name="gudang_id" required>
-                        <option value="">Pilih Gudang</option>
-                        @foreach($gudangs as $gudang)
-                            <option value="{{ $gudang->id }}" {{ old('gudang_id') == $gudang->id ? 'selected' : '' }}>{{ $gudang->nama_gudang }}</option>
-                        @endforeach
-                    </select>
+                    <label for="gudang_id">Lokasi Penjualan</label>
+                    {{-- LOKASI SEKARANG READONLY BERDASARKAN USER LOGIN --}}
+                    <input type="text" class="form-control" value="{{ $lokasi->nama_gudang }}" readonly>
+                    <input type="hidden" id="gudang_id" name="gudang_id" value="{{ $lokasi->id }}">
                 </div>
                 <div class="col-md-4 form-group">
                     <label for="konsumen_id">Konsumen <span class="text-danger">*</span></label>
@@ -58,7 +57,7 @@
                 <div class="col-md-5 form-group">
                     <label for="part-selector">Pilih Part</label>
                     <select id="part-selector" class="form-control select2bs4" disabled>
-                        <option>Pilih Gudang Terlebih Dahulu</option>
+                        <option>Memuat Part...</option>
                     </select>
                 </div>
                 <div class="col-md-2 form-group">
@@ -112,6 +111,7 @@
         </div>
         <div class="card-footer text-right">
             <button type="submit" class="btn btn-primary">Simpan Penjualan</button>
+            <a href="{{ route('admin.penjualans.index') }}" class="btn btn-secondary">Batal</a>
         </div>
     </form>
 </div>
@@ -166,16 +166,21 @@ $(document).ready(function() {
         $('#total-harga-input').val(total);
     }
 
-    $('#gudang_id').on('change', function() {
-        let gudangId = $(this).val();
+    function loadParts() {
+        let gudangId = $('#gudang_id').val();
         let partSelector = $('#part-selector');
-        partSelector.prop('disabled', true).html('<option>Memuat...</option>');
+        
+        partSelector.prop('disabled', true).html('<option>Memuat Part...</option>');
+        
         if (!gudangId) {
-            partSelector.html('<option>Pilih Gudang Terlebih Dahulu</option>');
+            partSelector.html('<option>Lokasi tidak valid</option>');
             return;
         }
+
+        let url = `{{ url('admin/api/lokasi') }}/${gudangId}/parts`;
+
         $.ajax({
-            url: `{{ url('admin/api/gudangs') }}/${gudangId}/parts`,
+            url: url,
             success: function(parts) {
                 partsData = parts;
                 partSelector.prop('disabled', false).html('<option value="">Pilih Part</option>');
@@ -185,7 +190,9 @@ $(document).ready(function() {
             },
             error: function() { partSelector.html('<option>Gagal memuat part</option>'); }
         });
-    });
+    }
+
+    loadParts(); // Panggil fungsi saat halaman dimuat
 
     $('#add-part-btn').on('click', function() {
         let partId = $('#part-selector').val();
@@ -194,22 +201,19 @@ $(document).ready(function() {
         let konsumenId = $('#konsumen_id').val();
 
         if (!partId || !qtyJual || qtyJual <= 0 || !konsumenId) {
-            alert('Silakan pilih Gudang, Konsumen, Part, dan isi jumlah yang valid.');
+            alert('Silakan pilih Konsumen, Part, dan isi jumlah yang valid.');
             return;
         }
 
-        // Cek duplikat
         if ($(`.part-row[data-part-id="${partId}"]`).length > 0) {
             alert('Part ini sudah ditambahkan. Hapus terlebih dahulu jika ingin mengubah jumlah.');
             return;
         }
 
-        // Ambil data batch
         $.ajax({
             url: `{{ route('admin.api.get-fifo-batches') }}`,
             data: { part_id: partId, gudang_id: gudangId },
             success: function(batches) {
-                // Ambil harga diskon
                 $.ajax({
                     url: '{{ route("admin.api.calculate-discount") }}',
                     data: { part_id: partId, konsumen_id: konsumenId },

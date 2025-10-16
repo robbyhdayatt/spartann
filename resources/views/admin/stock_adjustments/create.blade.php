@@ -2,6 +2,8 @@
 
 @section('title', 'Buat Adjusment Stok')
 
+@section('plugins.Select2', true)
+
 @section('content_header')
     <h1>Buat Permintaan Adjusment Stok</h1>
 @stop
@@ -22,24 +24,20 @@
             @endif
             <div class="row">
                 <div class="col-md-6 form-group">
-                    <label>Gudang</label>
-                    @if(count($gudangs) === 1)
-                        <input type="text" class="form-control" value="{{ $gudangs->first()->nama_gudang }}" readonly>
-                        <input type="hidden" id="gudang_id" name="gudang_id" value="{{ $gudangs->first()->id }}">
+                    <label>Lokasi</label>
+                    {{-- Logika ini memastikan user hanya bisa memilih lokasinya sendiri --}}
+                    @if($lokasi)
+                        <input type="text" class="form-control" value="{{ $lokasi->nama_gudang }}" readonly>
+                        <input type="hidden" id="lokasi_id" name="gudang_id" value="{{ $lokasi->id }}">
                     @else
-                        <select name="gudang_id" id="gudang_id" class="form-control select2" required>
-                            <option value="" disabled selected>Pilih Gudang</option>
-                            @foreach($gudangs as $gudang)
-                                <option value="{{ $gudang->id }}">{{ $gudang->nama_gudang }}</option>
-                            @endforeach
-                        </select>
+                        <p class="form-control-static text-danger">Anda tidak terasosiasi dengan lokasi manapun.</p>
                     @endif
                 </div>
 
                 <div class="col-md-6 form-group">
                     <label>Rak</label>
                     <select name="rak_id" id="rak_id" class="form-control select2" required>
-                        <option value="">-- Pilih Gudang Terlebih Dahulu --</option>
+                        <option value="">-- Pilih Lokasi Terlebih Dahulu --</option>
                     </select>
                 </div>
             </div>
@@ -79,38 +77,19 @@
 </div>
 @stop
 
-@section('plugins.Select2', true)
-
-@push('css')
-<style>
-    .select2-container .select2-selection--single {
-        height: calc(2.25rem + 2px) !important;
-    }
-    .select2-container--default .select2-selection--single .select2-selection__rendered {
-        line-height: 1.5 !important;
-        padding-left: .75rem !important;
-        padding-top: .375rem !important;
-    }
-    .select2-container--default .select2-selection--single .select2-selection__arrow {
-        height: calc(2.25rem + 2px) !important;
-    }
-</style>
-@endpush
-
-@section('js')
+@push('js')
 <script>
 $(document).ready(function() {
-    $('.select2').select2();
+    $('.select2').select2({ theme: 'bootstrap4' });
 
-    function fetchRaks(gudangId) {
+    function fetchRaks(lokasiId) {
         const rakSelect = $('#rak_id');
-        if (gudangId) {
-            // -- BAGIAN YANG DIPERBAIKI --
-            // Menggunakan route name yang benar yang sekarang menunjuk ke URL yang unik
-            let url = "{{ route('admin.api.gudang.raks.for.adjustment', ['gudang' => ':id']) }}";
-            url = url.replace(':id', gudangId);
+        if (lokasiId) {
+            // PERBAIKAN: Gunakan route dan parameter yang benar
+            let url = "{{ route('admin.api.lokasi.raks', ['lokasi' => ':id']) }}";
+            url = url.replace(':id', lokasiId);
 
-            rakSelect.prop('disabled', true).html('<option value="">Loading...</option>');
+            rakSelect.prop('disabled', true).html('<option value="">Memuat...</option>');
 
             $.ajax({
                 url: url,
@@ -120,29 +99,24 @@ $(document).ready(function() {
                     rakSelect.prop('disabled', false).empty().append('<option value="">-- Pilih Rak --</option>');
                     if (data.length > 0) {
                         $.each(data, function(key, value) {
-                            rakSelect.append('<option value="' + value.id + '">' + value.nama_rak + '</option>');
+                            rakSelect.append('<option value="' + value.id + '">' + value.nama_rak + ' (' + value.kode_rak + ')</option>');
                         });
                     } else {
-                        rakSelect.html('<option value="">-- Tidak ada rak di gudang ini --</option>');
+                        rakSelect.html('<option value="">-- Tidak ada rak di lokasi ini --</option>');
                     }
                 },
                 error: function() {
-                    alert('Gagal memuat data rak. Terjadi kesalahan pada server.');
-                    rakSelect.html('<option value="">-- Error --</option>');
+                    rakSelect.prop('disabled', false).html('<option value="">-- Gagal memuat data --</option>');
                 }
             });
-        } else {
-            rakSelect.prop('disabled', true).empty().append('<option value="">-- Pilih Gudang Terlebih Dahulu --</option>');
         }
     }
 
-    $('#gudang_id').on('change', function() {
-        fetchRaks($(this).val());
-    });
-
-    if ($('#gudang_id').val()) {
-        fetchRaks($('#gudang_id').val());
+    // Ambil ID dari hidden input dan panggil fungsi
+    const lokasiId = $('#lokasi_id').val();
+    if (lokasiId) {
+        fetchRaks(lokasiId);
     }
 });
 </script>
-@stop
+@endpush

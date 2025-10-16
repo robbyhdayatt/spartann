@@ -73,7 +73,7 @@ class HomeController extends Controller
         $salesToday = Penjualan::whereDate('created_at', today())->count();
         $stockValue = DB::table('inventory_batches')
             ->join('parts', 'inventory_batches.part_id', '=', 'parts.id')
-            ->sum(DB::raw('inventory_batches.quantity * parts.harga_beli_rata_rata'));
+            ->sum(DB::raw('inventory_batches.quantity * parts.dpp'));
 
         $criticalStockParts = Part::select('parts.nama_part', 'parts.kode_part', 'parts.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_stock'))
             ->join('inventory_batches', 'parts.id', '=', 'inventory_batches.part_id')

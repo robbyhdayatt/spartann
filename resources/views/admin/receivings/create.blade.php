@@ -2,7 +2,6 @@
 
 @section('title', 'Catat Penerimaan Barang')
 
-{{-- PERBAIKAN 1: Menambahkan plugin Select2 --}}
 @section('plugins.Select2', true)
 
 @section('content_header')
@@ -22,6 +21,9 @@
                         @endforeach
                     </ul>
                 </div>
+            @endif
+            @if(session('error'))
+                <div class="alert alert-danger">{{ session('error') }}</div>
             @endif
             <div class="row">
                 <div class="col-md-6 form-group">
@@ -73,7 +75,6 @@
 </div>
 @stop
 
-{{-- PERBAIKAN 2: Menambahkan blok CSS kustom --}}
 @push('css')
 <style>
     .select2-container .select2-selection--single {
@@ -89,7 +90,6 @@
     }
 </style>
 @endpush
-
 
 @section('js')
 <script>
@@ -114,45 +114,42 @@ $(document).ready(function() {
                 dataType: 'json',
                 success: function(response) {
                     tableBody.empty();
-                    let details = response.details;
-                    if(details && details.length > 0) {
-                        let hasItemsToShow = false;
-                        details.forEach(function(item) {
+                    
+                    // --- PERBAIKAN DI SINI ---
+                    // Langsung gunakan 'response' sebagai array, bukan 'response.details'
+                    if(response && response.length > 0) {
+                        response.forEach(function(item) {
                             let qty_sisa = item.qty_pesan - item.qty_diterima;
-                            if (qty_sisa > 0) {
-                                hasItemsToShow = true;
-                                let row = `
-                                    <tr>
-                                        <td>
-                                            ${item.part.nama_part} (${item.part.kode_part})
-                                            <input type="hidden" name="items[${item.part_id}][part_id]" value="${item.part_id}">
-                                        </td>
-                                        <td><input type="text" class="form-control" value="${item.qty_pesan}" readonly></td>
-                                        <td><input type="text" class="form-control" value="${item.qty_diterima}" readonly></td>
-                                        <td><input type="text" class="form-control" value="${qty_sisa}" readonly></td>
-                                        <td>
-                                            <input type="number" name="items[${item.part_id}][qty_terima]"
-                                                   class="form-control"
-                                                   min="0"
-                                                   max="${qty_sisa}"
-                                                   value="${qty_sisa}"
-                                                   required>
-                                        </td>
-                                    </tr>
-                                `;
-                                tableBody.append(row);
-                            }
+                            
+                            // Baris hanya akan ditambahkan jika masih ada sisa yang bisa diterima
+                            let row = `
+                                <tr>
+                                    <td>
+                                        ${item.part.nama_part} (${item.part.kode_part})
+                                        <input type="hidden" name="items[${item.part_id}][part_id]" value="${item.part_id}">
+                                    </td>
+                                    <td><input type="text" class="form-control" value="${item.qty_pesan}" readonly></td>
+                                    <td><input type="text" class="form-control" value="${item.qty_diterima}" readonly></td>
+                                    <td><input type="text" class="form-control" value="${qty_sisa}" readonly></td>
+                                    <td>
+                                        <input type="number" name="items[${item.part_id}][qty_terima]"
+                                               class="form-control"
+                                               min="0"
+                                               max="${qty_sisa}"
+                                               value="${qty_sisa}"
+                                               required>
+                                    </td>
+                                </tr>
+                            `;
+                            tableBody.append(row);
                         });
-
-                        if (!hasItemsToShow) {
-                           tableBody.html('<tr><td colspan="5" class="text-center text-success">Semua item dari PO ini sudah diterima sepenuhnya.</td></tr>');
-                        }
                     } else {
-                        tableBody.html('<tr><td colspan="5" class="text-center text-danger">Tidak ada detail item pada PO ini.</td></tr>');
+                        // Jika array kosong, berarti tidak ada item yang bisa diretur
+                        tableBody.html('<tr><td colspan="5" class="text-center text-success">Semua item dari PO ini sudah diterima sepenuhnya atau tidak ada detail item.</td></tr>');
                     }
                 },
                 error: function() {
-                    tableBody.html('<tr><td colspan="5" class="text-center text-danger">Gagal memuat data.</td></tr>');
+                    tableBody.html('<tr><td colspan="5" class="text-center text-danger">Gagal memuat data. Periksa otorisasi atau hubungi administrator.</td></tr>');
                 }
             });
         } else {

@@ -5,11 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Penjualan;
 use App\Models\Konsumen;
-use App\Models\Gudang;
+use App\Models\Lokasi; // DIUBAH DARI GUDANG
 use App\Models\User;
 use App\Models\Part;
 use App\Models\InventoryBatch;
-use App\Models\Jabatan;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -28,31 +27,44 @@ class PenjualanController extends Controller
     public function index()
     {
         $this->authorize('view-sales');
-        $penjualans = Penjualan::with(['konsumen', 'sales'])->latest()->get();
+        
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $query = Penjualan::with(['konsumen', 'sales', 'lokasi'])->latest();
+
+        // Filter penjualan berdasarkan lokasi user, kecuali untuk SA/PIC/MA
+        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
+            $query->where('gudang_id', $user->gudang_id);
+        }
+
+        $penjualans = $query->get();
         return view('admin.penjualans.index', compact('penjualans'));
     }
 
     public function create()
     {
-        $this->authorize('manage-sales');
+        $this->authorize('create-sale');
+        
+        /** @var \App\Models\User $user */
         $user = Auth::user();
         $konsumens = Konsumen::where('is_active', true)->orderBy('nama_konsumen')->get();
 
-        if ($user->jabatan->nama_jabatan === 'Sales') {
-            $gudangs = Gudang::where('id', $user->gudang_id)->get();
-        } else {
-            $gudangs = Gudang::where('is_active', true)->get();
+        // Lokasi penjualan ditentukan oleh lokasi user yang login
+        $lokasi = Lokasi::find($user->gudang_id);
+
+        if (!$lokasi) {
+            return redirect()->route('admin.home')->with('error', 'Anda tidak terasosiasi dengan lokasi manapun.');
         }
 
-        return view('admin.penjualans.create', compact('konsumens', 'gudangs'));
+        return view('admin.penjualans.create', compact('konsumens', 'lokasi'));
     }
 
     public function store(Request $request)
     {
-        $this->authorize('manage-sales');
+        $this->authorize('create-sale');
 
         $validated = $request->validate([
-            'gudang_id' => 'required|exists:gudangs,id',
+            'gudang_id' => 'required|exists:lokasi,id', // DIUBAH
             'konsumen_id' => 'required|exists:konsumens,id',
             'tanggal_jual' => 'required|date',
             'items' => 'required|array|min:1',
@@ -60,6 +72,13 @@ class PenjualanController extends Controller
             'items.*.batch_id' => 'required|exists:inventory_batches,id',
             'items.*.qty_jual' => 'required|integer|min:1',
         ]);
+        
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        // Validasi tambahan: pastikan user hanya bisa menjual dari lokasinya sendiri
+        if ($user->gudang_id != $validated['gudang_id']) {
+            abort(403, 'Aksi tidak diizinkan. Anda hanya dapat membuat penjualan dari lokasi Anda.');
+        }
 
         DB::beginTransaction();
         try {
@@ -72,8 +91,8 @@ class PenjualanController extends Controller
                 'tanggal_jual' => $validated['tanggal_jual'],
                 'gudang_id' => $validated['gudang_id'],
                 'konsumen_id' => $validated['konsumen_id'],
-                'sales_id' => auth()->id(),
-                'created_by' => auth()->id(),
+                'sales_id' => $user->id,
+                'created_by' => $user->id, // Tambahkan created_by jika belum ada
             ]);
 
             foreach ($validated['items'] as $item) {
@@ -103,6 +122,7 @@ class PenjualanController extends Controller
                     'subtotal' => $itemSubtotal,
                 ]);
 
+                // Gunakan relasi untuk membuat stock movement
                 $penjualan->stockMovements()->create([
                     'part_id' => $part->id,
                     'gudang_id' => $penjualan->gudang_id,
@@ -110,14 +130,14 @@ class PenjualanController extends Controller
                     'jumlah' => -$qty,
                     'stok_sebelum' => $stokSebelum,
                     'stok_sesudah' => $batch->quantity,
-                    'user_id' => auth()->id(),
+                    'user_id' => $user->id,
                     'keterangan' => 'Penjualan via Faktur #' . $penjualan->nomor_faktur,
                 ]);
             }
 
             InventoryBatch::where('quantity', '<=', 0)->delete();
 
-            $pajak = ($request->pajak > 0) ? $totalSubtotalServer * 0.11 : 0;
+            $pajak = ($request->use_ppn == 1) ? $totalSubtotalServer * 0.11 : 0;
             $totalHarga = $totalSubtotalServer + $pajak;
 
             $penjualan->update([
@@ -128,7 +148,7 @@ class PenjualanController extends Controller
             ]);
 
             DB::commit();
-            return redirect()->route('admin.penjualans.show', $penjualan)->with('success', 'Transaksi penjualan FIFO berhasil disimpan.');
+            return redirect()->route('admin.penjualans.show', $penjualan)->with('success', 'Transaksi penjualan berhasil disimpan.');
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -139,18 +159,19 @@ class PenjualanController extends Controller
     public function show(Penjualan $penjualan)
     {
         $this->authorize('view-sales');
-        $penjualan->load(['konsumen', 'gudang', 'sales', 'details.part', 'details.rak']);
+        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.part', 'details.rak']); // DIUBAH GUDANG -> LOKASI
         return view('admin.penjualans.show', compact('penjualan'));
     }
 
     // --- API Methods ---
-    public function getPartsByGudang(Gudang $gudang)
+    public function getPartsByLokasi(Lokasi $lokasi) // DIUBAH
     {
-        $parts = Part::whereHas('inventoryBatches', function ($query) use ($gudang) {
-            $query->where('gudang_id', $gudang->id)->where('quantity', '>', 0);
+        $this->authorize('create-sale');
+        $parts = Part::whereHas('inventoryBatches', function ($query) use ($lokasi) {
+            $query->where('gudang_id', $lokasi->id)->where('quantity', '>', 0);
         })
-        ->withSum(['inventoryBatches' => function ($query) use ($gudang) {
-            $query->where('gudang_id', $gudang->id);
+        ->withSum(['inventoryBatches' => function ($query) use ($lokasi) {
+            $query->where('gudang_id', $lokasi->id);
         }], 'quantity')
         ->orderBy('nama_part')
         ->get()
@@ -168,9 +189,10 @@ class PenjualanController extends Controller
 
     public function getFifoBatches(Request $request)
     {
+        $this->authorize('create-sale');
         $validated = $request->validate([
             'part_id' => 'required|exists:parts,id',
-            'gudang_id' => 'required|exists:gudangs,id',
+            'gudang_id' => 'required|exists:lokasi,id', // DIUBAH
         ]);
 
         $batches = InventoryBatch::where('part_id', $validated['part_id'])
@@ -178,10 +200,15 @@ class PenjualanController extends Controller
             ->where('quantity', '>', 0)
             ->with(['rak', 'receivingDetail.receiving'])
             ->get()
+            // Urutkan berdasarkan tanggal dibuatnya batch (jika tidak ada referensi receiving)
+            // atau tanggal terima barang jika ada referensi.
             ->sortBy(function($batch) {
-                return $batch->receivingDetail->receiving->tanggal_terima->format('Y-m-d') . '_' . str_pad($batch->receiving_detail_id, 8, '0', STR_PAD_LEFT);
+                if ($batch->receivingDetail && $batch->receivingDetail->receiving) {
+                    return $batch->receivingDetail->receiving->tanggal_terima->format('Y-m-d H:i:s');
+                }
+                return $batch->created_at->format('Y-m-d H:i:s');
             });
-
+            
         return response()->json($batches->values()->all());
     }
 

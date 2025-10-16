@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryBatch;
 use App\Models\Rak;
-use App\Models\Part;      // Tambahkan ini
-use App\Models\Gudang;   // Tambahkan ini
+use App\Models\Part;
+use App\Models\Lokasi; // DIUBAH DARI GUDANG
 use App\Models\StockAdjustment;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
@@ -17,65 +17,53 @@ class QuarantineStockController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('can:can-manage-stock');
+
     }
 
     public function index()
     {
+        $this->authorize('view-quarantine-stock');
+        /** @var \App\Models\User $user */
         $user = Auth::user();
-        $gudangFilter = null;
+        $lokasiFilterId = null;
 
-        if (!in_array($user->jabatan->singkatan, ['SA', 'MA'])) {
-            $gudangFilter = $user->gudang_id;
+        // User SA dan PIC bisa melihat semua, selain itu hanya bisa melihat lokasi sendiri
+        if (!$user->hasRole(['SA', 'PIC'])) {
+            $lokasiFilterId = $user->gudang_id;
         }
 
         $quarantineQuery = InventoryBatch::whereHas('rak', function ($query) {
             $query->where('tipe_rak', 'KARANTINA');
         })->where('quantity', '>', 0);
 
-        if ($gudangFilter) {
-            $quarantineQuery->where('gudang_id', $gudangFilter);
+        if ($lokasiFilterId) {
+            $quarantineQuery->where('gudang_id', $lokasiFilterId);
         }
 
-        // --- LOGIKA QUERY YANG DIPERBAIKI ---
+        // Logika query disederhanakan dengan eager loading
         $quarantineItems = $quarantineQuery
             ->select('part_id', 'rak_id', 'gudang_id', DB::raw('SUM(quantity) as total_quantity'))
             ->groupBy('part_id', 'rak_id', 'gudang_id')
+            ->with(['part', 'rak', 'lokasi']) // Eager load relasi
             ->get();
 
-        // Eager load relasi secara manual setelah query agregasi
-        if ($quarantineItems->isNotEmpty()) {
-            $partIds = $quarantineItems->pluck('part_id')->unique();
-            $rakIds = $quarantineItems->pluck('rak_id')->unique();
-            $gudangIds = $quarantineItems->pluck('gudang_id')->unique();
-
-            $parts = Part::whereIn('id', $partIds)->get()->keyBy('id');
-            $raks = Rak::whereIn('id', $rakIds)->get()->keyBy('id');
-            $gudangs = Gudang::whereIn('id', $gudangIds)->get()->keyBy('id');
-
-            // Lampirkan data relasi ke setiap item
-            $quarantineItems->each(function ($item) use ($parts, $raks, $gudangs) {
-                $item->part = $parts->get($item->part_id);
-                $item->rak = $raks->get($item->rak_id);
-                $item->gudang = $gudangs->get($item->gudang_id);
-            });
+        // Ambil rak penyimpanan berdasarkan filter lokasi user
+        $storageRaksQuery = Rak::where('tipe_rak', 'PENYIMPANAN')->where('is_active', true);
+        if ($lokasiFilterId) {
+            $storageRaksQuery->where('gudang_id', $lokasiFilterId);
         }
-        // --- AKHIR PERBAIKAN ---
-
-        $storageRaks = Rak::where('tipe_rak', 'PENYIMPANAN')
-            ->where('is_active', true)
-            ->get()
-            ->groupBy('gudang_id');
+        $storageRaks = $storageRaksQuery->get()->groupBy('gudang_id');
 
         return view('admin.quarantine_stock.index', compact('quarantineItems', 'storageRaks'));
     }
 
     public function process(Request $request)
     {
+        $this->authorize('manage-quarantine-stock');
         $validated = $request->validate([
             'part_id' => 'required|exists:parts,id',
             'rak_id' => 'required|exists:raks,id',
-            'gudang_id' => 'required|exists:gudangs,id',
+            'gudang_id' => 'required|exists:lokasi,id', // DIUBAH ke tabel lokasi
             'action' => 'required|in:return_to_stock,write_off',
             'quantity' => 'required|integer|min:1',
             'destination_rak_id' => 'nullable|required_if:action,return_to_stock|exists:raks,id',
@@ -99,19 +87,18 @@ class QuarantineStockController extends Controller
                 if ($validated['action'] === 'return_to_stock') {
                     $destinationRak = Rak::findOrFail($validated['destination_rak_id']);
                     if ($gudangId != $destinationRak->gudang_id) {
-                        throw new \Exception('Rak tujuan harus berada di gudang yang sama.');
+                        throw new \Exception('Rak tujuan harus berada di lokasi yang sama.');
                     }
 
                     $this->reduceStockFromBatches($partId, $rakId, $quantityToProcess, 'Keluar dari karantina ke rak ' . $destinationRak->kode_rak);
 
-                    InventoryBatch::create([
-                        'part_id' => $partId, 'rak_id' => $destinationRak->id, 'gudang_id' => $gudangId,
-                        'quantity' => $quantityToProcess, 'receiving_detail_id' => null,
-                    ]);
+                    // Logika penambahan stok diperbaiki
+                    $this->addStockToBatch($partId, $destinationRak->id, $gudangId, $quantityToProcess, 'Masuk ke stok dari karantina');
 
                     $message = 'Barang berhasil dikembalikan ke stok penjualan.';
 
                 } elseif ($validated['action'] === 'write_off') {
+                    // Proses ini sudah benar, membuat pengajuan adjustment
                     StockAdjustment::create([
                         'part_id' => $partId,
                         'gudang_id' => $gudangId,
@@ -126,7 +113,6 @@ class QuarantineStockController extends Controller
                 }
             });
 
-            // Kode BARU
             return redirect()->route('admin.quarantine-stock.index')->with('success', $message);
 
         } catch (\Exception $e) {
@@ -142,16 +128,15 @@ class QuarantineStockController extends Controller
         $remainingQtyToReduce = $quantityToReduce;
         foreach ($batches as $batch) {
             if ($remainingQtyToReduce <= 0) break;
+            
+            $stokTotalSebelum = InventoryBatch::where('part_id', $partId)->where('gudang_id', $batch->gudang_id)->sum('quantity');
 
-            $stokSebelum = $batch->quantity;
             $qtyToTake = min($batch->quantity, $remainingQtyToReduce);
             $batch->decrement('quantity', $qtyToTake);
-            $remainingQtyToReduce -= $qtyToTake;
-
-            // Perbaiki pencatatan Stock Movement
+            
             StockMovement::create([
                 'part_id' => $partId, 'gudang_id' => $batch->gudang_id, 'rak_id' => $rakId,
-                'jumlah' => -$qtyToTake, 'stok_sebelum' => $stokSebelum, 'stok_sesudah' => $batch->quantity,
+                'jumlah' => -$qtyToTake, 'stok_sebelum' => $stokTotalSebelum, 'stok_sesudah' => $stokTotalSebelum - $qtyToTake,
                 'referensi_type' => 'App\Models\User', 'referensi_id' => auth()->id(), 'user_id' => auth()->id(),
                 'keterangan' => $keterangan,
             ]);
@@ -160,5 +145,24 @@ class QuarantineStockController extends Controller
                 $batch->delete();
             }
         }
+    }
+    
+    // Helper function baru untuk menambah stok ke batch
+    private function addStockToBatch($partId, $rakId, $gudangId, $quantityToAdd, $keterangan)
+    {
+        $stokTotalSebelum = InventoryBatch::where('part_id', $partId)->where('gudang_id', $gudangId)->sum('quantity');
+        
+        $batch = InventoryBatch::firstOrCreate(
+            ['part_id' => $partId, 'rak_id' => $rakId, 'gudang_id' => $gudangId],
+            ['quantity' => 0, 'receiving_detail_id' => null]
+        );
+        $batch->increment('quantity', $quantityToAdd);
+
+        StockMovement::create([
+            'part_id' => $partId, 'gudang_id' => $gudangId, 'rak_id' => $rakId,
+            'jumlah' => $quantityToAdd, 'stok_sebelum' => $stokTotalSebelum, 'stok_sesudah' => $stokTotalSebelum + $quantityToAdd,
+            'referensi_type' => 'App\Models\User', 'referensi_id' => auth()->id(), 'user_id' => auth()->id(),
+            'keterangan' => $keterangan,
+        ]);
     }
 }

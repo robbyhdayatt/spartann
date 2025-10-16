@@ -365,41 +365,40 @@ return [
                 // PERBAIKAN: Hak akses disederhanakan di bawah ini
                 ['text' => 'Penerimaan Barang', 'route' => 'admin.receivings.index', 'can' => 'perform-warehouse-ops'],
                 ['text' => 'Quality Control (QC)', 'route' => 'admin.qc.index', 'can' => 'perform-warehouse-ops'],
-                ['text' => 'Penyimpanan (Putaway)', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'],
-                
+                ['text' => 'Penyimpanan (Putaway)', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'],     
                 ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index'],
                 ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index'],
-                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index'],
-                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index'],
-                ['text' => 'Retur Pembelian', 'route' => 'admin.purchase-returns.index'],
-            ],
+                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'],
+                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index', 'can' => 'view-quarantine-stock'],
+                ['text' => 'Retur Pembelian', 'route' => 'admin.purchase-returns.index', 'can' => 'manage-purchase-returns'],
+            ],  
         ],
         [
             'text' => 'Transaksi Dealer',
             'icon' => 'fas fa-fw fa-store-alt',
             'can'  => 'is-dealer-staff',
             'submenu' => [
-                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index'],
-                ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index'],
-                ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index'],
-                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index'],
+                ['text' => 'Penerimaan Mutasi', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'],
+                ['text' => 'Adjusment Stok', 'route' => 'admin.stock-adjustments.index', 'can' => 'create-stock-adjustment'],
+                ['text' => 'Mutasi Stok', 'route' => 'admin.stock-mutations.index', 'can' => 'create-stock-adjustment'],
+                ['text' => 'Stok Karantina', 'route' => 'admin.quarantine-stock.index', 'can' => 'manage-quarantine-stock'],
+                ['text' => 'Data Service', 'route'  => 'admin.services.index', 'icon' => 'fas fa-fw fa-wrench', 'can'  => 'view-service'],
             ],
         ],
         [
             'text'    => 'Penjualan',
             'icon'    => 'fas fa-fw fa-cash-register',
-            'can'     => 'access-sales-module',
+            'can'     => 'view-sales', // Induk menu bisa dilihat oleh semua yang berhak melihat
             'submenu' => [
-                ['text' => 'Buat Transaksi', 'route' => 'admin.penjualans.create'],
+                // PERUBAHAN: Tambahkan 'can' => 'create-sale'
+                ['text' => 'Buat Transaksi', 'route' => 'admin.penjualans.create', 'can' => 'create-sale'],
+                
+                // Riwayat bisa dilihat oleh semua yang punya akses 'view-sales'
                 ['text' => 'Riwayat Penjualan', 'route' => 'admin.penjualans.index'],
-                ['text' => 'Retur Penjualan', 'route' => 'admin.sales-returns.index'],
+                
+                // Asumsi retur juga hanya bisa dibuat oleh Sales/Counter
+                ['text' => 'Retur Penjualan', 'route' => 'admin.sales-returns.index', 'can' => 'create-sale'],
             ],
-        ],
-        [
-            'text' => 'Data Service',
-            'route'  => 'admin.services.index',
-            'icon' => 'fas fa-fw fa-wrench',
-            'can'  => ['is-super-admin', 'is-pic', 'is-manager'] // Contoh, sesuaikan
         ],
 
         // ================== MENU ANALISIS ==================

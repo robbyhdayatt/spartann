@@ -3,33 +3,31 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\InventoryBatch;
+use App\Models\Lokasi;
+use App\Models\Rak;
 use App\Models\Receiving;
 use App\Models\ReceivingDetail;
-use App\Models\Lokasi; // DIUBAH
-use App\Models\Rak;
+use App\Models\StockMovement;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class QcController extends Controller
 {
     public function index()
     {
-        // PERUBAHAN: Menggunakan gate 'perform-warehouse-ops'
         $this->authorize('perform-warehouse-ops');
         $user = Auth::user();
 
         $query = Receiving::where('status', 'PENDING_QC')
-                            // PERUBAHAN: Menggunakan relasi 'lokasi'
-                            ->with(['purchaseOrder.supplier', 'lokasi']);
+                           ->with(['purchaseOrder.supplier', 'lokasi']);
 
-        // Filter berdasarkan lokasi user, kecuali untuk role global
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('gudang_id', $user->gudang_id);
         }
 
         $receivings = $query->latest('tanggal_terima')->paginate(15);
-
         return view('admin.qc.index', compact('receivings'));
     }
 
@@ -40,7 +38,6 @@ class QcController extends Controller
             return redirect()->route('admin.qc.index')->with('error', 'Penerimaan ini sudah diproses QC.');
         }
 
-        // Pastikan user hanya bisa proses QC di lokasinya
         if (Auth::user()->gudang_id != $receiving->gudang_id && !Auth::user()->hasRole(['SA', 'PIC'])) {
             return redirect()->route('admin.qc.index')->with('error', 'Anda tidak berwenang memproses QC untuk lokasi ini.');
         }
@@ -66,7 +63,6 @@ class QcController extends Controller
 
             foreach ($validated['items'] as $detailId => $data) {
                 $detail = ReceivingDetail::findOrFail($detailId);
-
                 $qtyLolos = (int) $data['qty_lolos'];
                 $qtyGagal = (int) $data['qty_gagal'];
                 $totalInput = $qtyLolos + $qtyGagal;
@@ -80,6 +76,44 @@ class QcController extends Controller
                     'qty_gagal_qc' => $qtyGagal,
                     'catatan_qc' => $data['catatan_qc'],
                 ]);
+
+                // --- LOGIKA BARU UNTUK MEMINDAHKAN STOK GAGAL QC ---
+                if ($qtyGagal > 0) {
+                    // 1. Cari rak karantina di lokasi penerimaan
+                    $quarantineRak = Rak::where('gudang_id', $receiving->gudang_id)
+                                        ->where('tipe_rak', 'KARANTINA')
+                                        ->first();
+
+                    if (!$quarantineRak) {
+                        throw new \Exception("Tidak ditemukan rak karantina di lokasi " . $receiving->lokasi->nama_gudang . ". Mohon setup terlebih dahulu.");
+                    }
+
+                    // 2. Buat atau tambahkan stok ke batch di rak karantina
+                    $batch = InventoryBatch::firstOrCreate(
+                        [
+                            'part_id' => $detail->part_id,
+                            'rak_id' => $quarantineRak->id,
+                            'gudang_id' => $receiving->gudang_id
+                        ],
+                        ['quantity' => 0, 'receiving_detail_id' => $detail->id]
+                    );
+                    $batch->increment('quantity', $qtyGagal);
+                    
+                    // 3. Catat pergerakan stok (opsional tapi sangat direkomendasikan)
+                    StockMovement::create([
+                        'part_id' => $detail->part_id,
+                        'gudang_id' => $receiving->gudang_id,
+                        'rak_id' => $quarantineRak->id,
+                        'jumlah' => $qtyGagal,
+                        'stok_sebelum' => $batch->quantity - $qtyGagal,
+                        'stok_sesudah' => $batch->quantity,
+                        'referensi_type' => get_class($receiving),
+                        'referensi_id' => $receiving->id,
+                        'keterangan' => 'Stok masuk ke karantina dari QC Gagal (Penerimaan: ' . $receiving->nomor_penerimaan . ')',
+                        'user_id' => Auth::id(),
+                    ]);
+                }
+                // --- AKHIR LOGIKA BARU ---
 
                 $totalLolos += $qtyLolos;
             }
@@ -95,7 +129,7 @@ class QcController extends Controller
             $receiving->save();
 
             DB::commit();
-            return redirect()->route('admin.qc.index')->with('success', 'Hasil QC berhasil disimpan.');
+            return redirect()->route('admin.qc.index')->with('success', 'Hasil QC berhasil disimpan. Stok gagal QC telah dipindahkan ke rak karantina.');
 
         } catch (\Exception $e) {
             DB::rollBack();
