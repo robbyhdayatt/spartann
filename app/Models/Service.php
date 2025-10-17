@@ -13,6 +13,7 @@ class Service extends Model
 
     protected $casts = [
         'reg_date' => 'date',
+        'printed_at' => 'datetime',
     ];
     public function details()
     {

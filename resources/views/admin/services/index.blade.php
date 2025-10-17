@@ -2,7 +2,6 @@
 
 @section('title', 'Manajemen Service')
 
-{{-- ++ MODIFIKASI 1: Tambahkan plugin DataTables ++ --}}
 @section('plugins.Datatables', true)
 
 @section('content_header')
@@ -25,8 +24,7 @@
             </div>
         @endif
 
-        {{-- ++ MODIFIKASI 2: Bungkus Card Impor dengan @can ++ --}}
-        {{-- Card ini hanya akan muncul untuk user yang memiliki izin 'manage-service' --}}
+        {{-- Fitur Impor tetap ada --}}
         @can('manage-service')
         <div class="card">
             <div class="card-header">
@@ -38,39 +36,9 @@
                 </div>
             </div>
             <div class="card-body">
+                {{-- ++ PERUBAHAN 1: Kolom petunjuk dihapus, form impor dibuat full width ++ --}}
                 <div class="row">
-                    <div class="col-md-6">
-                        <div class="alert alert-info">
-                            <h5><i class="icon fas fa-info"></i> Petunjuk Import File Excel</h5>
-                            <p>Pastikan file Excel Anda memiliki kolom-kolom berikut dengan urutan yang sesuai:</p>
-                            <ol>
-                                <li><strong>invoice_no</strong></li>
-                                <li><strong>reg_date</strong> (Format: YYYY-MM-DD)</li>
-                                <li><strong>dealer</strong></li>
-                                <li><strong>customer_name</strong></li>
-                                <li><strong>plate_no</strong></li>
-                                <li><strong>total_labor</strong></li>
-                                <li><strong>total_part_service</strong></li>
-                                <li><strong>total_oil_service</strong></li>
-                                <li><strong>total_retail_parts</strong></li>
-                                <li><strong>total_retail_oil</strong></li>
-                                <li><strong>benefit_amount</strong></li>
-                                <li><strong>total_amount</strong></li>
-                                <li><strong>e_payment_amount</strong></li>
-                                <li><strong>cash_amount</strong></li>
-                                <li><strong>debit_amount</strong></li>
-                                <li><strong>total_payment</strong></li>
-                                <li><strong>balance</strong></li>
-                                <li><strong>item_category</strong></li>
-                                <li><strong>item_code</strong></li>
-                                <li><strong>item_name</strong></li>
-                                <li><strong>quantity</strong></li>
-                                <li><strong>price</strong></li>
-                            </ol>
-                            <p><strong>Penting:</strong> Kolom `dealer` harus sesuai dengan kode dealer akun Anda.</p>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
+                    <div class="col-md-12">
                         <form action="{{ route('admin.services.import') }}" method="POST" enctype="multipart/form-data">
                             @csrf
                             <div class="form-group">
@@ -86,6 +54,7 @@
                                         </button>
                                     </div>
                                 </div>
+                                <small class="form-text text-muted">Hanya file .xls, .xlsx, atau .csv yang diizinkan. Pastikan kolom `dealer` sesuai dengan kode dealer Anda.</small>
                             </div>
                         </form>
                     </div>
@@ -99,18 +68,18 @@
                 <h3 class="card-title">Daftar Transaksi Service</h3>
             </div>
             <div class="card-body">
-                {{-- ID tabel tetap sama untuk JavaScript DataTables --}}
                 <table id="services-table" class="table table-bordered table-striped table-hover">
                     <thead>
                         <tr>
-                            <th>No.</th>
+                            <th style="width: 5%;">No.</th>
                             <th>No. Invoice</th>
                             <th>Dealer</th>
                             <th>Tanggal Registrasi</th>
                             <th>Pelanggan</th>
                             <th>Plat Nomor</th>
                             <th class="text-right">Total Tagihan</th>
-                            <th>Aksi</th>
+                            <th class="text-center" style="width: 10%;">Status Cetak</th>
+                            <th class="text-center" style="width: 10%;">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -123,7 +92,18 @@
                                 <td>{{ $service->customer_name }}</td>
                                 <td>{{ $service->plate_no }}</td>
                                 <td class="text-right">@rupiah($service->total_amount)</td>
-                                <td>
+                                <td class="text-center">
+                                    @if($service->printed_at)
+                                        <span class="badge badge-success" title="Dicetak pada: {{ $service->printed_at->format('d/m/Y H:i') }}">
+                                            <i class="fas fa-check"></i> Sudah Cetak
+                                        </span>
+                                    @else
+                                        <span class="badge badge-secondary">
+                                            <i class="fas fa-times"></i> Belum Cetak
+                                        </span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
                                     <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-xs btn-info" title="Lihat Detail">
                                         <i class="fas fa-eye"></i>
                                     </a>
@@ -138,7 +118,6 @@
                     </tbody>
                 </table>
             </div>
-            {{-- Footer card dihapus karena paginasi akan ditangani DataTables --}}
         </div>
     </div>
 </div>
@@ -150,7 +129,7 @@
         // Inisialisasi bs-custom-file-input
         bsCustomFileInput.init();
 
-        // ++ MODIFIKASI 3: Inisialisasi DataTables ++
+        // Inisialisasi DataTables
         $('#services-table').DataTable({
             "responsive": true,
             "lengthChange": true,
@@ -159,7 +138,21 @@
             "info": true,
             "language": {
                 "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json"
-            }
+            },
+
+            {{-- ++ PERUBAHAN 2: Mengaktifkan sorting di kolom Status Cetak ++ --}}
+            "columnDefs": [
+                {
+                    "orderable": false,
+                    "searchable": false,
+                    "targets": [8] // Hanya nonaktifkan sort/search di kolom 'Aksi' (index 8)
+                }
+            ],
+
+            {{-- ++ PERUBAHAN 3: Sorting default berdasarkan Status Cetak (index 7) ++ --}}
+            "order": [
+                [ 7, "asc" ] // "asc" akan mengurutkan 'Belum Cetak' (B) sebelum 'Sudah Cetak' (S)
+            ]
         });
     });
 </script>

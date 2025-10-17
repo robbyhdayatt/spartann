@@ -32,6 +32,7 @@ class ServiceController extends Controller
             }
         }
 
+        // Ambil data dengan paginasi
         $services = $query->latest()->paginate(25);
 
         return view('admin.services.index', compact('services'));
@@ -68,7 +69,7 @@ class ServiceController extends Controller
                 }
                 return redirect()->back()->with('success', $message);
             }
-            
+
             $errorMessage = 'Impor gagal.';
             if ($skippedDealerCount > 0) {
                  $errorMessage .= " {$skippedDealerCount} baris data ditolak karena tidak sesuai dengan dealer Anda.";
@@ -98,10 +99,7 @@ class ServiceController extends Controller
     {
         $this->authorize('manage-service');
         $service->load('details.part', 'lokasi');
-
-        // ++ PERBAIKAN 1: Gunakan kolom 'gudang_id' dari User ++
         $userLokasiId = Auth::user()->gudang_id;
-
         return view('admin.services.edit', compact('service', 'userLokasiId'));
     }
 
@@ -118,43 +116,38 @@ class ServiceController extends Controller
 
         try {
             DB::transaction(function () use ($validated, $service) {
-                
+
                 $user = Auth::user();
-                // ++ PERBAIKAN 2: Cek dan gunakan 'gudang_id' dari User ++
                 if (!$user->gudang_id) {
                     throw new \Exception("Gagal menyimpan: Akun Anda tidak terhubung dengan lokasi manapun.");
                 }
                 $lokasiId = $user->gudang_id;
-                
+
                 if (isset($validated['items'])) {
                     foreach ($validated['items'] as $item) {
                         $part = Part::find($item['part_id']);
                         $quantity = (int)$item['quantity'];
 
-                        // 1. Validasi stok dari inventaris (FIFO) berdasarkan lokasi PENGGUNA
                         $remainingQtyToReduce = $quantity;
                         $batches = InventoryBatch::where('part_id', $part->id)
-                            ->where('gudang_id', $lokasiId) // <- Menggunakan lokasi pengguna ($lokasiId dari $user->gudang_id)
+                            ->where('gudang_id', $lokasiId)
                             ->where('quantity', '>', 0)
                             ->orderBy('created_at', 'asc')
                             ->get();
-                        
-                        // Pesan error yang lebih jelas
+
                         if ($batches->sum('quantity') < $remainingQtyToReduce) {
                             $namaLokasi = $user->lokasi->nama_lokasi ?? 'gudang Anda';
                             throw new \Exception("Stok untuk part '{$part->nama_part}' tidak mencukupi di {$namaLokasi}.");
                         }
 
-                        // Lanjutkan proses pengurangan stok
                         foreach ($batches as $batch) {
                             if ($remainingQtyToReduce <= 0) break;
                             $qtyToTake = min($batch->quantity, $remainingQtyToReduce);
                             $stokTotalSebelum = InventoryBatch::where('part_id', $part->id)->where('gudang_id', $lokasiId)->sum('quantity');
-                            
+
                             $batch->decrement('quantity', $qtyToTake);
                             $remainingQtyToReduce -= $qtyToTake;
 
-                            // 2. Catat pergerakan stok
                             StockMovement::create([
                                 'part_id' => $part->id, 'gudang_id' => $lokasiId, 'rak_id' => $batch->rak_id,
                                 'jumlah' => -$qtyToTake, 'stok_sebelum' => $stokTotalSebelum, 'stok_sesudah' => $stokTotalSebelum - $qtyToTake,
@@ -164,7 +157,6 @@ class ServiceController extends Controller
                             ]);
                         }
 
-                        // 3. Tambahkan item ke service_details
                         $service->details()->create([
                             'item_category' => 'PART', 'item_code' => $part->kode_part, 'item_name' => $part->nama_part,
                             'quantity' => $quantity, 'price' => $item['price'],
@@ -172,49 +164,51 @@ class ServiceController extends Controller
                     }
                 }
 
-                // 4. Hitung ulang total pada tabel services
                 $service->refresh()->load('details');
                 $totalPartService = $service->details()->where('item_category', 'PART')->sum(DB::raw('quantity * price'));
                 $totalOilService = $service->details()->where('item_category', 'OLI')->sum(DB::raw('quantity * price'));
 
                 $service->total_part_service = $totalPartService;
                 $service->total_oil_service = $totalOilService;
-                
+
                 $totalAmount = $service->total_labor + $totalPartService + $totalOilService + $service->total_retail_parts + $service->total_retail_oil;
                 $service->total_amount = $totalAmount;
                 $service->total_payment = $totalAmount - $service->benefit_amount;
                 $service->balance = $service->total_payment - ($service->e_payment_amount + $service->cash_amount + $service->debit_amount);
-                
+
                 $service->save();
             });
 
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Gagal memperbarui service: ' . $e->getMessage())->withInput();
         }
-        
+
         return redirect()->route('admin.services.show', $service)->with('success', 'Part baru berhasil ditambahkan ke data service.');
     }
 
-public function downloadPDF($id)
+    public function downloadPDF($id)
     {
         $this->authorize('view-service');
         $service = Service::with('details')->findOrFail($id);
-        $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
 
-        // Konversi ukuran dari cm ke points (1 cm = 28.3465 points)
+        // ++ PERUBAHAN: Tandai faktur sebagai sudah dicetak/didownload ++
+        if (is_null($service->printed_at)) {
+            $service->printed_at = now();
+            $service->save();
+        }
+
+        $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
         $widthInPoints = 24 * 28.3465;
         $heightInPoints = 14 * 28.3465;
         $customPaper = [0, 0, $heightInPoints, $widthInPoints];
 
         $pdf = PDF::loadView('admin.services.pdf', compact('service'))
-            // Atur ukuran kertas kustom (landscape)
             ->setPaper($customPaper)
-            // Atur opsi untuk menghilangkan margin
             ->setOptions([
                 'isHtml5ParserEnabled' => true,
                 'isRemoteEnabled' => true,
                 'dpi' => 150,
-                'defaultFont' => 'Courier', // Opsional: pastikan font konsisten
+                'defaultFont' => 'Courier',
                 'margin-top'    => 0,
                 'margin-right'  => 0,
                 'margin-bottom' => 0,

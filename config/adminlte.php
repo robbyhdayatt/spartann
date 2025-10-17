@@ -85,7 +85,7 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'usermenu_enabled' => true, // Diaktifkan untuk menampilkan nama user & logout
+    'usermenu_enabled' => true, // Biarkan true jika ingin dropdown user tetap ada
     'usermenu_header' => false,
     'usermenu_header_class' => 'bg-primary',
     'usermenu_image' => false,
@@ -99,8 +99,8 @@ return [
 
     'layout_topnav' => null,
     'layout_boxed' => null,
-    'layout_fixed_sidebar' => true, // Dibuat fixed agar tidak ikut scroll
-    'layout_fixed_navbar' => true, // Dibuat fixed agar tidak ikut scroll
+    'layout_fixed_sidebar' => true,
+    'layout_fixed_navbar' => true,
     'layout_fixed_footer' => null,
     'layout_dark_mode' => null,
 
@@ -129,7 +129,7 @@ return [
     'classes_content_wrapper' => '',
     'classes_content_header' => '',
     'classes_content' => '',
-    'classes_sidebar' => 'sidebar-light-primary elevation-4', // Warna disesuaikan
+    'classes_sidebar' => 'sidebar-light-primary elevation-4',
     'classes_sidebar_nav' => '',
     'classes_topnav'  => 'navbar-white navbar-light',
     'classes_topnav_nav' => 'navbar-expand',
@@ -201,7 +201,15 @@ return [
         // Navbar items:
         ['type' => 'fullscreen-widget', 'topnav_right' => true],
 
-        // Sidebar items:
+        // ++ PERUBAHAN: Tambahkan item logout di sini ++
+        [
+            'type'         => 'logout-link', // Tipe khusus untuk logout
+            'text'         => 'Logout',      // Teks yang muncul saat dihover (opsional)
+            'icon'         => 'fas fa-sign-out-alt', // Ikon tombol
+            'topnav_right' => true,          // Letakkan di kanan navbar
+        ],
+
+        // Sidebar items: (Sisanya tetap sama seperti sebelumnya)
         [
             'text' => 'Dashboard',
             'route'  => 'admin.home',
@@ -212,11 +220,9 @@ return [
             'route'  => 'admin.profile.show',
             'icon' => 'fas fa-fw fa-user-circle',
         ],
-
-        // ================== MENU PUSAT & GLOBAL ==================
         [
             'header' => 'MASTER & PENGATURAN',
-            'can' => 'view-master-data', 
+            'can' => 'view-master-data',
         ],
         [
             'text' => 'Manajemen Lokasi',
@@ -246,8 +252,6 @@ return [
             'icon' => 'fas fa-fw fa-users-cog',
             'can' => 'manage-users',
         ],
-
-        // ================== MENU OPERASIONAL ==================
         [
             'header' => 'OPERASIONAL',
         ],
@@ -259,13 +263,13 @@ return [
                 ['text' => 'Purchase Order (PO)', 'icon' => 'fas fa-fw fa-shopping-cart', 'route' => 'admin.purchase-orders.index', 'can' => 'access-po-module'],
                 ['text' => 'Penerimaan Barang', 'icon' => 'fas fa-fw fa-box-open', 'route' => 'admin.receivings.index', 'can' => 'perform-warehouse-ops'],
                 ['text' => 'Quality Control (QC)', 'icon' => 'fas fa-fw fa-check-double', 'route' => 'admin.qc.index', 'can' => 'perform-warehouse-ops'],
-                ['text' => 'Penyimpanan (Putaway)', 'icon' => 'fas fa-fw fa-dolly', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'],      
+                ['text' => 'Penyimpanan (Putaway)', 'icon' => 'fas fa-fw fa-dolly', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'],
                 ['text' => 'Adjusment Stok', 'icon' => 'fas fa-fw fa-sliders-h', 'route' => 'admin.stock-adjustments.index'],
                 ['text' => 'Mutasi Stok', 'icon' => 'fas fa-fw fa-people-arrows', 'route' => 'admin.stock-mutations.index'],
                 ['text' => 'Penerimaan Mutasi', 'icon' => 'fas fa-fw fa-truck-loading', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'],
                 ['text' => 'Stok Karantina', 'icon' => 'fas fa-fw fa-biohazard', 'route' => 'admin.quarantine-stock.index', 'can' => 'view-quarantine-stock'],
                 ['text' => 'Retur Pembelian', 'icon' => 'fas fa-fw fa-undo-alt', 'route' => 'admin.purchase-returns.index', 'can' => 'manage-purchase-returns'],
-            ],   
+            ],
         ],
         [
             'text' => 'Transaksi Dealer',
@@ -289,8 +293,6 @@ return [
                 ['text' => 'Retur Penjualan', 'icon' => 'fas fa-fw fa-exchange-alt', 'route' => 'admin.sales-returns.index', 'can' => 'create-sale'],
             ],
         ],
-
-        // ================== MENU ANALISIS ==================
         [
             'header' => 'ANALISIS & MARKETING',
             'can' => ['is-manager', 'is-pic'],

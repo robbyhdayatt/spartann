@@ -36,15 +36,17 @@
                     @if(session('error'))
                         <div class="alert alert-danger">{{ session('error') }}</div>
                     @endif
-                    
+
+                    {{-- ++ PERUBAHAN 1: TATA LETAK HTML ++ --}}
                     <div class="row align-items-end">
-                        <div class="col-md-5 form-group">
+                        <div class="col-md-4 form-group">
                             <label for="part-selector">Cari Part</label>
                             <select id="part-selector" class="form-control"></select>
+                            {{-- Input hidden untuk menyimpan harga asli --}}
+                            <input type="hidden" id="original-price" value="0">
                         </div>
-                        <div class="col-md-3 form-group">
+                        <div class="col-md-2 form-group">
                             <label for="qty-selector">Jumlah</label>
-                            {{-- PERBAIKAN: Menambahkan elemen untuk info stok --}}
                             <div class="input-group">
                                 <input type="number" id="qty-selector" class="form-control" min="1" value="1">
                                 <div class="input-group-append">
@@ -53,8 +55,18 @@
                             </div>
                         </div>
                         <div class="col-md-2 form-group">
+                            <label for="discount-selector">Diskon (%)</label>
+                            <div class="input-group">
+                                <input type="number" id="discount-selector" class="form-control" min="0" max="100" value="0">
+                                <div class="input-group-append">
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 form-group">
                             <label for="price-selector">Harga Satuan</label>
-                            <input type="number" id="price-selector" class="form-control" min="0">
+                            {{-- Ubah type ke "text" dan tambahkan readonly --}}
+                            <input type="text" id="price-selector" class="form-control text-right" readonly>
                         </div>
                         <div class="col-md-2 form-group">
                             <button type="button" class="btn btn-primary" id="add-part-btn">Tambahkan</button>
@@ -80,7 +92,7 @@
                 </div>
                 <div class="card-footer">
                     <button type="submit" class="btn btn-success">Simpan Perubahan</button>
-                    <a href="{{ route('admin.services.index', $service) }}" class="btn btn-secondary">Batal</a>
+                    <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">Batal</a>
                 </div>
             </form>
         </div>
@@ -120,11 +132,61 @@
 </div>
 @stop
 
+{{-- ++ PERUBAHAN 2: CSS (Style untuk input readonly) ++ --}}
+@push('css')
+<style>
+    /* Membuat input readonly tetap terlihat jelas (latar putih) */
+    input[readonly].form-control {
+        background-color: #fff;
+        opacity: 1;
+    }
+</style>
+@endpush
+
 @push('js')
+{{-- ++ PERUBAHAN 3: LOGIKA JAVASCRIPT ++ --}}
 <script>
 $(document).ready(function() {
     let itemIndex = 0;
 
+    // --- Helper Functions ---
+    /**
+     * Memformat angka menjadi string Rupiah (Rp 123.456)
+     */
+    const formatAsRupiah = (number) => {
+        return new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR',
+            minimumFractionDigits: 0, // Hapus desimal ,00
+            maximumFractionDigits: 0  // Hapus desimal ,00
+        }).format(number);
+    }
+
+    /**
+     * Mengubah string Rupiah (Rp 123.456) kembali menjadi angka (123456)
+     */
+    const parseRupiah = (text) => {
+        if (!text) return 0;
+        return parseFloat(text.replace(/[^0-9]/g, '')) || 0;
+    }
+
+    /**
+     * Logika utama untuk menghitung harga setelah diskon
+     */
+    function calculateFinalPrice() {
+        let originalPrice = parseFloat($('#original-price').val()) || 0;
+        let diskonPersen = parseFloat($('#discount-selector').val()) || 0;
+
+        if (diskonPersen < 0) diskonPersen = 0;
+        if (diskonPersen > 100) diskonPersen = 100;
+
+        let hargaSetelahDiskon = originalPrice * (1 - (diskonPersen / 100));
+
+        // Atur nilai input harga satuan dengan format Rupiah
+        $('#price-selector').val(formatAsRupiah(hargaSetelahDiskon));
+    }
+
+    // --- Event Listeners ---
     $('#part-selector').select2({
         theme: 'bootstrap4',
         placeholder: 'Ketik kode atau nama part...',
@@ -132,11 +194,10 @@ $(document).ready(function() {
             url: "{{ route('admin.parts.search') }}",
             dataType: 'json',
             delay: 250,
-            // PERBAIKAN: Mengirim ID lokasi saat melakukan pencarian
             data: function (params) {
                 return {
-                    q: params.term, // Teks yang diketik user
-                    lokasi_id: $('#service_lokasi_id').val() // Ambil ID lokasi dari hidden input
+                    q: params.term,
+                    lokasi_id: $('#service_lokasi_id').val()
                 };
             },
             processResults: function (data) {
@@ -148,21 +209,33 @@ $(document).ready(function() {
         }
     }).on('select2:select', function (e) {
         var data = e.params.data;
-        $('#price-selector').val(data.harga_satuan || 0);
-        
-        // PERBAIKAN: Tampilkan stok dan set batas maksimal input qty
+
+        // Simpan harga asli ke input hidden
+        $('#original-price').val(data.harga_satuan || 0);
+        // Reset diskon ke 0
+        $('#discount-selector').val(0);
+        // Hitung dan format harga final
+        calculateFinalPrice();
+
         $('#stock-info').text(`Stok: ${data.total_stock}`);
         $('#qty-selector').attr('max', data.total_stock);
+    });
+
+    // Hitung ulang harga jika diskon diubah
+    $('#discount-selector').on('keyup change input', function() {
+        calculateFinalPrice();
     });
 
     // Tombol Tambah Part
     $('#add-part-btn').on('click', function() {
         let selectedPart = $('#part-selector').select2('data')[0];
         let qty = $('#qty-selector').val();
-        let price = $('#price-selector').val();
+        // Ambil harga final (setelah diskon) dari input yang sudah diformat
+        let price = parseRupiah($('#price-selector').val());
+        let priceDisplay = $('#price-selector').val(); // "Rp 123.456"
 
-        if (!selectedPart || !qty || qty <= 0 || !price || price < 0) {
-            alert('Silakan pilih Part dan isi jumlah/harga yang valid.');
+        if (!selectedPart || !qty || qty <= 0 || price < 0) {
+            alert('Silakan pilih Part dan isi jumlah yang valid.');
             return;
         }
 
@@ -176,19 +249,22 @@ $(document).ready(function() {
                     <input type="hidden" name="items[${itemIndex}][quantity]" value="${qty}">
                 </td>
                 <td>${qty}</td>
-                <td>${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(price)}</td>
-                <td>${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(subtotal)}</td>
+                <td class="text-right">${priceDisplay}</td>
+                <td class="text-right">${formatAsRupiah(subtotal)}</td>
                 <td><button type="button" class="btn btn-xs btn-danger remove-item-btn"><i class="fas fa-trash"></i></button></td>
             </tr>
         `;
-        
+
         $('#parts-container').append(rowHtml);
         itemIndex++;
 
         // Reset input
         $('#part-selector').val(null).trigger('change');
         $('#qty-selector').val(1);
+        $('#discount-selector').val(0);
         $('#price-selector').val('');
+        $('#original-price').val(0);
+        $('#stock-info').text('Stok: -');
     });
 
     // Tombol Hapus Item
@@ -196,12 +272,13 @@ $(document).ready(function() {
         $(this).closest('tr').remove();
     });
 
+    // Validasi submit form (sudah benar)
     $('#edit-service-form').on('submit', function(e){
         let maxQty = parseInt($('#qty-selector').attr('max')) || 0;
         let currentQty = parseInt($('#qty-selector').val()) || 0;
         if(currentQty > maxQty){
             alert(`Jumlah yang dimasukkan (${currentQty}) melebihi stok yang tersedia (${maxQty}).`);
-            e.preventDefault(); // Mencegah form di-submit
+            e.preventDefault();
         }
     });
 });
