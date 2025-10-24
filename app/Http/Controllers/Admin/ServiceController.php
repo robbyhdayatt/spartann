@@ -47,7 +47,7 @@ class ServiceController extends Controller
             }
         }
 
-        $services = $query->latest()->paginate(25)->withQueryString();
+        $services = $query->latest()->paginate(1000)->withQueryString();
 
         // Ganti nama variabel 'dealers' menjadi 'listDealer' agar tidak bentrok
         return view('admin.services.index', [

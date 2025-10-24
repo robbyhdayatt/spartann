@@ -2,8 +2,10 @@
 
 @section('title', 'Manajemen Service')
 
+{{-- Aktifkan plugin DataTables dan plugin tambahannya (untuk Buttons) --}}
 @section('plugins.Datatables', true)
-@section('plugins.Select2', true) {{-- Aktifkan Select2 --}}
+@section('plugins.DatatablesPlugin', true)
+@section('plugins.Select2', true)
 
 @section('content_header')
     <h1>Manajemen Service</h1>
@@ -28,7 +30,7 @@
 
         {{-- Box Impor (Collapsed) --}}
         @can('manage-service')
-        <div class="card collapsed-card">
+        <div class="card collapsed-card card-outline card-secondary">
             <div class="card-header">
                 <h3 class="card-title">Import Data Service</h3>
                 <div class="card-tools">
@@ -60,7 +62,7 @@
         </div>
         @endcan
 
-        {{-- ++ Box Filter Dealer (Hanya untuk Superadmin/PIC) ++ --}}
+        {{-- Box Filter Dealer (Hanya untuk Superadmin/PIC) --}}
         @if($isSuperAdminOrPic && $dealers->isNotEmpty())
         <div class="card card-outline card-primary">
             <div class="card-header">
@@ -75,8 +77,7 @@
                 <form action="{{ route('admin.services.index') }}" method="GET" class="form-inline">
                     <div class="form-group mb-2 mr-sm-2">
                         <label for="dealer_code" class="mr-sm-2">Pilih Dealer:</label>
-                        {{-- Gunakan Select2 untuk dropdown --}}
-                        <select name="dealer_code" id="dealer_code" class="form-control select2" style="width: 250px;"> {{-- Beri style width --}}
+                        <select name="dealer_code" id="dealer_code" class="form-control select2" style="width: 250px;">
                             <option value="all" {{ !$selectedDealer || $selectedDealer == 'all' ? 'selected' : '' }}>-- Semua Dealer --</option>
                             @foreach ($dealers as $dealer)
                                 <option value="{{ $dealer->kode_dealer }}" {{ $selectedDealer == $dealer->kode_dealer ? 'selected' : '' }}>
@@ -88,7 +89,6 @@
                     <button type="submit" class="btn btn-primary mb-2">
                         <i class="fas fa-filter"></i> Terapkan Filter
                     </button>
-                    {{-- Tombol Reset hanya muncul jika filter aktif --}}
                     @if(request('dealer_code') && request('dealer_code') !== 'all')
                          <a href="{{ route('admin.services.index') }}" class="btn btn-secondary mb-2 ml-2">
                              <i class="fas fa-sync-alt"></i> Reset
@@ -100,9 +100,8 @@
         @endif
 
         {{-- Box Tabel Daftar Service --}}
-        <div class="card">
+        <div class="card card-outline card-info">
             <div class="card-header">
-                 {{-- Tampilkan dealer yang difilter di judul --}}
                 <h3 class="card-title">
                     Daftar Transaksi Service
                     @if($isSuperAdminOrPic && $selectedDealer && $selectedDealer !== 'all')
@@ -113,8 +112,8 @@
                 </h3>
             </div>
             <div class="card-body">
-                <div class="table-responsive"> {{-- Bungkus tabel agar responsif --}}
-                    <table id="services-table" class="table table-bordered table-striped table-hover">
+                <div class="table-responsive">
+                    <table id="services-table" class="table table-bordered table-striped table-hover" style="width:100%">
                         <thead>
                             <tr>
                                 <th style="width: 5%;">No.</th>
@@ -124,27 +123,33 @@
                                 <th>Pelanggan</th>
                                 <th>Plat No.</th>
                                 <th class="text-right">Total</th>
-                                <th class="text-center" style="width: 10%;">Cetak</th>
+                                <th class="text-center" style="width: 10%;">Status Cetak</th>
                                 <th class="text-center" style="width: 10%;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($services as $service)
-                                <tr>
-                                    <td>{{ ($services->currentPage() - 1) * $services->perPage() + $loop->iteration }}</td>
-                                    <td>{{ $service->invoice_no }}</td>
+                                <tr class="{{ $service->printed_at ? 'row-printed' : '' }}">
+                                    {{-- Gunakan $loop->iteration jika paginasi dikelola DataTables --}}
+                                    {{-- Jika paginasi Laravel, gunakan: --}}
+                                    {{-- <td>{{ ($services->currentPage() - 1) * $services->perPage() + $loop->iteration }}</td> --}}
+                                    <td>{{ $loop->iteration }}</td>
+                                    <td>
+                                        <strong>{{ $service->invoice_no }}</strong>
+                                    </td>
                                     <td><span class="badge badge-secondary">{{ $service->dealer_code }}</span></td>
-                                    <td>{{ \Carbon\Carbon::parse($service->reg_date)->isoFormat('DD MMM YYYY') }}</td> {{-- Format tanggal lebih pendek --}}
+                                    <td>{{ \Carbon\Carbon::parse($service->reg_date)->isoFormat('DD MMM YYYY') }}</td>
                                     <td>{{ $service->customer_name }}</td>
-                                    <td>{{ $service->plate_no }}</td>
-                                    <td class="text-right">@rupiah($service->total_amount)</td>
-                                    <td class="text-center">
+                                    <td><span class="badge badge-dark">{{ $service->plate_no }}</span></td>
+                                    <td class="text-right"><strong>@rupiah($service->total_amount)</strong></td>
+
+                                    <td class="text-center" data-order="{{ $service->printed_at ? 1 : 0 }}">
                                         @if($service->printed_at)
                                             <span class="badge badge-success" title="Pada: {{ $service->printed_at->format('d/m/Y H:i') }}">
                                                 <i class="fas fa-check"></i> Sudah Cetak
                                             </span>
                                         @else
-                                            <span class="badge badge-secondary">
+                                            <span class="badge badge-warning">
                                                 <i class="fas fa-times"></i> Belum
                                             </span>
                                         @endif
@@ -153,24 +158,23 @@
                                         <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-xs btn-info" title="Lihat Detail">
                                             <i class="fas fa-eye"></i>
                                         </a>
-                                         {{-- Tombol Edit sudah dihapus --}}
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    {{-- Sesuaikan colspan dengan jumlah kolom --}}
                                     <td colspan="9" class="text-center">Tidak ada data service ditemukan.</td>
                                 </tr>
                             @endforelse
                         </tbody>
                     </table>
-                </div> {{-- End table-responsive --}}
-
-                {{-- Link Paginasi Laravel --}}
-                <div class="mt-3 d-flex justify-content-center"> {{-- Pusatkan paginasi --}}
-                    {{-- ++ PERBAIKAN: Tentukan view pagination Bootstrap 4 ++ --}}
-                    {{ $services->appends(request()->query())->links('pagination::bootstrap-4') }}
                 </div>
+
+                {{-- Link Paginasi Laravel (SEKARANG DISembunyikan/DIHAPUS) --}}
+                {{--
+                    <div class="mt-3 d-flex justify-content-center">
+                        {{ $services->appends(request()->query())->links('pagination::bootstrap-4') }}
+                    </div>
+                --}}
             </div>
         </div>
     </div>
@@ -185,52 +189,116 @@
 
         // Inisialisasi Select2
         $('.select2').select2({
-             theme: 'bootstrap4'
+              theme: 'bootstrap4'
         });
 
-        // Inisialisasi DataTables (tanpa fitur bawaan, hanya untuk tampilan)
-        $('#services-table').DataTable({
+        // Inisialisasi DataTables
+        var table = $('#services-table').DataTable({
             "responsive": true,
-            "lengthChange": false, // Paging & length diatur Laravel
             "autoWidth": false,
-            "paging": false,       // Paging diatur Laravel
-            "info": false,         // Info diatur Laravel (atau bisa diaktifkan jika perlu)
-            "searching": true,     // Aktifkan search DataTables
-            "ordering": true,      // Aktifkan sorting DataTables
+
+            // == PERUBAHAN ==
+            // Aktifkan kembali Paginasi, Info, dan Length Change
+            "paging": true,
+            "lengthChange": true,
+            "info": true,
+            // =============
+
+            "searching": true,
+            "ordering": true,
+
             "language": {
                 "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json",
-                 "search": "_INPUT_",
-                 "searchPlaceholder": "Cari data...",
+                "search": "",
+                "searchPlaceholder": "Cari di halaman ini..."
             },
-            "columnDefs": [
-                { "orderable": false, "targets": [0, 8] }, // No & Aksi tidak bisa diurutkan
-                { "searchable": false, "targets": [0, 8] } // No & Aksi tidak bisa dicari
+
+            // == PERUBAHAN ==
+            // 'l' = lengthChange
+            // 'B' = Buttons
+            // 'f' = filtering/search
+            // 't' = table
+            // 'r' = processing
+            // 'i' = info
+            // 'p' = pagination
+            "dom": "<'row'<'col-sm-12 col-md-6'lB><'col-sm-12 col-md-6'f>>" +
+                   "<'row'<'col-sm-12'tr>>" +
+                   "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+            // =============
+
+            "buttons": [
+                { extend: 'copy', text: '<i class="fas fa-copy"></i> Salin', className: 'btn btn-sm btn-default' },
+                { extend: 'csv', text: '<i class="fas fa-file-csv"></i> CSV', className: 'btn btn-sm btn-default' },
+                { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel', className: 'btn btn-sm btn-default' },
+                { extend: 'pdf', text: '<i class="fas fa-file-pdf"></i> PDF', className: 'btn btn-sm btn-default' },
+                { extend: 'print', text: '<i class="fas fa-print"></i> Cetak', className: 'btn btn-sm btn-default' },
+                { extend: 'colvis', text: '<i class="fas fa-eye"></i> Kolom', className: 'btn btn-sm btn-default' }
             ],
-            // Hapus order default agar menggunakan 'latest' dari Controller
-             "order": []
-            // Atau jika ingin sort default berdasarkan kolom lain (misal Tanggal index 3 descending):
-            // "order": [[ 3, "desc" ]]
+
+            "columnDefs": [
+                { "orderable": false, "targets": [0, 8] },
+                { "searchable": false, "targets": [0, 7, 8] }
+            ],
+
+            "order": [[ 7, "asc" ]]
         });
     });
 </script>
 @endpush
 
 @push('css')
-{{-- Style tambahan jika perlu --}}
 <style>
-    /* Atur lebar search box DataTables */
-    .dataTables_filter {
-        width: 100%;
-        text-align: right; /* Pindahkan ke kanan */
+    /* Style untuk baris yang sudah dicetak */
+    .row-printed td {
+        background-color: #f8f9fa !important;
+        color: #6c757d;
     }
-    .dataTables_filter input {
-        width: 250px; /* Atur lebar input */
-        display: inline-block;
-        margin-left: 10px;
+    .row-printed .badge {
+        opacity: 0.7;
     }
+    .row-printed a.btn {
+        opacity: 0.7;
+    }
+
+    /* Samakan tinggi select2 */
     .select2-container .select2-selection--single {
-        height: calc(2.25rem + 2px); /* Samakan tinggi select2 dengan input lain */
+        height: calc(2.25rem + 2px);
+        padding-top: 0.375rem;
     }
+
+    /* Atur layout DataTables DOM (Buttons dan Search) */
+    .dataTables_wrapper .row:first-child {
+        margin-bottom: 0.5rem;
+        padding-top: 0.5rem;
+        background-color: #f4f6f9; /* Beri sedikit latar */
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 0.5rem;
+    }
+    .dataTables_wrapper .dt-buttons {
+        text-align: left;
+        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
+    }
+    .dataTables_wrapper .dataTables_filter {
+        text-align: right;
+        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
+    }
+    .dataTables_wrapper .dataTables_filter input {
+        width: 250px;
+        display: inline-block;
+        margin-left: 0.5rem;
+    }
+    /* Atur layout Paginasi dan Info di bawah */
+    .dataTables_wrapper .row:last-child {
+         padding-top: 1rem;
+         border-top: 1px solid #dee2e6;
+    }
+    .dataTables_wrapper .dataTables_info {
+        padding-top: 0.375rem; /* Agar sejajar tombol paginasi */
+    }
+    .dataTables_wrapper .dataTables_paginate {
+        text-align: right;
+    }
+
 </style>
 @endpush
 
