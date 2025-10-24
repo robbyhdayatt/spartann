@@ -17,15 +17,17 @@ $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->
     <div class="d-flex justify-content-between align-items-center">
         <h1>Faktur Service: {{ $service->invoice_no }}</h1>
         <div>
-            {{-- PERUBAHAN 1: Tombol Kembali --}}
             <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Kembali
             </a>
-            @can('manage-service')
+
+            {{-- ++ PERUBAHAN: Hapus/Komentari blok @can ... @endcan berikut ++ --}}
+            {{-- @can('manage-service')
                 <a href="{{ route('admin.services.edit', $service->id) }}" class="btn btn-warning">
                     <i class="fas fa-edit"></i> Edit / Tambah Part
                 </a>
-            @endcan
+            @endcan --}}
+
             <a href="{{ route('admin.services.pdf', ['id' => $service->id]) }}" class="btn btn-danger" target="_blank">
                 <i class="fas fa-file-pdf"></i> Export PDF
             </a>

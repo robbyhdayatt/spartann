@@ -9,22 +9,37 @@ use App\Imports\ServiceImport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Auth;
 use PDF;
-use App\Models\Part;
-use App\Models\InventoryBatch;
-use App\Models\StockMovement;
+// ++ Tambahkan Model Dealer & Lokasi (jika Dealer = Lokasi, cukup satu) ++
+use App\Models\Dealer;
+use App\Models\Lokasi; // Pastikan model Lokasi ada
 use Illuminate\Support\Facades\DB;
+
 
 class ServiceController extends Controller
 {
+    // ... (method index() dan import() tetap sama) ...
     public function index(Request $request)
     {
         $this->authorize('view-service');
 
         $user = Auth::user();
         $query = Service::query();
+        $dealers = collect();
+        $selectedDealer = null;
 
-        // Batasi data berdasarkan dealer user, kecuali untuk Superadmin
-        if ($user->jabatan && $user->jabatan->nama_jabatan !== 'Superadmin') {
+        // Asumsi 'SA' dan 'PIC' adalah singkatan di tabel Jabatan
+        $isSuperAdminOrPic = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
+
+        if ($isSuperAdminOrPic) {
+            // Ambil dari model Lokasi yang tipe nya DEALER
+            $dealers = Lokasi::where('tipe', 'DEALER')->orderBy('kode_gudang')->get(['kode_gudang', 'nama_gudang']);
+
+            $selectedDealer = $request->input('dealer_code');
+
+            if ($selectedDealer && $selectedDealer !== 'all') {
+                $query->where('dealer_code', $selectedDealer);
+            }
+        } else {
             if ($user->lokasi && $user->lokasi->kode_gudang) {
                 $query->where('dealer_code', $user->lokasi->kode_gudang);
             } else {
@@ -32,14 +47,20 @@ class ServiceController extends Controller
             }
         }
 
-        // Ambil data dengan paginasi
-        $services = $query->latest()->paginate(25);
+        $services = $query->latest()->paginate(25)->withQueryString();
 
-        return view('admin.services.index', compact('services'));
+        // Ganti nama variabel 'dealers' menjadi 'listDealer' agar tidak bentrok
+        return view('admin.services.index', [
+            'services' => $services,
+            'listDealer' => $dealers, // Menggunakan nama variabel baru
+            'selectedDealer' => $selectedDealer,
+            'isSuperAdminOrPic' => $isSuperAdminOrPic
+        ]);
     }
 
     public function import(Request $request)
     {
+        // ... (Fungsi impor tetap sama) ...
         $this->authorize('manage-service');
         $request->validate([
             'file' => 'required|mimes:xls,xlsx,csv'
@@ -62,7 +83,7 @@ class ServiceController extends Controller
             if ($importedCount > 0) {
                 $message = "Data service berhasil diimpor! {$importedCount} data baru ditambahkan.";
                 if ($skippedCount > 0) {
-                    $message .= " {$skippedCount} data duplikat dilewati.";
+                    $message .= " {$skippedCount} data duplikat/gagal dilewati (cek log).";
                 }
                 if ($skippedDealerCount > 0) {
                     $message .= " {$skippedDealerCount} data ditolak karena tidak sesuai dengan dealer Anda.";
@@ -75,135 +96,68 @@ class ServiceController extends Controller
                  $errorMessage .= " {$skippedDealerCount} baris data ditolak karena tidak sesuai dengan dealer Anda.";
             }
             if ($skippedCount > 0) {
-                $errorMessage .= " {$skippedCount} baris data merupakan duplikat.";
+                $errorMessage .= " {$skippedCount} baris data merupakan duplikat atau gagal (cek log).";
             }
             if ($importedCount == 0 && $skippedCount == 0 && $skippedDealerCount == 0) {
                 $errorMessage = 'Tidak ada data yang ditemukan di dalam file.';
             }
 
             return redirect()->back()->with('error', $errorMessage);
-
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Terjadi kesalahan saat mengimpor file: ' . $e->getMessage());
         }
     }
 
+
     public function show(Service $service)
     {
-        $this->authorize('view-service');
-        $service->load('details', 'lokasi');
-        return view('admin.services.show', compact('service'));
-    }
+        $user = Auth::user();
+        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC']);
 
-    public function edit(Service $service)
-    {
-        $this->authorize('manage-service');
-        $service->load('details.part', 'lokasi');
-        $userLokasiId = Auth::user()->gudang_id;
-        return view('admin.services.edit', compact('service', 'userLokasiId'));
-    }
-
-    public function update(Request $request, Service $service)
-    {
-        $this->authorize('manage-service');
-
-        $validated = $request->validate([
-            'items' => 'sometimes|array',
-            'items.*.part_id' => 'required|exists:parts,id',
-            'items.*.quantity' => 'required|integer|min:1',
-            'items.*.price' => 'required|numeric|min:0',
-        ]);
-
-        try {
-            DB::transaction(function () use ($validated, $service) {
-
-                $user = Auth::user();
-                if (!$user->gudang_id) {
-                    throw new \Exception("Gagal menyimpan: Akun Anda tidak terhubung dengan lokasi manapun.");
-                }
-                $lokasiId = $user->gudang_id;
-
-                if (isset($validated['items'])) {
-                    foreach ($validated['items'] as $item) {
-                        $part = Part::find($item['part_id']);
-                        $quantity = (int)$item['quantity'];
-
-                        $remainingQtyToReduce = $quantity;
-                        $batches = InventoryBatch::where('part_id', $part->id)
-                            ->where('gudang_id', $lokasiId)
-                            ->where('quantity', '>', 0)
-                            ->orderBy('created_at', 'asc')
-                            ->get();
-
-                        if ($batches->sum('quantity') < $remainingQtyToReduce) {
-                            $namaLokasi = $user->lokasi->nama_lokasi ?? 'gudang Anda';
-                            throw new \Exception("Stok untuk part '{$part->nama_part}' tidak mencukupi di {$namaLokasi}.");
-                        }
-
-                        foreach ($batches as $batch) {
-                            if ($remainingQtyToReduce <= 0) break;
-                            $qtyToTake = min($batch->quantity, $remainingQtyToReduce);
-                            $stokTotalSebelum = InventoryBatch::where('part_id', $part->id)->where('gudang_id', $lokasiId)->sum('quantity');
-
-                            $batch->decrement('quantity', $qtyToTake);
-                            $remainingQtyToReduce -= $qtyToTake;
-
-                            StockMovement::create([
-                                'part_id' => $part->id, 'gudang_id' => $lokasiId, 'rak_id' => $batch->rak_id,
-                                'jumlah' => -$qtyToTake, 'stok_sebelum' => $stokTotalSebelum, 'stok_sesudah' => $stokTotalSebelum - $qtyToTake,
-                                'referensi_type' => get_class($service), 'referensi_id' => $service->id,
-                                'keterangan' => 'Penambahan part pada Service #' . $service->invoice_no,
-                                'user_id' => Auth::id(),
-                            ]);
-                        }
-
-                        $service->details()->create([
-                            'item_category' => 'PART', 'item_code' => $part->kode_part, 'item_name' => $part->nama_part,
-                            'quantity' => $quantity, 'price' => $item['price'],
-                        ]);
-                    }
-                }
-
-                $service->refresh()->load('details');
-                $totalPartService = $service->details()->where('item_category', 'PART')->sum(DB::raw('quantity * price'));
-                $totalOilService = $service->details()->where('item_category', 'OLI')->sum(DB::raw('quantity * price'));
-
-                $service->total_part_service = $totalPartService;
-                $service->total_oil_service = $totalOilService;
-
-                $totalAmount = $service->total_labor + $totalPartService + $totalOilService + $service->total_retail_parts + $service->total_retail_oil;
-                $service->total_amount = $totalAmount;
-                $service->total_payment = $totalAmount - $service->benefit_amount;
-                $service->balance = $service->total_payment - ($service->e_payment_amount + $service->cash_amount + $service->debit_amount);
-
-                $service->save();
-            });
-
-        } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Gagal memperbarui service: ' . $e->getMessage())->withInput();
+        if (!$isSuperAdminOrPic) {
+            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_gudang) {
+                abort(403, 'Anda tidak diizinkan melihat detail service ini.');
+            }
         }
 
-        return redirect()->route('admin.services.show', $service)->with('success', 'Part baru berhasil ditambahkan ke data service.');
+        $this->authorize('view-service');
+        // Pastikan 'lokasi' dimuat di sini juga untuk tampilan 'show'
+        $service->load('details', 'lokasi');
+        return view('admin.services.show', compact('service'));
     }
 
     public function downloadPDF($id)
     {
         $this->authorize('view-service');
-        $service = Service::with('details')->findOrFail($id);
 
-        // ++ PERUBAHAN: Tandai faktur sebagai sudah dicetak/didownload ++
+        // ++ PERUBAHAN: Tambahkan 'lokasi' ke with() ++
+        $service = Service::with('details', 'lokasi')->findOrFail($id);
+
+        $user = Auth::user();
+        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC']);
+
+        if (!$isSuperAdminOrPic) {
+            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_gudang) {
+                abort(403, 'Anda tidak diizinkan mengunduh PDF service ini.');
+            }
+        }
+
         if (is_null($service->printed_at)) {
             $service->printed_at = now();
             $service->save();
         }
 
         $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
-        $widthInPoints = 24 * 28.3465;
-        $heightInPoints = 14 * 28.3465;
-        $customPaper = [0, 0, $heightInPoints, $widthInPoints];
+
+        $width_cm = 24;
+        $height_cm = 14;
+        $points_per_cm = 28.3465;
+        $widthInPoints = $width_cm * $points_per_cm;
+        $heightInPoints = $height_cm * $points_per_cm;
+        $customPaper = [0, 0, $widthInPoints, $heightInPoints];
 
         $pdf = PDF::loadView('admin.services.pdf', compact('service'))
-            ->setPaper($customPaper)
+            ->setPaper($customPaper) // Hapus 'landscape', biarkan ukuran custom
             ->setOptions([
                 'isHtml5ParserEnabled' => true,
                 'isRemoteEnabled' => true,
@@ -213,8 +167,12 @@ class ServiceController extends Controller
                 'margin-right'  => 0,
                 'margin-bottom' => 0,
                 'margin-left'   => 0,
+                'enable-smart-shrinking' => true,
+                'disable-smart-shrinking' => false,
+                'lowquality' => false
             ]);
 
         return $pdf->stream($fileName);
     }
 }
+
