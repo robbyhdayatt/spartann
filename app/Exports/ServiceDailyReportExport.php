@@ -3,280 +3,371 @@
 namespace App\Exports;
 
 use App\Models\Service;
-// Hapus ServiceDetail, kita tidak query dari situ lagi
 use App\Models\Lokasi;
-use Maatwebsite\Excel\Concerns\FromQuery;
-// HAPUS WithHeadings, kita akan buat manual
-use Maatwebsite\Excel\Concerns\WithMapping;
+use Maatwebsite\Excel\Concerns\FromQuery; // <-- Kembali ke FromQuery
+use Maatwebsite\Excel\Concerns\WithMapping; // <-- Kembali ke WithMapping
+use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Builder; // <-- Gunakan Builder lagi
 use Carbon\Carbon;
-use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use Maatwebsite\Excel\Concerns\WithColumnFormatting;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
-
-// Untuk perbaikan format Teks (KTP, Kode Item)
 use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
 use PhpOffice\PhpSpreadsheet\Cell\Cell;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat; // <-- Tambahkan ini
 
-// ++ PERHATIKAN: extends DefaultValueBinder ++
+// Hapus: use Illuminate\Support\Collection;
+// Hapus: use Maatwebsite\Excel\Concerns\FromCollection;
+
 class ServiceDailyReportExport extends DefaultValueBinder implements
-    FromQuery,
-    // WithHeadings, // <-- HAPUS INTERFACE INI
-    WithMapping,
+    FromQuery, // <-- Ubah kembali
+    WithMapping, // <-- Ubah kembali
+    WithHeadings,
     ShouldAutoSize,
-    WithStrictNullComparison,
     WithEvents,
     WithStyles,
-    WithColumnFormatting,
-    WithCustomValueBinder // Implementasikan ini
+    WithCustomValueBinder
+    // Hapus: FromCollection
 {
     protected $dealerCode;
     protected $filterDate;
     protected $dealers;
-    private $totalRows = 0;
-    // Hapus $invoiceTotals, kita akan SUM langsung di Excel
+    private $totalRows = 0; // Kembali ke nama variabel awal
+    private $headerRowCount = 2;
 
     public function __construct($dealerCode, $filterDate)
     {
         $this->dealerCode = $dealerCode;
         $this->filterDate = $filterDate;
         $this->dealers = Lokasi::where('tipe', 'DEALER')->pluck('nama_gudang', 'kode_gudang');
-        // Hapus $this->calculateInvoiceTotals();
     }
 
-    // ++ FUNGSI KRITIS: UNTUK FIX KTP & NO RANGKA ++
+    // Binder: paksa beberapa kolom ke string (KTP(L), Telepon(O), No Rangka(R), Parts No.(V))
     public function bindValue(Cell $cell, $value)
     {
-        // Kolom L (KTP), O (Telepon), R (No Rangka)
-        if (in_array($cell->getColumn(), ['L', 'O', 'R'])) {
+        // Sesuaikan Kolom: KTP(L), Telepon(O), No Rangka(R), Parts No.(V)
+        if (in_array($cell->getColumn(), ['L', 'O', 'R', 'V'])) { // <-- Parts No. kembali ke V
             $cell->setValueExplicit($value, DataType::TYPE_STRING);
             return true;
         }
+        // Format angka untuk kolom harga detail (Y) jika nilainya string multi-baris
+        if ($cell->getColumn() === 'Y' && is_string($value) && strpos($value, "\n") !== false) {
+             // Biarkan default binder menanganinya atau bisa coba atur format di sini jika perlu
+             // Tapi lebih aman atur style wrap text saja
+        }
+         // Format angka untuk kolom kuantitas detail (X)
+        if ($cell->getColumn() === 'X' && is_string($value) && strpos($value, "\n") !== false) {
+             // Tidak perlu format khusus, biarkan string
+        }
+        // Format angka untuk kolom labor cost detail (U)
+        if ($cell->getColumn() === 'U' && is_string($value) && strpos($value, "\n") !== false) {
+            // Biarkan default binder menanganinya atau atur format Rp
+        }
+
+        // Format angka Rupiah untuk kolom Amount Breakdown & Totals (AB - AN, Kecuali AL)
+        if (in_array($cell->getColumn(), ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AM', 'AN'])) {
+            // Hanya format jika nilainya numerik
+             if (is_numeric($value)) {
+                $cell->setValueExplicit($value, DataType::TYPE_NUMERIC);
+                $cell->getStyle()->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
+                return true;
+             }
+        }
+
+
         return parent::bindValue($cell, $value);
     }
 
-    /**
-    * @return Builder
-    */
+    // --- Tambahkan kembali method query() ---
     public function query(): Builder
     {
-        // ++ PERUBAHAN: Query utama sekarang ke tabel 'services' ++
         $query = Service::query()
-                 ->with(['lokasi']) // Eager load relasi lokasi
+                 ->with(['lokasi', 'details']) // Tetap load 'details'
                  ->orderBy('created_at', 'desc');
 
-        // Terapkan filter tanggal (pasti ada)
         if ($this->filterDate) {
-            $query->whereDate('created_at', $this->filterDate);
+            $query->whereDate('services.created_at', $this->filterDate);
         }
-        
-        // Terapkan filter dealer jika ada (bukan 'all')
+
         if ($this->dealerCode && $this->dealerCode !== 'all') {
             $query->where('dealer_code', $this->dealerCode);
         }
 
+        // Hitung total baris berdasarkan Service (bukan detail)
         $this->totalRows = (clone $query)->count();
-        return $query; // Mengembalikan Eloquent\Builder dari Service
+        return $query;
     }
+    // --- Akhir method query() ---
 
-/**
-    * @param Service $service
-    */
+
+    // --- HAPUS method collection() ---
+
+
+    // --- Tambahkan kembali method map() ---
+    /**
+     * @var Service $service
+     */
     public function map($service): array
     {
         $namaDealer = $this->dealers->get($service->dealer_code) ?? $service->dealer_code;
 
+        // Gabungkan data detail menjadi string multi-baris
+        $detailCols = [
+            'service_category_code' => [],
+            'service_package_name' => [],
+            'labor_cost_service' => [],
+            'item_code' => [],
+            'item_name' => [],
+            'quantity' => [],
+            'price' => [],
+        ];
+
+        foreach ($service->details as $detail) {
+            $detailCols['service_category_code'][] = $detail->service_category_code;
+            $detailCols['service_package_name'][] = $detail->service_package_name;
+            // Format angka sebelum digabung
+            $detailCols['labor_cost_service'][] = $this->formatRupiahExcel($detail->labor_cost_service);
+            $detailCols['item_code'][] = $detail->item_code;
+            $detailCols['item_name'][] = $detail->item_name;
+            $detailCols['quantity'][] = $detail->quantity; // Kuantitas tanpa format Rp
+            $detailCols['price'][] = $this->formatRupiahExcel($detail->price);
+        }
+
+        // Gunakan PHP_EOL atau "\n" sebagai pemisah baris dalam sel Excel
+        $separator = PHP_EOL; //"\n";
+
         return [
-            // A-J (Info Dasar)
-            $service->yss, $service->dealer_code, $namaDealer, $service->point,
+            // Kolom A-R (Data Service Utama Bagian 1)
+            $service->yss,
+            $service->dealer_code,
+            $namaDealer,
+            $service->point,
             $service->reg_date ? Carbon::parse($service->reg_date)->format('Y-m-d') : null,
-            $service->service_order, $service->plate_no, $service->work_order_no,
-            $service->work_order_status, $service->invoice_no,
-            
-            // K-O (Customer Info)
-            $service->customer_name, $service->customer_ktp, $service->customer_npwp_no,
-            $service->customer_npwp_name, $service->customer_phone,
-            
-            // P-R (M/C Info)
-            $service->mc_brand, $service->mc_model_name, $service->mc_frame_no,
-            
-            // S-W (Payment Info)
-            $service->payment_type, $service->transaction_code,
+            $service->service_order,
+            $service->plate_no,
+            $service->work_order_no,
+            $service->work_order_status,
+            $service->invoice_no,
+            $service->customer_name,
+            $service->customer_ktp,
+            $service->customer_npwp_no,
+            $service->customer_npwp_name,
+            $service->customer_phone,
+            $service->mc_brand,
+            $service->mc_model_name,
+            $service->mc_frame_no,
 
-            // ++ PERBAIKAN: KEMBALIKAN (float) CAST DI SINI ++
-            // Ini akan mengubah string "75000.00" menjadi angka 75000
-            
-            (float) $service->e_payment_amount, // Kolom U
-            (float) $service->cash_amount,      // Kolom V
-            (float) $service->debit_amount,     // Kolom W
-            
-            // X-AC (Amount Group - YANG ANDA MINTA)
-            (float) $service->total_down_payment,    // Kolom X
-            (float) $service->total_labor,           // Kolom Y
-            (float) $service->total_part_service,  // Kolom Z
-            (float) $service->total_oil_service,   // Kolom AA
-            (float) $service->total_retail_parts,  // Kolom AB
-            (float) $service->total_retail_oil,    // Kolom AC
-            
-            // AD-AG (Other Totals - YANG ANDA MINTA)
-            (float) $service->total_amount,        // Kolom AD
-            (float) $service->benefit_amount,    // Kolom AE
-            (float) $service->total_payment,       // Kolom AF
-            (float) $service->balance,             // Kolom AG
-            // ++ END PERBAIKAN ++
+            // Kolom S-Y (Kolom Detail Baru - Digabung)
+            implode($separator, $detailCols['service_category_code']),
+            implode($separator, $detailCols['service_package_name']),
+            implode($separator, $detailCols['labor_cost_service']),
+            implode($separator, $detailCols['item_code']),
+            implode($separator, $detailCols['item_name']),
+            implode($separator, $detailCols['quantity']),
+            implode($separator, $detailCols['price']),
 
-            // AH-AJ (Other Info)
-            $service->technician_name,
-            $service->printed_at ? Carbon::parse($service->printed_at)->format('Y-m-d H:i:s') : null,
-            $service->created_at ? Carbon::parse($service->created_at)->format('Y-m-d H:i:s') : null,
+            // Kolom Z-AQ (Data Service Utama Bagian 2)
+            $service->payment_type,
+            $service->transaction_code,
+            $service->e_payment_amount,     // AB
+            $service->cash_amount,          // AC
+            $service->debit_amount,         // AD
+            $service->total_down_payment,   // AE
+            $service->total_labor,          // AF
+            $service->total_part_service,   // AG
+            $service->total_oil_service,    // AH
+            $service->total_retail_parts,   // AI
+            $service->total_retail_oil,     // AJ
+            $service->total_amount,         // AK
+            $service->benefit_amount,       // AL
+            $service->total_payment,        // AM
+            $service->balance,              // AN
+            $service->technician_name,      // AO
+            $service->printed_at ? Carbon::parse($service->printed_at)->format('Y-m-d H:i:s') : null, // AP
+            $service->created_at ? Carbon::parse($service->created_at)->format('Y-m-d H:i:s') : null, // AQ
         ];
     }
-    /**
-     * @return array
+    // --- Akhir method map() ---
+
+     /**
+     * Helper function to format number as Rupiah for Excel display within concatenated strings.
+     * Note: This keeps it as a string, Excel won't treat it as a number for SUM.
      */
-    public function registerEvents(): array
+    private function formatRupiahExcel($number)
+    {
+        if (!is_numeric($number)) {
+            return $number; // Return original if not numeric
+        }
+        // Format sederhana tanpa tanda kurung negatif, karena ini string
+        return 'Rp ' . number_format($number, 0, ',', '.');
+    }
+
+
+    // headings() tetap sama
+    public function headings(): array
+    {
+        return [
+            // Kolom A-R (Data Service Utama Bagian 1)
+            'YSS', 'Kode Dealer', 'Nama Dealer', 'Point', 'Tanggal Service', 'Service Order',
+            'No Polisi', 'No Work Order', 'Status Work Order', 'No Invoice',
+            'Nama Pelanggan', 'KTP Pelanggan', 'NPWP No Pelanggan', 'NPWP Nama Pelanggan', 'Telepon Pelanggan',
+            'Brand Motor', 'Model Motor', 'No Rangka Motor',
+
+            // Kolom S-Y (Kolom Detail Baru)
+            'Service Category', 'Service Package', 'Labor cost Service', 'Parts No.', 'Parts Name', 'Parts Qty', 'Parts Price',
+
+            // Kolom Z-AQ (Data Service Utama Bagian 2)
+            'Tipe Pembayaran', 'Kode Transaksi', 'Jumlah E-Payment', 'Jumlah Cash', 'Jumlah Debit',
+            'Total DP', 'Total Labor', 'Total Part Service', 'Total Oil Service',
+            'Total Retail Parts', 'Total Retail Oil',
+            'Total Amount (Gross)', 'Benefit Amount', 'Total Payment (Net)', 'Balance',
+            'Nama Teknisi', 'Waktu Cetak', 'Tanggal Import',
+        ];
+    }
+
+
+    // registerEvents() perlu disesuaikan kembali
+public function registerEvents(): array
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
-                
-                // 1. Sisipkan 2 baris baru di atas untuk header kustom
-                // Data dari map() akan mulai di baris 3
-                $sheet->insertNewRowBefore(1, 2);
+
+                // Sisipkan 1 baris di atas untuk header grup
+                $sheet->insertNewRowBefore(1, 1);
                 $groupHeaderRow = 1;
-                $headerRow = 2; // Header sub-kolom ada di baris 2
-                
-                // 2. Tulis header sub-kolom (dari headings()) secara manual di baris 2
-                $headings = [
-                    'A' => 'YSS', 'B' => 'Kode Dealer', 'C' => 'Nama Dealer', 'D' => 'Point', 'E' => 'Tanggal Service', 'F' => 'Service Order',
-                    'G' => 'No Polisi', 'H' => 'No Work Order', 'I' => 'Status Work Order', 'J' => 'No Invoice', 
-                    'K' => 'Nama Pelanggan', 'L' => 'KTP Pelanggan', 'M' => 'NPWP No Pelanggan', 'N' => 'NPWP Nama Pelanggan', 'O' => 'Telepon Pelanggan',
-                    'P' => 'Brand Motor', 'Q' => 'Model Motor', 'R' => 'No Rangka Motor',
-                    // Kolom Detail Dihapus
-                    'S' => 'Tipe Pembayaran', 'T' => 'Kode Transaksi', 'U' => 'Jumlah E-Payment', 'V' => 'Jumlah Cash', 'W' => 'Jumlah Debit',
-                    'X' => 'Total DP', 'Y' => 'Total Labor', 'Z' => 'Total Part Service', 'AA' => 'Total Oil Service',
-                    'AB' => 'Total Retail Parts', 'AC' => 'Total Retail Oil', 
-                    'AD' => 'Total Amount (Gross)', 'AE' => 'Benefit Amount', 'AF' => 'Total Payment (Net)', 'AG' => 'Balance',
-                    'AH' => 'Nama Teknisi', 'AI' => 'Waktu Cetak', 'AJ' => 'Tanggal Import',
+                $headerRow = 2; // Judul kolom (dari WithHeadings) ada di baris 2
+
+                $headings = $this->headings();
+                $numHeadings = count($headings);
+                $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($numHeadings);
+
+                // Definisikan Header Grup (Pastikan range kolom sudah benar)
+                $groupHeaders = [
+                    // Kolom => ['range' => 'StartCol<Row1>:EndCol<Row1>', 'title' => 'Judul Grup']
+                    'K' => ['range' => "K{$groupHeaderRow}:O{$groupHeaderRow}", 'title' => 'Customer Information'], // K sampai O
+                    'P' => ['range' => "P{$groupHeaderRow}:R{$groupHeaderRow}", 'title' => 'M/C Information'],    // P sampai R
+                    'S' => ['range' => "S{$groupHeaderRow}:Y{$groupHeaderRow}", 'title' => 'Service Details'],   // S sampai Y
+                    'AE' => ['range' => "AE{$groupHeaderRow}:AJ{$groupHeaderRow}", 'title' => 'Amount Breakdown'], // AE sampai AJ
+                    'AK' => ['range' => "AK{$groupHeaderRow}:AN{$groupHeaderRow}", 'title' => 'Totals & Balance'] // AK sampai AN
                 ];
-                foreach ($headings as $column => $title) {
-                    $sheet->setCellValue("{$column}{$headerRow}", $title);
+
+                // --- Langkah 1: Terapkan Header Grup ---
+                $groupedColumns = []; // Catat kolom mana saja yang sudah masuk grup
+                foreach ($groupHeaders as $startCol => $group) {
+                    $sheet->mergeCells($group['range']);
+                    $sheet->setCellValue("{$startCol}{$groupHeaderRow}", $group['title']);
+                    // Catat semua indeks kolom dalam range grup ini
+                    list($rangeStart, $rangeEnd) = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::rangeBoundaries($group['range']);
+                    for ($colIdx = $rangeStart[0]; $colIdx <= $rangeEnd[0]; $colIdx++) {
+                         $groupedColumns[$colIdx] = true; // Gunakan indeks kolom sebagai key
+                    }
                 }
 
-                // 3. Tulis header grup di Baris 1
-                $sheet->mergeCells("K{$groupHeaderRow}:O{$groupHeaderRow}"); 
-                $sheet->setCellValue("K{$groupHeaderRow}", 'Customer Information');
-                
-                $sheet->mergeCells("P{$groupHeaderRow}:R{$groupHeaderRow}"); 
-                $sheet->setCellValue("P{$groupHeaderRow}", 'M/C Information');
-                
-                // ++ PERUBAHAN KOORDINAT: Kolom Amount sekarang di X-AC ++
-                $sheet->mergeCells("X{$groupHeaderRow}:AC{$groupHeaderRow}"); 
-                $sheet->setCellValue("X{$groupHeaderRow}", 'Amount');
-                
-                // 4. Gabungkan sel header yang tidak punya grup (di Baris 1 & 2)
-                $singleHeaders = [
-                    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', // Info dasar
-                    'S', 'T', 'U', 'V', 'W', // Info bayar
-                    'AD', 'AE', 'AF', 'AG', // Info total lain
-                    'AH', 'AI', 'AJ' // Info teknisi/waktu
-                ];
-                
-                foreach ($singleHeaders as $column) {
-                    // Ambil nilai dari baris 2
-                    $value = $sheet->getCell("{$column}{$headerRow}")->getValue();
-                    // Set nilai itu ke baris 1
-                    $sheet->setCellValue("{$column}{$groupHeaderRow}", $value);
-                    // Baru merge
-                    $sheet->mergeCells("{$column}{$groupHeaderRow}:{$column}{$headerRow}");
+                // --- Langkah 2: Merge Header Kolom Tunggal secara Vertikal ---
+                for ($colIndex = 1; $colIndex <= $numHeadings; $colIndex++) {
+                    // Jika indeks kolom ini TIDAK ADA dalam $groupedColumns
+                    if (!isset($groupedColumns[$colIndex])) {
+                        $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                         // Ambil nilai header dari baris 2 (yang dibuat oleh WithHeadings)
+                        $headerValue = $sheet->getCell("{$colLetter}{$headerRow}")->getValue();
+                        // Set nilai di baris 1
+                        $sheet->setCellValue("{$colLetter}{$groupHeaderRow}", $headerValue);
+                        // Merge sel A1:A2, B1:B2, dst.
+                        $sheet->mergeCells("{$colLetter}{$groupHeaderRow}:{$colLetter}{$headerRow}");
+                    }
                 }
 
-                // 5. Atur Style Header (Baris 1 & 2)
+                // --- Style Header ---
                 $headerStyle = [
                     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']], // Biru
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
-                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => 'FFFFFFFF']]]
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
                 ];
-                // ++ PERUBAHAN KOORDINAT: Range header sekarang A1:AJ2 ++
-                $sheet->getStyle("A{$groupHeaderRow}:AJ{$headerRow}")->applyFromArray($headerStyle);
-                
-                // 6. Logika Baris TOTAL
+                // Terapkan style ke kedua baris header
+                $sheet->getStyle("A{$groupHeaderRow}:{$lastColLetter}{$headerRow}")->applyFromArray($headerStyle);
+                // Atur tinggi baris header agar teks wrap terlihat (sesuaikan jika perlu)
+                $sheet->getRowDimension($groupHeaderRow)->setRowHeight(25);
+                $sheet->getRowDimension($headerRow)->setRowHeight(40);
+
+
+                // --- Hitung Total --- (Tidak ada perubahan di sini)
                 if ($this->totalRows > 0) {
-                    // Data sekarang mulai dari baris 3
-                    $firstDataRow = 3;
-                    $lastDataRow = $this->totalRows + $headerRow; 
+                    $firstDataRow = $this->headerRowCount + 1;
+                    $lastDataRow = $this->totalRows + $this->headerRowCount;
                     $totalRow = $lastDataRow + 1;
 
-                    $sheet->setCellValue("A{$totalRow}", 'GRAND TOTAL');
-                    // ++ PERUBAHAN KOORDINAT: Gabung sampai T (sebelum kolom hitungan) ++
-                    $sheet->mergeCells("A{$totalRow}:T{$totalRow}"); 
-                    
-                    // ++ PERUBAHAN: Gunakan SUM() Excel biasa, mulai dari kolom 'U' ++
-                    $columnsToSum = range('U', 'AG'); // U (E-Payment) sampai AG (Balance)
+                    $mergeUntilCol = 'AA'; // Kolom sebelum kolom pertama yg dijumlah (AB)
+                    $sheet->setCellValue("A{$totalRow}", 'TOTAL');
+                    $sheet->mergeCells("A{$totalRow}:{$mergeUntilCol}{$totalRow}");
+
+                    $columnsToSum = [
+                        'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AM', 'AN'
+                    ];
+
                     foreach ($columnsToSum as $column) {
                         $sheet->setCellValue("{$column}{$totalRow}", "=SUM({$column}{$firstDataRow}:{$column}{$lastDataRow})");
+                        $sheet->getStyle("{$column}{$totalRow}")
+                              ->getNumberFormat()
+                              ->setFormatCode("Rp #,##0_);(Rp #,##0)");
                     }
-                    // Kolom AH, AI, AJ (Teks) dikosongkan
 
-                    // Style Baris Total
                     $totalRowStyle = [
                         'font' => ['bold' => true],
-                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFE0B2']], // Oranye muda
-                        'borders' => ['top' => ['borderStyle' => Border::BORDER_THIN]],
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFE0B2']],
+                        'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
                     ];
-                    // ++ PERUBAHAN KOORDINAT: Style A sampai AJ ++
-                    $sheet->getStyle("A{$totalRow}:AJ{$totalRow}")->applyFromArray($totalRowStyle);
-                    
-                    // Format Angka Baris Total
-                    $numberFormat = '#.##0';
-                    $sheet->getStyle("U{$totalRow}:AG{$totalRow}")->getNumberFormat()->setFormatCode($numberFormat);
-                    $sheet->getStyle("A{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                    $sheet->getStyle("A{$totalRow}:{$lastColLetter}{$totalRow}")->applyFromArray($totalRowStyle);
+                    $sheet->getStyle("A{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
                 }
-                
-                // 7. Bekukan Header (Baris 1 & 2)
-                $sheet->freezePane('A3'); // Bekukan di sel A3 (di bawah header)
+
+                // Freeze Pane (Tetap sama)
+                $sheet->freezePane('A' . ($this->headerRowCount + 1));
             },
         ];
     }
 
-    /**
-     * @param Worksheet $sheet
-     */
+
+    // styles() perlu menambahkan wrap text untuk kolom detail
     public function styles(Worksheet $sheet)
     {
-        // Atur perataan untuk data (mulai dari baris 3)
-        return [
-            // Data dimulai dari baris 3
-            'A3:AJ' . ($this->totalRows + 2) => [
-                 'alignment' => ['vertical' => Alignment::VERTICAL_TOP],
-            ],
-            // Rata kiri (Teks) - Sampai Kolom T
-            'A:T' => [ 'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT] ],
-            // Rata kanan (Angka) - Mulai Kolom U
-            'U:AG' => [ 'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT] ],
-             // Rata kiri (Teks lagi)
-            'AH:AJ' => [ 'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT] ],
-        ];
-    }
+        // Terapkan alignment vertikal top ke semua baris data
+        $lastDataRow = $this->totalRows + $this->headerRowCount; // Gunakan totalRows dari query Service
+        $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($this->headings())); // AQ
 
-    /**
-     * @return array
-     */
-    public function columnFormats(): array
-    {
-        return [
-            'U:AG' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+        $stylesArray = [
+            "A" . ($this->headerRowCount + 1) . ":{$lastColLetter}{$lastDataRow}" => [
+                'alignment' => ['vertical' => Alignment::VERTICAL_TOP],
+            ],
+            // --- Tambahkan Wrap Text untuk kolom detail S sampai Y ---
+            "S" . ($this->headerRowCount + 1) . ":Y{$lastDataRow}" => [
+                 'alignment' => [
+                    'wrapText' => true,
+                    'vertical' => Alignment::VERTICAL_TOP // Pastikan vertical top juga diterapkan
+                 ],
+            ],
+            // --- Akhir penambahan Wrap Text ---
         ];
+
+        // Format angka untuk kolom Amount di baris data (sudah ditangani di bindValue, tapi bisa juga di sini)
+        /*
+        $amountCols = ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN'];
+        foreach($amountCols as $col) {
+            $stylesArray["{$col}" . ($this->headerRowCount + 1) . ":{$col}{$lastDataRow}"] = [
+                'numberFormat' => ['formatCode' => "Rp #,##0_);(Rp #,##0)"]
+            ];
+        }
+        */
+
+        return $stylesArray;
     }
 }

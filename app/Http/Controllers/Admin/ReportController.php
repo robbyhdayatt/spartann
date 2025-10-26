@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Part;
 use App\Models\StockMovement;
-use App\Models\Gudang;
+use App\Models\Lokasi;
 use App\Models\InventoryBatch; // <--- UBAH DARI Inventory
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\StockByWarehouseExport;
@@ -24,18 +24,18 @@ class ReportController extends Controller
 {
     public function stockCard(Request $request)
     {
-        // Ambil semua part dan gudang untuk pilihan dropdown
+        // Ambil semua part dan lokasi untuk pilihan dropdown
         $user = Auth::user();
-        $gudangs = Gudang::where('is_active', true)->orderBy('nama_gudang')->get();
+        $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         $movements = collect(); // Buat koleksi kosong secara default
 
         // Cek jika user adalah Kepala Gudang
         if ($user->jabatan->nama_jabatan === 'Kepala Gudang') {
-            // Jika ya, paksa pilihan gudang hanya gudangnya sendiri
-            $gudangs = Gudang::where('id', $user->gudang_id)->get();
+            // Jika ya, paksa pilihan lokasi hanya lokasinya sendiri
+            $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
         } else {
-            // Jika bukan, tampilkan semua gudang
-            $gudangs = Gudang::where('is_active', true)->orderBy('nama_gudang')->get();
+            // Jika bukan, tampilkan semua lokasi
+            $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
 
         // Ambil semua part untuk pilihan dropdown
@@ -75,24 +75,24 @@ class ReportController extends Controller
         $selectedGudang = null;
 
         if ($user->jabatan->nama_jabatan === 'Kepala Gudang') {
-            $gudangs = Gudang::where('id', $user->gudang_id)->get();
-            if (!$request->filled('gudang_id')) {
-                $request->merge(['gudang_id' => $user->gudang_id]);
+            $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
+            if (!$request->filled('lokasi_id')) {
+                $request->merge(['lokasi_id' => $user->lokasi_id]);
             }
         } else {
-            $gudangs = Gudang::where('is_active', true)->orderBy('nama_gudang')->get();
+            $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
 
-        if ($request->filled('gudang_id')) {
-            $selectedGudang = Gudang::find($request->gudang_id);
+        if ($request->filled('lokasi_id')) {
+            $selectedLokasi = Lokasi::find($request->lokasi_id);
 
             $inventoryItems = InventoryBatch::select(
                     'part_id',
                     'rak_id',
-                    'gudang_id',
+                    'lokasi_id',
                     DB::raw('SUM(quantity) as quantity')
                 )
-                ->where('gudang_id', $request->gudang_id)
+                ->where('lokasi_id', $request->lokasi_id)
                 ->where('quantity', '>', 0)
                 ->with([
                     'part:id,kode_part,nama_part,satuan,brand_id,category_id',
@@ -114,10 +114,10 @@ class ReportController extends Controller
             'gudang_id' => 'required|exists:gudangs,id'
         ]);
 
-        $gudang = Gudang::find($request->gudang_id);
-        $fileName = 'Laporan Stok - ' . $gudang->kode_gudang . ' - ' . now()->format('d-m-Y') . '.xlsx';
+        $lokasi = Lokasi::find($request->lokasi_id);
+        $fileName = 'Laporan Stok - ' . $lokasi->kode_lokasi . ' - ' . now()->format('d-m-Y') . '.xlsx';
 
-        return Excel::download(new StockByWarehouseExport($request->gudang_id), $fileName);
+        return Excel::download(new StockByWarehouseExport($request->lokasi_id), $fileName);
     }
 
     public function salesJournal(Request $request)

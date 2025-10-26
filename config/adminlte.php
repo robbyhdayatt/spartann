@@ -237,6 +237,12 @@ return [
                 ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index'],
                 ['text' => 'Part', 'icon' => 'fas fa-fw fa-cogs', 'route' => 'admin.parts.index'],
                 ['text' => 'Konsumen', 'icon' => 'fas fa-fw fa-user-friends', 'route' => 'admin.konsumens.index'],
+                [
+                    'text' => 'Master Convert',
+                    'url'  => 'admin/converts', // Sesuaikan dengan URI rute
+                    'icon' => 'fas fa-fw fa-exchange-alt', // Contoh ikon
+                    'can'  => 'manage-converts',
+                ],
             ],
         ],
         [

@@ -30,6 +30,7 @@ use App\Http\Controllers\Admin\CustomerDiscountCategoryController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\DealerController;
 use App\Http\Controllers\Admin\PdfController;
+use App\Http\Controllers\Admin\ConvertController;
 
 Route::get('/', fn() => redirect()->route('login'));
 
@@ -116,6 +117,12 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('reports/purchase-journal', [ReportController::class, 'purchaseJournal'])->name('reports.purchase-journal');
     Route::get('reports/inventory-value', [ReportController::class, 'inventoryValue'])->name('reports.inventory-value');
     Route::get('reports/rekomendasi-po', [ReportController::class, 'rekomendasiPo'])->name('reports.rekomendasi-po');
+
+    // === CONVERT ===
+    // Rute Resource standar untuk Convert
+    Route::resource('converts', ConvertController::class)->except(['show']); // Hapus 'show' jika tidak dipakai
+    // Rute tambahan untuk mengambil data edit via AJAX
+    Route::get('converts/{convert}/data', [ConvertController::class, 'getEditData'])->name('converts.editData'); // <-- Rute Baru
 
         // === API (untuk AJAX) ===
         Route::get('/api/purchase-orders/{purchaseOrder}/details', [ReceivingController::class, 'getPurchaseOrderDetails'])->name('api.po.details');

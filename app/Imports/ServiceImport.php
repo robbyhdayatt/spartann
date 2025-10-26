@@ -111,16 +111,13 @@ class ServiceImport implements OnEachRow, WithChunkReading
     private function createServiceDetail(Service $service, array $row, int $rowIndex)
     {
         $hasActivity = false;
-
-        // Indeks kolom
-        $serviceCategoryCode_idx = 18; // S
-        $servicePackageName_idx = 21; // V
-        $laborCost_idx = 22; // W
-        $partsNo_idx = 23; // X
-        $partsName_idx = 24; // Y
-        $partsQty_idx = 25; // Z
-        $partsPrice_idx = 26; // AA
-
+        $serviceCategoryCode_idx = 18; // S (Tetap)
+        $servicePackageName_idx = 21; // V (Tetap)
+        $laborCostService_idx = 22; //
+        $partsNo_idx = 23;    // X <<== BERGESER dari 23
+        $partsName_idx = 24;  // Y <<== BERGESER dari 24
+        $partsQty_idx = 25;   // Z <<== BERGESER dari 25
+        $partsPrice_idx = 26; // AA <<== BERGESER dari 26
         $serviceCategoryCode = $this->currentServiceCategoryCode;
         if (empty($serviceCategoryCode)) {
             $serviceCategoryCode = $row[$serviceCategoryCode_idx] ?? null;
@@ -130,13 +127,15 @@ class ServiceImport implements OnEachRow, WithChunkReading
         // Ambil data dari baris
         $servicePackageNameRaw = $row[$servicePackageName_idx] ?? null;
         $servicePackageNameNormalized = $this->normalizeString($servicePackageNameRaw);
-        $laborCost = $row[$laborCost_idx] ?? null;
+        $laborCostServiceValue = $row[$laborCostService_idx] ?? null; // Ambil dari kolom W
+        $cleanedLaborCostService = $this->cleanNumeric($laborCostServiceValue);
+        $laborCost = $laborCostServiceValue; // Gunakan nilai yang sama dari kolom W
+        $cleanedLaborCost = $cleanedLaborCostService; // Gunakan nilai bersih yang sama
         $partsNo = trim($row[$partsNo_idx] ?? null);
         $partsName = trim($row[$partsName_idx] ?? null);
         $partsQty = $row[$partsQty_idx] ?? null;
         $partsPrice = $row[$partsPrice_idx] ?? null;
 
-        // --- Logika untuk JASA atau hasil KONVERSI ---
         if (!empty($servicePackageNameNormalized)) {
             // 1. Cek KONVERSI
             if (isset($this->convertMapping[$servicePackageNameNormalized])) {
@@ -146,6 +145,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                         'item_category' => 'PART', // Hasil konversi selalu jadi PART
                         'service_category_code' => $serviceCategoryCode,
                         'service_package_name' => null, // Konversi tidak punya nama paket
+                        'labor_cost_service' => 0, // <<== TAMBAHKAN: Set default 0 untuk konversi
                         'item_code' => $convertData->part_code_input,
                         'item_name' => $convertData->part_name,
                         'quantity' => $convertData->quantity,
@@ -159,20 +159,21 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 }
             }
             // 2. Jika bukan konversi DAN ada biaya Jasa, anggap sebagai JASA biasa
-            elseif ($laborCost !== null) {
-                $cleanedLaborCost = $this->cleanNumeric($laborCost);
+            elseif ($laborCost !== null) { // Gunakan $laborCost (dari kolom W)
+                // $cleanedLaborCost = $this->cleanNumeric($laborCost); // Sudah dibersihkan di atas
                 try {
                     $service->details()->create([
                         'item_category' => 'JASA',
                         'service_category_code' => $serviceCategoryCode,
                         'service_package_name' => $servicePackageNameRaw, // Nama paket asli
-                        'item_code' => null, // ++ PERUBAHAN: Kosongkan item_code untuk JASA ++
-                        'item_name' => null, // ++ PERUBAHAN: Kosongkan item_name untuk JASA ++
+                        'labor_cost_service' => $cleanedLaborCostService, // Simpan nilai dari kolom W
+                        'item_code' => null, // Kosongkan item_code untuk JASA
+                        'item_name' => null, // Kosongkan item_name untuk JASA
                         'quantity' => 1,
-                        'price' => $cleanedLaborCost,
+                        'price' => $cleanedLaborCost, // 'price' tetap diisi dengan biaya Jasa
                     ]);
                     $hasActivity = true;
-                    Log::info("Baris {$rowIndex}: Menambahkan JASA '{$servicePackageNameRaw}' (item code/name dikosongkan).");
+                    Log::info("Baris {$rowIndex}: Menambahkan JASA '{$servicePackageNameRaw}' dengan Labor Cost Service: {$cleanedLaborCostService} (item code/name dikosongkan).");
                 } catch (\Exception $e) {
                     Log::error("Baris {$rowIndex}: Gagal membuat detail JASA untuk '{$servicePackageNameRaw}'. Error: " . $e->getMessage());
                     $this->skippedCount++;
@@ -183,7 +184,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
         }
 
         // --- Logika untuk PART atau OLI ---
-        // Pengecekan ini selalu berjalan terlepas dari apakah Jasa/Konversi ditemukan di atas
         if (!empty($partsNo) && !empty($partsName)) {
             $cleanedPartsQty = $this->cleanNumeric($partsQty);
             $cleanedPartsPrice = $this->cleanNumeric($partsPrice);
@@ -199,6 +199,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     'item_category' => $itemCategory,
                     'service_category_code' => $serviceCategoryCode,
                     'service_package_name' => null, // Part/Oli biasa tidak punya nama paket
+                    'labor_cost_service' => 0, // Part/Oli diasumsikan tidak punya labor cost service sendiri
                     'item_code' => $partsNo, // Gunakan Parts No dari Excel
                     'item_name' => $partsName, // Gunakan Parts Name dari Excel
                     'quantity' => $cleanedPartsQty,
@@ -212,14 +213,12 @@ class ServiceImport implements OnEachRow, WithChunkReading
             }
         }
 
-        // Log jika baris dilewati karena tidak ada aktivitas sama sekali
+        // Log jika baris dilewati
         if (!$hasActivity && $rowIndex > 2) {
             Log::info("Baris {$rowIndex} dilewati karena tidak ada data Jasa/Konversi atau Part/Oli yang valid untuk diproses.");
         }
     }
 
-
-    // ... (fungsi onRow dan fungsi lainnya tetap sama seperti di jawaban sebelumnya) ...
      public function onRow(Row $row)
      {
          $rowIndex = $row->getIndex();
