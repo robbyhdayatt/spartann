@@ -13,6 +13,8 @@ use PDF;
 use App\Models\Dealer;
 use App\Models\Lokasi; // Pastikan model Lokasi ada
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon; // Pastikan ini ada di atas
+use App\Exports\ServiceDailyReportExport; // Pastikan ini ada di atas
 
 
 class ServiceController extends Controller
@@ -26,14 +28,13 @@ class ServiceController extends Controller
         $query = Service::query();
         $dealers = collect();
         $selectedDealer = null;
+        $filterDate = $request->input('filter_date', null);
 
-        // Asumsi 'SA' dan 'PIC' adalah singkatan di tabel Jabatan
-        $isSuperAdminOrPic = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
+        // Ubah variabel ini
+        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
 
-        if ($isSuperAdminOrPic) {
-            // Ambil dari model Lokasi yang tipe nya DEALER
+        if ($canFilterByDealer) { // Gunakan variabel baru
             $dealers = Lokasi::where('tipe', 'DEALER')->orderBy('kode_gudang')->get(['kode_gudang', 'nama_gudang']);
-
             $selectedDealer = $request->input('dealer_code');
 
             if ($selectedDealer && $selectedDealer !== 'all') {
@@ -42,19 +43,31 @@ class ServiceController extends Controller
         } else {
             if ($user->lokasi && $user->lokasi->kode_gudang) {
                 $query->where('dealer_code', $user->lokasi->kode_gudang);
+                $selectedDealer = $user->lokasi->kode_gudang;
             } else {
                 $query->whereRaw('1 = 0');
             }
         }
 
-        $services = $query->latest()->paginate(1000)->withQueryString();
+        // ... (Logika filter tanggal tetap sama) ...
+        if ($filterDate) {
+            try {
+                $validDate = Carbon::createFromFormat('Y-m-d', $filterDate)->startOfDay();
+                $query->whereDate('created_at', $validDate);
+            } catch (\Exception $e) {
+                $filterDate = null;
+            }
+        }
 
-        // Ganti nama variabel 'dealers' menjadi 'listDealer' agar tidak bentrok
+        $services = $query->orderBy('created_at', 'desc')->paginate(1000)->withQueryString();
+
         return view('admin.services.index', [
             'services' => $services,
-            'listDealer' => $dealers, // Menggunakan nama variabel baru
+            'listDealer' => $dealers,
             'selectedDealer' => $selectedDealer,
-            'isSuperAdminOrPic' => $isSuperAdminOrPic
+            // 'isSuperAdminOrPic' => $isSuperAdminOrPic, // Ganti ini
+            'canFilterByDealer' => $canFilterByDealer, // Kirim variabel baru
+            'filterDate' => $filterDate
         ]);
     }
 
@@ -143,36 +156,86 @@ class ServiceController extends Controller
         }
 
         if (is_null($service->printed_at)) {
-            $service->printed_at = now();
-            $service->save();
+                $service->printed_at = now();
+                $service->save();
+            }
+
+            $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
+
+            $width_cm = 24;
+            $height_cm = 14;
+            $points_per_cm = 28.3465;
+            $widthInPoints = $width_cm * $points_per_cm;
+            $heightInPoints = $height_cm * $points_per_cm;
+            $customPaper = [0, 0, $widthInPoints, $heightInPoints];
+
+            $pdf = PDF::loadView('admin.services.pdf', compact('service'))
+                ->setPaper($customPaper)
+                ->setOptions([
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled' => true,
+                    'dpi' => 150,
+                    // ++ PERUBAHAN FONT ++
+                    'defaultFont' => 'DejaVu Sans Mono', // Ganti Courier ke DejaVu Sans Mono
+                    'margin-top'    => 0,
+                    'margin-right'  => 0,
+                    'margin-bottom' => 0,
+                    'margin-left'   => 0,
+                    'enable-smart-shrinking' => true,
+                    'disable-smart-shrinking' => false,
+                    'lowquality' => false
+                ]);
+
+            return $pdf->stream($fileName);
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $this->authorize('export-service-report');
+
+        $user = Auth::user();
+        $selectedDealer = $request->query('dealer_code');
+        $filterDate = $request->query('filter_date');
+
+        $isSuperAdminOrPic = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
+
+        // Validasi tanggal
+        if (!$filterDate) {
+            return redirect()->back()->with('error', 'Silakan pilih tanggal untuk export laporan harian.');
         }
 
-        $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
+        try {
+            $validDate = Carbon::createFromFormat('Y-m-d', $filterDate)->format('Y-m-d');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Format tanggal export tidak valid.');
+        }
 
-        $width_cm = 24;
-        $height_cm = 14;
-        $points_per_cm = 28.3465;
-        $widthInPoints = $width_cm * $points_per_cm;
-        $heightInPoints = $height_cm * $points_per_cm;
-        $customPaper = [0, 0, $widthInPoints, $heightInPoints];
+        $dealerCodeForExport = null;
+        $dealerName = 'Semua_Dealer';
 
-        $pdf = PDF::loadView('admin.services.pdf', compact('service'))
-            ->setPaper($customPaper) // Hapus 'landscape', biarkan ukuran custom
-            ->setOptions([
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled' => true,
-                'dpi' => 150,
-                'defaultFont' => 'Courier',
-                'margin-top'    => 0,
-                'margin-right'  => 0,
-                'margin-bottom' => 0,
-                'margin-left'   => 0,
-                'enable-smart-shrinking' => true,
-                'disable-smart-shrinking' => false,
-                'lowquality' => false
-            ]);
+        if ($isSuperAdminOrPic) {
+            if ($selectedDealer && $selectedDealer !== 'all') {
+                $dealerCodeForExport = $selectedDealer;
+                // Cari nama dealer untuk nama file
+                $dealerInfo = Lokasi::where('kode_gudang', $dealerCodeForExport)->first();
+                $dealerName = $dealerInfo ? str_replace(' ', '_', $dealerInfo->nama_gudang) : $dealerCodeForExport;
+            }
+        } else {
+            // Jika bukan SA/PIC, otomatis filter berdasarkan dealernya
+            if ($user->lokasi && $user->lokasi->kode_gudang) {
+                $dealerCodeForExport = $user->lokasi->kode_gudang;
+                $dealerName = str_replace(' ', '_', $user->lokasi->nama_gudang);
+            } else {
+                // Seharusnya tidak terjadi jika logic di index benar
+                return redirect()->back()->with('error', 'Akun Anda tidak terasosiasi dengan dealer.');
+            }
+        }
 
-        return $pdf->stream($fileName);
+
+        $fileName = "Laporan_Service_Harian_{$dealerName}_{$validDate}.xlsx";
+
+        // Kirim parameter filter ke class Export
+        return Excel::download(new ServiceDailyReportExport($dealerCodeForExport, $validDate), $fileName);
     }
 }
 

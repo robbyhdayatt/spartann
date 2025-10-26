@@ -102,9 +102,12 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     // === SERVICE ===
     Route::get('services', [ServiceController::class, 'index'])->name('services.index');
     Route::post('services/import', [ServiceController::class, 'import'])->name('services.import');
+    // Pindahkan Export Excel SEBELUM route dengan parameter
+    Route::get('services/export-excel', [App\Http\Controllers\Admin\ServiceController::class, 'exportExcel'])->name('services.export.excel');
+    // Route dengan parameter setelahnya
     Route::get('services/{service}', [ServiceController::class, 'show'])->name('services.show');
     Route::get('services/{id}/pdf', [ServiceController::class, 'downloadPDF'])->name('services.pdf');
-
+    
     // === LAPORAN ===
     Route::get('reports/stock-card', [ReportController::class, 'stockCard'])->name('reports.stock-card');
     Route::get('reports/stock-by-warehouse', [ReportController::class, 'stockByWarehouse'])->name('reports.stock-by-warehouse');

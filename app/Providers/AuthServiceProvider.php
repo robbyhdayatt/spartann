@@ -110,6 +110,11 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-service', function(User $user) {
             return $user->hasRole('CS');
         });
+        
+        Gate::define('export-service-report', function(User $user) {
+            // Izinkan SA, PIC, Manager, Kpl Cabang, dan Counter Sales
+            return $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS']);
+        });
 
         // ++ BARU: Gate Sederhana untuk Menu (tidak butuh model) ++
         Gate::define('view-stock-adjustments-menu', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KG', 'KC', 'AG', 'AD']));

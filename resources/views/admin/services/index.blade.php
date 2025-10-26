@@ -62,55 +62,82 @@
         </div>
         @endcan
 
-        {{-- Box Filter Dealer (Hanya untuk Superadmin/PIC) --}}
-        @if($isSuperAdminOrPic && $dealers->isNotEmpty())
-        <div class="card card-outline card-primary">
-            <div class="card-header">
-                <h3 class="card-title">Filter Data</h3>
-                 <div class="card-tools">
-                    <button type="button" class="btn btn-tool" data-card-widget="collapse">
-                        <i class="fas fa-minus"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <form action="{{ route('admin.services.index') }}" method="GET" class="form-inline">
-                    <div class="form-group mb-2 mr-sm-2">
-                        <label for="dealer_code" class="mr-sm-2">Pilih Dealer:</label>
-                        <select name="dealer_code" id="dealer_code" class="form-control select2" style="width: 250px;">
-                            <option value="all" {{ !$selectedDealer || $selectedDealer == 'all' ? 'selected' : '' }}>-- Semua Dealer --</option>
-                            @foreach ($dealers as $dealer)
-                                <option value="{{ $dealer->kode_dealer }}" {{ $selectedDealer == $dealer->kode_dealer ? 'selected' : '' }}>
-                                    {{ $dealer->kode_dealer }} - {{ $dealer->nama_dealer }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary mb-2">
-                        <i class="fas fa-filter"></i> Terapkan Filter
-                    </button>
-                    @if(request('dealer_code') && request('dealer_code') !== 'all')
-                         <a href="{{ route('admin.services.index') }}" class="btn btn-secondary mb-2 ml-2">
-                             <i class="fas fa-sync-alt"></i> Reset
-                         </a>
-                     @endif
-                </form>
+    {{-- Box Filter --}}
+    <div class="card card-outline card-primary">
+        <div class="card-header">
+            <h3 class="card-title">Filter Data</h3>
+            <div class="card-tools">
+                <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                    <i class="fas fa-minus"></i>
+                </button>
             </div>
         </div>
-        @endif
-
-        {{-- Box Tabel Daftar Service --}}
-        <div class="card card-outline card-info">
-            <div class="card-header">
-                <h3 class="card-title">
-                    Daftar Transaksi Service
-                    @if($isSuperAdminOrPic && $selectedDealer && $selectedDealer !== 'all')
-                        (Dealer: {{ $selectedDealer }} - {{ $dealers->firstWhere('kode_dealer', $selectedDealer)->nama_dealer ?? '' }})
-                    @elseif ($isSuperAdminOrPic && (!$selectedDealer || $selectedDealer == 'all'))
-                        (Semua Dealer)
+        <div class="card-body">
+            {{-- Form untuk Filter Tampilan --}}
+            <form action="{{ route('admin.services.index') }}" method="GET" id="filter-form">
+                <div class="row">              
+                    {{-- Filter Dealer (Hanya untuk Superadmin/PIC) --}}
+                    @if($canFilterByDealer && $listDealer->isNotEmpty())
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="dealer_code">Pilih Dealer:</label>
+                                <select name="dealer_code" id="dealer_code" class="form-control select2">
+                                    <option value="all" {{ !$selectedDealer || $selectedDealer == 'all' ? 'selected' : '' }}>-- Semua Dealer --</option>
+                                    @foreach ($listDealer as $dealer)
+                                        <option value="{{ $dealer->kode_gudang }}" {{ $selectedDealer == $dealer->kode_gudang ? 'selected' : '' }}>
+                                            {{ $dealer->kode_gudang }} - {{ $dealer->nama_gudang }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
                     @endif
-                </h3>
+                    {{-- Filter Tanggal Import (created_at) --}}
+                    <div class="col-md-{{ $canFilterByDealer ? '3' : '4' }}">
+                        <div class="form-group">
+                            <label for="filter_date">Tanggal Import:</label>
+                            <input type="date" name="filter_date" id="filter_date" class="form-control" value="{{ $filterDate ?? '' }}">
+                        </div>
+                    </div>
+
+                    {{-- Tombol Filter dan Reset --}}
+                    <div class="col-md-5 d-flex align-items-end mb-3">
+                        <button type="submit" class="btn btn-primary mr-2">
+                            <i class="fas fa-filter"></i> Terapkan Filter
+                        </button>
+                        @if(($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all') || $filterDate)
+                            <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
+                                <i class="fas fa-sync-alt"></i> Reset Filter
+                            </a>
+                        @endif
+                    </div>
+                </div>
+            </form>
+            {{-- Tombol Export Excel Harian --}}
+            @can('export-service-report')
+            <div class="mt-2">
+                <button type="button" class="btn btn-success" id="export-excel-btn">
+                    <i class="fas fa-file-excel"></i> Export Excel Laporan Harian (sesuai filter)
+                </button>
+                <small class="text-muted ml-2">Pilih Tanggal Import terlebih dahulu untuk mengaktifkan tombol ini.</small>
             </div>
+            @endcan
+        </div>
+    </div>
+    {{-- Box Tabel Daftar Service --}}
+    <div class="card card-outline card-info">
+        <div class="card-header">
+            <h3 class="card-title">
+                Daftar Transaksi Service
+                @if($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all')
+                    (Dealer: {{ $selectedDealer }} - {{ $listDealer->firstWhere('kode_gudang', $selectedDealer)->nama_gudang ?? '' }})
+                @elseif ($canFilterByDealer && (!$selectedDealer || $selectedDealer == 'all'))
+                    (Semua Dealer)
+                @elseif (!$canFilterByDealer && $selectedDealer)
+                    (Dealer: {{ Auth::user()->lokasi->nama_gudang ?? $selectedDealer }})
+                @endif
+            </h3>
+        </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table id="services-table" class="table table-bordered table-striped table-hover" style="width:100%">
@@ -130,9 +157,6 @@
                         <tbody>
                             @forelse ($services as $service)
                                 <tr class="{{ $service->printed_at ? 'row-printed' : '' }}">
-                                    {{-- Gunakan $loop->iteration jika paginasi dikelola DataTables --}}
-                                    {{-- Jika paginasi Laravel, gunakan: --}}
-                                    {{-- <td>{{ ($services->currentPage() - 1) * $services->perPage() + $loop->iteration }}</td> --}}
                                     <td>{{ $loop->iteration }}</td>
                                     <td>
                                         <strong>{{ $service->invoice_no }}</strong>
@@ -168,13 +192,6 @@
                         </tbody>
                     </table>
                 </div>
-
-                {{-- Link Paginasi Laravel (SEKARANG DISembunyikan/DIHAPUS) --}}
-                {{--
-                    <div class="mt-3 d-flex justify-content-center">
-                        {{ $services->appends(request()->query())->links('pagination::bootstrap-4') }}
-                    </div>
-                --}}
             </div>
         </div>
     </div>
@@ -184,121 +201,138 @@
 @push('js')
 <script>
     $(function () {
-        // Inisialisasi bs-custom-file-input
         bsCustomFileInput.init();
 
-        // Inisialisasi Select2
         $('.select2').select2({
               theme: 'bootstrap4'
         });
 
-        // Inisialisasi DataTables
         var table = $('#services-table').DataTable({
-            "responsive": true,
-            "autoWidth": false,
-
-            // == PERUBAHAN ==
-            // Aktifkan kembali Paginasi, Info, dan Length Change
-            "paging": true,
-            "lengthChange": true,
-            "info": true,
-            // =============
-
-            "searching": true,
-            "ordering": true,
-
+            // ... (Opsi DataTables Anda) ...
+             "responsive": true,
+            "autoWidth": false,
+            "paging": true,
+            "lengthChange": true,
+            "info": true,
+            "searching": true,
+            "ordering": true,
             "language": {
-                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json",
-                "search": "",
-                "searchPlaceholder": "Cari di halaman ini..."
-            },
-
-            // == PERUBAHAN ==
-            // 'l' = lengthChange
-            // 'B' = Buttons
-            // 'f' = filtering/search
-            // 't' = table
-            // 'r' = processing
-            // 'i' = info
-            // 'p' = pagination
+                 "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json",
+                 "search": "",
+                 "searchPlaceholder": "Cari di halaman ini..."
+             },
             "dom": "<'row'<'col-sm-12 col-md-6'lB><'col-sm-12 col-md-6'f>>" +
                    "<'row'<'col-sm-12'tr>>" +
                    "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
-            // =============
-
             "buttons": [
-                { extend: 'copy', text: '<i class="fas fa-copy"></i> Salin', className: 'btn btn-sm btn-default' },
-                { extend: 'csv', text: '<i class="fas fa-file-csv"></i> CSV', className: 'btn btn-sm btn-default' },
-                { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel', className: 'btn btn-sm btn-default' },
-                { extend: 'pdf', text: '<i class="fas fa-file-pdf"></i> PDF', className: 'btn btn-sm btn-default' },
-                { extend: 'print', text: '<i class="fas fa-print"></i> Cetak', className: 'btn btn-sm btn-default' },
-                { extend: 'colvis', text: '<i class="fas fa-eye"></i> Kolom', className: 'btn btn-sm btn-default' }
+                 { extend: 'copy', text: '<i class="fas fa-copy"></i> Salin', className: 'btn btn-sm btn-default' },
+                 { extend: 'csv', text: '<i class="fas fa-file-csv"></i> CSV', className: 'btn btn-sm btn-default' },
+                 { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel (Halaman)', className: 'btn btn-sm btn-default' }, // Tombol excel bawaan datatables
+                 { extend: 'pdf', text: '<i class="fas fa-file-pdf"></i> PDF', className: 'btn btn-sm btn-default' },
+                 { extend: 'print', text: '<i class="fas fa-print"></i> Cetak', className: 'btn btn-sm btn-default' },
+                 { extend: 'colvis', text: '<i class="fas fa-eye"></i> Kolom', className: 'btn btn-sm btn-default' }
             ],
-
-            "columnDefs": [
-                { "orderable": false, "targets": [0, 8] },
-                { "searchable": false, "targets": [0, 7, 8] }
-            ],
-
-            "order": [[ 7, "asc" ]]
+             "columnDefs": [
+                 { "orderable": false, "targets": [0, 8] },
+                 { "searchable": false, "targets": [0, 7, 8] }
+             ],
+            "order": [[ 7, "asc" ]] // Urutkan berdasarkan status cetak
         });
+
+        // ++ LOGIKA UNTUK TOMBOL EXPORT EXCEL HARIAN ++
+        function checkExportButtonState() {
+            var filterDateValue = $('#filter_date').val();
+            if (filterDateValue) {
+                $('#export-excel-btn').prop('disabled', false);
+            } else {
+                $('#export-excel-btn').prop('disabled', true);
+            }
+        }
+
+        // Cek saat halaman dimuat
+        checkExportButtonState();
+
+        // Cek saat tanggal diubah
+        $('#filter_date').on('change', function() {
+            checkExportButtonState();
+        });
+
+        // Handle klik tombol export
+        $('#export-excel-btn').on('click', function() {
+            var filterDateValue = $('#filter_date').val();
+            var dealerCodeValue = $('#dealer_code').val() || 'all'; // Ambil dealer code, default 'all'
+
+            if (!filterDateValue) {
+                alert('Silakan pilih Tanggal Import terlebih dahulu.');
+                return;
+            }
+
+            // Buat URL export dengan parameter filter
+            var exportUrl = "{{ route('admin.services.export.excel') }}";
+            exportUrl += "?filter_date=" + filterDateValue;
+            exportUrl += "&dealer_code=" + dealerCodeValue;
+
+            // Redirect ke URL export
+            window.location.href = exportUrl;
+        });
+        // ++ END LOGIKA EXPORT ++
+
     });
 </script>
 @endpush
 
 @push('css')
 <style>
-    /* Style untuk baris yang sudah dicetak */
-    .row-printed td {
-        background-color: #f8f9fa !important;
-        color: #6c757d;
-    }
-    .row-printed .badge {
-        opacity: 0.7;
-    }
-    .row-printed a.btn {
-        opacity: 0.7;
-    }
+/* ... (CSS Anda sebelumnya tetap sama) ... */
+ /* Style untuk baris yang sudah dicetak */
+    .row-printed td {
+        background-color: #f8f9fa !important;
+        color: #6c757d;
+    }
+    .row-printed .badge {
+        opacity: 0.7;
+    }
+    .row-printed a.btn {
+        opacity: 0.7;
+    }
 
-    /* Samakan tinggi select2 */
-    .select2-container .select2-selection--single {
-        height: calc(2.25rem + 2px);
-        padding-top: 0.375rem;
-    }
+    /* Samakan tinggi select2 */
+    .select2-container .select2-selection--single {
+        height: calc(2.25rem + 2px);
+        padding-top: 0.375rem;
+    }
 
-    /* Atur layout DataTables DOM (Buttons dan Search) */
-    .dataTables_wrapper .row:first-child {
-        margin-bottom: 0.5rem;
-        padding-top: 0.5rem;
-        background-color: #f4f6f9; /* Beri sedikit latar */
-        border-bottom: 1px solid #dee2e6;
-        padding-bottom: 0.5rem;
-    }
-    .dataTables_wrapper .dt-buttons {
-        text-align: left;
-        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
-    }
-    .dataTables_wrapper .dataTables_filter {
-        text-align: right;
-        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
-    }
-    .dataTables_wrapper .dataTables_filter input {
-        width: 250px;
-        display: inline-block;
-        margin-left: 0.5rem;
-    }
-    /* Atur layout Paginasi dan Info di bawah */
-    .dataTables_wrapper .row:last-child {
-         padding-top: 1rem;
-         border-top: 1px solid #dee2e6;
-    }
-    .dataTables_wrapper .dataTables_info {
-        padding-top: 0.375rem; /* Agar sejajar tombol paginasi */
-    }
-    .dataTables_wrapper .dataTables_paginate {
-        text-align: right;
-    }
-
+    /* Atur layout DataTables DOM (Buttons dan Search) */
+    .dataTables_wrapper .row:first-child {
+        margin-bottom: 0.5rem;
+        padding-top: 0.5rem;
+        background-color: #f4f6f9; /* Beri sedikit latar */
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 0.5rem;
+    }
+    .dataTables_wrapper .dt-buttons {
+        text-align: left;
+        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
+    }
+    .dataTables_wrapper .dataTables_filter {
+        text-align: right;
+        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
+    }
+    .dataTables_wrapper .dataTables_filter input {
+        width: 250px;
+        display: inline-block;
+        margin-left: 0.5rem;
+    }
+    /* Atur layout Paginasi dan Info di bawah */
+    .dataTables_wrapper .row:last-child {
+         padding-top: 1rem;
+         border-top: 1px solid #dee2e6;
+    }
+    .dataTables_wrapper .dataTables_info {
+        padding-top: 0.375rem; /* Agar sejajar tombol paginasi */
+    }
+    .dataTables_wrapper .dataTables_paginate {
+        text-align: right;
+    }
 </style>
 @endpush
-
