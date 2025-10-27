@@ -9,11 +9,11 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 
 class StockByWarehouseExport implements FromCollection, WithHeadings, WithMapping
 {
-    protected $gudang_id;
+    protected $lokasi_id;
 
-    public function __construct(int $gudang_id)
+    public function __construct(int $lokasi_id)
     {
-        $this->gudang_id = $gudang_id;
+        $this->lokasi_id = $lokasi_id;
     }
 
     /**
@@ -21,8 +21,8 @@ class StockByWarehouseExport implements FromCollection, WithHeadings, WithMappin
     */
     public function collection()
     {
-        return Inventory::where('gudang_id', $this->gudang_id)
-            ->with(['part', 'rak', 'gudang'])
+        return Inventory::where('lokasi_id', $this->lokasi_id)
+            ->with(['part', 'rak', 'lokasi'])
             ->where('quantity', '>', 0)
             ->get();
     }
@@ -33,7 +33,7 @@ class StockByWarehouseExport implements FromCollection, WithHeadings, WithMappin
     public function headings(): array
     {
         return [
-            'Gudang',
+            'lokasi',
             'Kode Part',
             'Nama Part',
             'Kode Rak',
@@ -49,7 +49,7 @@ class StockByWarehouseExport implements FromCollection, WithHeadings, WithMappin
     public function map($inventory): array
     {
         return [
-            $inventory->gudang->nama_gudang,
+            $inventory->lokasi->nama_lokasi,
             $inventory->part->kode_part,
             $inventory->part->nama_part,
             $inventory->rak->kode_rak,

@@ -14,14 +14,14 @@ use Illuminate\Support\Facades\DB;
 class MutationReceivingController extends Controller
 {
     /**
-     * Menampilkan daftar mutasi yang sedang dalam perjalanan ke gudang pengguna.
+     * Menampilkan daftar mutasi yang sedang dalam perjalanan ke lokasi pengguna.
      */
     public function index()
     {
         $user = Auth::user();
         $this->authorize('view-mutation-receiving');
 
-        $pendingMutations = StockMutation::where('gudang_tujuan_id', $user->gudang_id)
+        $pendingMutations = StockMutation::where('lokasi_tujuan_id', $user->lokasi_id)
             ->where('status', 'IN_TRANSIT')
             ->with(['part', 'lokasiAsal', 'createdBy'])
             ->latest('approved_at')
@@ -37,12 +37,12 @@ class MutationReceivingController extends Controller
     {
         $this->authorize('receive-mutation');
 
-        if ($mutation->gudang_tujuan_id !== Auth::user()->gudang_id) {
+        if ($mutation->lokasi_tujuan_id !== Auth::user()->lokasi_id) {
             abort(403, 'AKSI TIDAK DIIZINKAN.');
         }
 
         $mutation->load(['part', 'lokasiAsal', 'createdBy', 'approvedBy']);
-        $raks = Rak::where('gudang_id', $mutation->gudang_tujuan_id)
+        $raks = Rak::where('lokasi_id', $mutation->lokasi_tujuan_id)
                     ->where('is_active', true)
                     ->where('tipe_rak', 'PENYIMPANAN')
                     ->orderBy('kode_rak')
@@ -58,7 +58,7 @@ class MutationReceivingController extends Controller
     {
         $this->authorize('receive-mutation');
 
-        if ($mutation->gudang_tujuan_id !== Auth::user()->gudang_id) {
+        if ($mutation->lokasi_tujuan_id !== Auth::user()->lokasi_id) {
             abort(403, 'AKSI TIDAK DIIZINKAN.');
         }
 
@@ -74,13 +74,13 @@ class MutationReceivingController extends Controller
                 $newBatch = InventoryBatch::create([
                     'part_id' => $mutation->part_id,
                     'rak_id' => $validated['rak_tujuan_id'],
-                    'gudang_id' => $mutation->gudang_tujuan_id,
+                    'lokasi_id' => $mutation->lokasi_tujuan_id,
                     'quantity' => $jumlahMutasi,
                     'receiving_detail_id' => null, // Tidak berasal dari PO
                 ]);
 
-                // Hitung total stok sebelumnya di gudang tujuan untuk part ini (untuk laporan kartu stok)
-                $stokSebelumTotal = InventoryBatch::where('gudang_id', $mutation->gudang_tujuan_id)
+                // Hitung total stok sebelumnya di lokasi tujuan untuk part ini (untuk laporan kartu stok)
+                $stokSebelumTotal = InventoryBatch::where('lokasi_id', $mutation->lokasi_tujuan_id)
                     ->where('part_id', $mutation->part_id)
                     ->where('id', '!=', $newBatch->id) // Abaikan batch yang baru dibuat
                     ->sum('quantity');
@@ -90,14 +90,14 @@ class MutationReceivingController extends Controller
                 // Catat pergerakan stok masuk dengan format yang benar
                 StockMovement::create([
                     'part_id' => $mutation->part_id,
-                    'gudang_id' => $mutation->gudang_tujuan_id,
+                    'lokasi_id' => $mutation->lokasi_tujuan_id,
                     'rak_id' => $newBatch->rak_id,
                     'jumlah' => $jumlahMutasi,
-                    'stok_sebelum' => $stokSebelumTotal, // Stok total di gudang sebelum ditambah
-                    'stok_sesudah' => $stokSesudahTotal, // Stok total di gudang setelah ditambah
+                    'stok_sebelum' => $stokSebelumTotal, // Stok total di lokasi sebelum ditambah
+                    'stok_sesudah' => $stokSesudahTotal, // Stok total di lokasi setelah ditambah
                     'referensi_type' => get_class($mutation), // Menggunakan polymorphic relation
                     'referensi_id' => $mutation->id,           // Menggunakan polymorphic relation
-                    'keterangan' => 'Mutasi Masuk dari ' . $mutation->lokasiAsal->kode_gudang,
+                    'keterangan' => 'Mutasi Masuk dari ' . $mutation->lokasiAsal->kode_lokasi,
                     'user_id' => Auth::id(),
                 ]);
 

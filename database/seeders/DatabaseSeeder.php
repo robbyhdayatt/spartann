@@ -16,14 +16,14 @@ class DatabaseSeeder extends Seeder
         $this->call([
             // Urutan ini penting
             JabatanSeeder::class,
+            DealerSeeder::class,
             LokasiSeeder::class, // LokasiSeeder harus dijalankan sebelum UserSeeder
             RakSeeder::class,    // RakSeeder sekarang akan berjalan setelah lokasi dibuat
             BrandSeeder::class,
             CategorySeeder::class,
             SupplierSeeder::class,
             KonsumenSeeder::class,
-            UserSeeder::class, // Pastikan UserSeeder juga sudah disesuaikan jika perlu 
-            DealerSeeder::class, // Ini akan mengisi tabel ?dealers?
+            UserSeeder::class, // Pastikan UserSeeder juga sudah disesuaikan jika perlu
         ]);
     }
 }

@@ -30,7 +30,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
      public function __construct(string $userDealerCode)
      {
          $this->userDealerCode = $userDealerCode;
-         $this->lokasiMapping = Lokasi::pluck('id', 'kode_gudang')->toArray();
+         $this->lokasiMapping = Lokasi::pluck('id', 'kode_lokasi')->toArray();
 
          // Ambil data konversi dan petakan menggunakan FUNGSI NORMALISASI
          $this->convertMapping = DB::table('converts')
@@ -246,7 +246,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                       return;
                   }
                   if (!isset($this->lokasiMapping[$dealerCode])) {
-                      Log::warning("Baris {$rowIndex} dilewati: Kode gudang (Dealer code) '{$dealerCode}' tidak ditemukan di tabel Lokasi.");
+                      Log::warning("Baris {$rowIndex} dilewati: Kode lokasi (Dealer code) '{$dealerCode}' tidak ditemukan di tabel Lokasi.");
                       $this->skippedCount++;
                       $this->currentService = null;
                       return;

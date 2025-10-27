@@ -84,8 +84,8 @@
                                 <select name="dealer_code" id="dealer_code" class="form-control select2">
                                     <option value="all" {{ !$selectedDealer || $selectedDealer == 'all' ? 'selected' : '' }}>-- Semua Dealer --</option>
                                     @foreach ($listDealer as $dealer)
-                                        <option value="{{ $dealer->kode_gudang }}" {{ $selectedDealer == $dealer->kode_gudang ? 'selected' : '' }}>
-                                            {{ $dealer->kode_gudang }} - {{ $dealer->nama_gudang }}
+                                        <option value="{{ $dealer->kode_lokasi}}" {{ $selectedDealer == $dealer->kode_lokasi? 'selected' : '' }}>
+                                            {{ $dealer->kode_lokasi}} - {{ $dealer->nama_lokasi}}
                                         </option>
                                     @endforeach
                                 </select>
@@ -130,11 +130,11 @@
             <h3 class="card-title">
                 Daftar Transaksi Service
                 @if($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all')
-                    (Dealer: {{ $selectedDealer }} - {{ $listDealer->firstWhere('kode_gudang', $selectedDealer)->nama_gudang ?? '' }})
+                    (Dealer: {{ $selectedDealer }} - {{ $listDealer->firstWhere('kode_gudang', $selectedDealer)->nama_lokasi?? '' }})
                 @elseif ($canFilterByDealer && (!$selectedDealer || $selectedDealer == 'all'))
                     (Semua Dealer)
                 @elseif (!$canFilterByDealer && $selectedDealer)
-                    (Dealer: {{ Auth::user()->lokasi->nama_gudang ?? $selectedDealer }})
+                    (Dealer: {{ Auth::user()->lokasi->nama_lokasi?? $selectedDealer }})
                 @endif
             </h3>
         </div>

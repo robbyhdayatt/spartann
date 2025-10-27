@@ -42,7 +42,7 @@
                     </td>
                     <td>
                         {{ $po->createdBy->nama ?? 'N/A' }}<br>
-                        <small class="text-muted">{{ $po->lokasi->nama_gudang ?? '' }}</small> 
+                        <small class="text-muted">{{ $po->lokasi->nama_lokasi ?? '' }}</small>
                     </td>
                     <td class="text-center">
                         <a href="{{ route('admin.purchase-orders.show', $po) }}" class="btn btn-info btn-xs">

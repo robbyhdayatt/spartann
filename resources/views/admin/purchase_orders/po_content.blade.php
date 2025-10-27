@@ -30,8 +30,8 @@ use App\Helpers\NumberHelper;
         <tr>
             <td style="width: 60%;"><div class="header-main">PURCHASE ORDER</div></td>
             <td style="width: 40%;" class="text-right">
-                <div class="header-sub">SENTRAL YAMAHA LAMPUNG</div>
-                <div>JL. IKAN TENGGIRI NO. 24</div>
+                <div class="header-sub">GUDANG PUSAT (SENTRAL)</div>
+                <div>-</div>
             </td>
         </tr>
     </table>
@@ -109,7 +109,7 @@ use App\Helpers\NumberHelper;
             </td>
         </tr>
     </table>
-    
+
     {{-- Tiga Tanda Tangan --}}
     <table class="signature-box" style="width: 100%;">
         <tr>

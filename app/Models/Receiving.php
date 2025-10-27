@@ -24,7 +24,7 @@ class Receiving extends Model
 
     public function lokasi()
     {
-        return $this->belongsTo(Lokasi::class, 'gudang_id');
+        return $this->belongsTo(Lokasi::class, 'lokasi_id');
     }
 
     public function details()

@@ -59,35 +59,67 @@
 @stop
 
 @section('js')
-{{-- Kode Javascript tidak perlu diubah sama sekali --}}
 <script>
 $(document).ready(function() {
     function validateRow(row) {
         let qtyDiterima = parseInt(row.find('.qty-diterima').val()) || 0;
         let qtyLolos = parseInt(row.find('.qty-lolos').val()) || 0;
         let qtyGagal = parseInt(row.find('.qty-gagal').val()) || 0;
+
+        // Pastikan qty lolos/gagal tidak melebihi qty diterima secara individual
+        // (Meskipun sudah ada 'max' di HTML, ini double check)
+        if (qtyLolos > qtyDiterima) {
+            qtyLolos = qtyDiterima;
+            row.find('.qty-lolos').val(qtyLolos);
+        }
+        if (qtyGagal > qtyDiterima) {
+            qtyGagal = qtyDiterima;
+            row.find('.qty-gagal').val(qtyGagal);
+        }
+
         let totalInput = qtyLolos + qtyGagal;
         let sisa = qtyDiterima - totalInput;
         let sisaInput = row.find('.sisa');
         sisaInput.val(sisa);
-        if (sisa < 0) { sisaInput.addClass('is-invalid'); } 
-        else { sisaInput.removeClass('is-invalid'); }
-        validateAllRows();
+
+        // ++ PERBAIKAN: Beri class 'is-invalid' jika sisa TIDAK sama dengan 0 ++
+        if (sisa !== 0) {
+            sisaInput.addClass('is-invalid');
+            // Opsional: beri style juga ke input lolos/gagal jika totalnya salah
+            // row.find('.qty-lolos, .qty-gagal').addClass('is-invalid');
+        } else {
+            sisaInput.removeClass('is-invalid');
+            // row.find('.qty-lolos, .qty-gagal').removeClass('is-invalid');
+        }
+        validateAllRows(); // Panggil validasi global setiap ada perubahan
     }
+
     function validateAllRows() {
         let isFormValid = true;
         $('.qc-item-row').each(function() {
+            // Cek input lolos & gagal apakah valid (angka dan min 0)
+            let lolosInput = $(this).find('.qty-lolos');
+            let gagalInput = $(this).find('.qty-gagal');
+            let qtyLolos = parseInt(lolosInput.val()) || 0;
+            let qtyGagal = parseInt(gagalInput.val()) || 0;
+
+            // ++ PERBAIKAN: Tombol submit di-disable jika ada sisa TIDAK 0
+            //    atau jika input lolos/gagal < 0 (meskipun dicegah HTML min="0")
             let sisa = parseInt($(this).find('.sisa').val());
-            if (sisa < 0) {
+            if (sisa !== 0 || qtyLolos < 0 || qtyGagal < 0) {
                 isFormValid = false;
-                return false;
+                return false; // Hentikan loop .each jika ditemukan 1 baris invalid
             }
         });
         $('#submit-btn').prop('disabled', !isFormValid);
     }
-    $('#qc-items-table').on('input', '.qty-lolos, .qty-gagal', function() {
+
+    // Listener saat input qty lolos atau gagal berubah
+    $('#qc-items-table').on('input change', '.qty-lolos, .qty-gagal', function() {
         validateRow($(this).closest('tr'));
     });
+
+    // Validasi semua baris saat halaman dimuat
     $('.qc-item-row').each(function() {
         validateRow($(this));
     });

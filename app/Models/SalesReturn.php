@@ -15,7 +15,7 @@ class SalesReturn extends Model
     public function details() { return $this->hasMany(SalesReturnDetail::class); }
     public function penjualan() { return $this->belongsTo(Penjualan::class); }
     public function konsumen() { return $this->belongsTo(Konsumen::class); }
-    public function lokasi() { return $this->belongsTo(Lokasi::class, 'gudang_id'); }
+    public function lokasi() { return $this->belongsTo(Lokasi::class, 'lokasi_id'); }
     public function createdBy() { return $this->belongsTo(User::class, 'created_by'); }
 
     public static function generateReturnNumber()

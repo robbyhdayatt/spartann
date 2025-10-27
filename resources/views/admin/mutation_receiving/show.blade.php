@@ -20,10 +20,11 @@
                         <li class="list-group-item"><b>Nomor Mutasi:</b> {{ $mutation->nomor_mutasi }}</li>
                         <li class="list-group-item"><b>Part:</b> {{ $mutation->part->nama_part }} ({{$mutation->part->kode_part}})</li>
                         <li class="list-group-item"><b>Jumlah Dikirim:</b> <span class="badge badge-primary">{{ $mutation->jumlah }} {{ $mutation->part->satuan }}</span></li>
-                        <li class="list-group-item"><b>Dari Gudang:</b> {{ $mutation->lokasiAsal->nama_gudang }}</li>
+                        {{-- ++ PERBAIKAN DI SINI ++ --}}
+                        <li class="list-group-item"><b>Dari Lokasi:</b> {{ $mutation->lokasiAsal->nama_lokasi }} ({{ $mutation->lokasiAsal->kode_lokasi }})</li>
                         <li class="list-group-item"><b>Rak Asal:</b> <span class="text-muted">Diambil dari batch tertua (FIFO)</span></li>
-                        <li class="list-group-item"><b>Tanggal Kirim:</b> {{ $mutation->approved_at->format('d M Y, H:i') }}</li>
-                        <li class="list-group-item"><b>Keterangan:</b> {{ $mutation->keterangan ?? '-' }}</li>
+                        <li class="list-group-item"><b>Tanggal Kirim:</b> {{ $mutation->approved_at ? $mutation->approved_at->format('d M Y, H:i') : '-' }}</li> {{-- Tambah check null --}}
+                        <li class="list-group-item"><b>Keterangan Kirim:</b> {{ $mutation->keterangan ?? '-' }}</li>
                     </ul>
                 </div>
             </div>
@@ -48,17 +49,28 @@
 
                     <p>Silakan pilih rak tujuan untuk menyimpan barang ini.</p>
                       <div class="form-group">
-                          <label for="rak_tujuan_id">Pilih Rak Penyimpanan</label>
-                          <select name="rak_tujuan_id" id="rak_tujuan_id" class="form-control select2" required>
+                          <label for="rak_tujuan_id">Pilih Rak Penyimpanan <span class="text-danger">*</span></label>
+                          <select name="rak_tujuan_id" id="rak_tujuan_id" class="form-control select2 @error('rak_tujuan_id') is-invalid @enderror" required>
                               <option value="">-- Pilih Rak --</option>
-                              @foreach ($raks as $rak)
-                                  <option value="{{ $rak->id }}">{{ $rak->nama_rak }} ({{ $rak->kode_rak }})</option>
-                              @endforeach
+                              {{-- Pastikan $raks hanya berisi rak dari lokasi tujuan --}}
+                              @forelse ($raks as $rak)
+                                  <option value="{{ $rak->id }}" {{ old('rak_tujuan_id') == $rak->id ? 'selected' : '' }}>
+                                      {{ $rak->nama_rak }} ({{ $rak->kode_rak }})
+                                  </option>
+                              @empty
+                                 <option value="" disabled>Tidak ada rak penyimpanan aktif di lokasi ini</option>
+                              @endforelse
                           </select>
+                           @error('rak_tujuan_id')
+                               <span class="invalid-feedback" role="alert">
+                                   <strong>{{ $message }}</strong>
+                               </span>
+                           @enderror
                       </div>
                  </div>
                  <div class="card-footer">
-                      <button type="submit" class="btn btn-success">
+                      {{-- Tambahkan kondisi disabled jika tidak ada rak --}}
+                      <button type="submit" class="btn btn-success" {{ $raks->isEmpty() ? 'disabled' : '' }}>
                           <i class="fas fa-check-circle"></i> Konfirmasi Terima Barang
                       </button>
                       <a href="{{ route('admin.mutation-receiving.index') }}" class="btn btn-secondary">Batal</a>
@@ -73,7 +85,7 @@
 <script>
     $(document).ready(function() {
         // Inisialisasi Select2
-        $('.select2').select2();
+        $('.select2').select2({ theme: 'bootstrap4' }); // Tambahkan theme
     });
 </script>
 @stop

@@ -2,18 +2,18 @@
 namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\Rak;
-use App\Models\Gudang;
+use App\Models\Lokasi;
 
 class QuarantineRakSeeder extends Seeder
 {
     public function run()
     {
-        $gudangs = Gudang::all();
-        foreach ($gudangs as $gudang) {
+        $lokasi = Lokasi::all();
+        foreach ($lokasi as $Lokasi) {
             Rak::firstOrCreate(
-                ['kode_rak' => $gudang->kode_gudang . '-KRN-RT'],
+                ['kode_rak' => $Lokasi->kode_Lokasi . '-KRN-RT'],
                 [
-                    'gudang_id' => $gudang->id,
+                    'Lokasi_id' => $Lokasi->id,
                     'nama_rak' => 'Rak Karantina Retur',
                     'tipe_rak' => 'KARANTINA', // <-- TAMBAHKAN BARIS INI
                     'is_active' => true

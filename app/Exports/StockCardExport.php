@@ -11,14 +11,14 @@ use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 class StockCardExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize
 {
     protected $part_id;
-    protected $gudang_id;
+    protected $lokasi_id;
     protected $start_date;
     protected $end_date;
 
-    public function __construct($part_id, $gudang_id, $start_date, $end_date)
+    public function __construct($part_id, $lokasi_id, $start_date, $end_date)
     {
         $this->part_id = $part_id;
-        $this->gudang_id = $gudang_id;
+        $this->lokasi_id = $lokasi_id;
         $this->start_date = $start_date;
         $this->end_date = $end_date;
     }
@@ -29,12 +29,12 @@ class StockCardExport implements FromCollection, WithHeadings, WithMapping, Shou
     public function collection()
     {
         $query = StockMovement::where('part_id', $this->part_id)
-            ->with(['part', 'gudang', 'user'])
+            ->with(['part', 'lokasi', 'user'])
             ->whereDate('created_at', '>=', $this->start_date)
             ->whereDate('created_at', '<=', $this->end_date);
 
-        if ($this->gudang_id) {
-            $query->where('gudang_id', $this->gudang_id);
+        if ($this->lokasi_id) {
+            $query->where('lokasi_id', $this->lokasi_id);
         }
 
         return $query->oldest()->get();
@@ -45,7 +45,7 @@ class StockCardExport implements FromCollection, WithHeadings, WithMapping, Shou
         return [
             'Part',
             'Tanggal',
-            'Gudang',
+            'lokasi',
             'Tipe Gerakan',
             'Jumlah',
             'Stok Sebelum',
@@ -60,7 +60,7 @@ class StockCardExport implements FromCollection, WithHeadings, WithMapping, Shou
         return [
             $movement->part->nama_part . ' (' . $movement->part->kode_part . ')',
             $movement->created_at->format('d-m-Y H:i'),
-            $movement->gudang->nama_gudang ?? 'N/A',
+            $movement->lokasi->nama_lokasi ?? 'N/A',
             str_replace('_', ' ', $movement->tipe_gerakan),
             $movement->jumlah,
             $movement->stok_sebelum,

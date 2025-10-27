@@ -20,14 +20,14 @@ public function index()
     {
         // PERBAIKAN: Menggunakan gate yang sudah ada
         $this->authorize('view-sales');
-        
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $query = SalesReturn::with(['konsumen', 'penjualan', 'lokasi'])->latest();
 
         // Filter data berdasarkan lokasi user
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
-            $query->where('gudang_id', $user->gudang_id);
+            $query->where('lokasi_id', $user->lokasi_id);
         }
 
         $returns = $query->get();
@@ -38,7 +38,7 @@ public function index()
     {
         // PERBAIKAN: Menggunakan gate yang sudah ada
         $this->authorize('create-sale');
-        
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $query = Penjualan::whereHas('details', function ($q) {
@@ -47,9 +47,9 @@ public function index()
 
         // Filter faktur penjualan berdasarkan lokasi user
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
-            $query->where('gudang_id', $user->gudang_id);
+            $query->where('lokasi_id', $user->lokasi_id);
         }
-        
+
         $penjualans = $query->latest()->get();
         return view('admin.sales_returns.create', compact('penjualans'));
     }
@@ -68,17 +68,17 @@ public function index()
 
         try {
             DB::transaction(function () use ($request, $penjualan) {
-                // Cari atau buat rak karantina di gudang yang sama
+                // Cari atau buat rak karantina di lokasi yang sama
                 $rakKarantina = Rak::firstOrCreate(
-                    ['gudang_id' => $penjualan->gudang_id, 'tipe_rak' => 'KARANTINA'],
-                    ['nama_rak' => 'RAK KARANTINA RETUR', 'kode_rak' => $penjualan->gudang->kode_gudang . '-KRN-RT']
+                    ['lokasi_id' => $penjualan->lokasi_id, 'tipe_rak' => 'KARANTINA'],
+                    ['nama_rak' => 'RAK KARANTINA RETUR', 'kode_rak' => $penjualan->lokasi->kode_lokasi . '-KRN-RT']
                 );
 
                 $salesReturn = SalesReturn::create([
                     'nomor_retur_jual' => SalesReturn::generateReturnNumber(),
                     'penjualan_id' => $penjualan->id,
                     'konsumen_id' => $penjualan->konsumen_id,
-                    'gudang_id' => $penjualan->gudang_id,
+                    'lokasi_id' => $penjualan->lokasi_id,
                     'tanggal_retur' => $request->tanggal_retur,
                     'catatan' => $request->catatan,
                     'created_by' => auth()->id(),
@@ -112,7 +112,7 @@ public function index()
                     $newBatch = InventoryBatch::create([
                         'part_id' => $penjualanDetail->part_id,
                         'rak_id' => $rakKarantina->id,
-                        'gudang_id' => $penjualan->gudang_id,
+                        'lokasi_id' => $penjualan->lokasi_id,
                         'quantity' => $qtyRetur,
                         'receiving_detail_id' => null, // Tidak berasal dari PO
                     ]);
@@ -120,7 +120,7 @@ public function index()
                     // LOGIKA BARU: Catat pergerakan stok dengan format yang benar
                     StockMovement::create([
                         'part_id' => $penjualanDetail->part_id,
-                        'gudang_id' => $penjualan->gudang_id,
+                        'lokasi_id' => $penjualan->lokasi_id,
                         'rak_id' => $rakKarantina->id,
                         'jumlah' => $qtyRetur,
                         'stok_sebelum' => 0, // Stok di batch baru ini selalu mulai dari 0

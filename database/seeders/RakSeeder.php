@@ -28,30 +28,30 @@ class RakSeeder extends Seeder
             if ($lokasi->tipe === 'PUSAT') {
                 // Buat rak standar untuk Gudang Pusat
                 Rak::firstOrCreate(
-                    ['gudang_id' => $lokasi->id, 'kode_rak' => 'A-01-01'],
+                    ['lokasi_id' => $lokasi->id, 'kode_rak' => 'A-01-01'],
                     ['nama_rak' => 'Rak Penyimpanan A-01-01', 'tipe_rak' => 'PENYIMPANAN']
                 );
                 Rak::firstOrCreate(
-                    ['gudang_id' => $lokasi->id, 'kode_rak' => 'A-01-02'],
+                    ['lokasi_id' => $lokasi->id, 'kode_rak' => 'A-01-02'],
                     ['nama_rak' => 'Rak Penyimpanan A-01-02', 'tipe_rak' => 'PENYIMPANAN']
                 );
                 Rak::firstOrCreate(
-                    ['gudang_id' => $lokasi->id, 'kode_rak' => 'KRN-QC'],
+                    ['lokasi_id' => $lokasi->id, 'kode_rak' => 'KRN-QC'],
                     ['nama_rak' => 'Rak Karantina QC', 'tipe_rak' => 'KARANTINA']
                 );
                 Rak::firstOrCreate(
-                    ['gudang_id' => $lokasi->id, 'kode_rak' => 'KRN-RT'],
+                    ['lokasi_id' => $lokasi->id, 'kode_rak' => 'KRN-RT'],
                     ['nama_rak' => 'Rak Karantina Retur', 'tipe_rak' => 'KARANTINA']
                 );
             }
             elseif ($lokasi->tipe === 'DEALER') {
                 // Buat rak standar untuk setiap Dealer
                 Rak::firstOrCreate(
-                    ['gudang_id' => $lokasi->id, 'kode_rak' => $lokasi->kode_gudang . '-01'],
+                    ['lokasi_id' => $lokasi->id, 'kode_rak' => $lokasi->kode_gudang . '-01'],
                     ['nama_rak' => 'Rak Penyimpanan Utama', 'tipe_rak' => 'PENYIMPANAN']
                 );
                 Rak::firstOrCreate(
-                    ['gudang_id' => $lokasi->id, 'kode_rak' => $lokasi->kode_gudang . '-KRN'],
+                    ['lokasi_id' => $lokasi->id, 'kode_rak' => $lokasi->kode_gudang . '-KRN'],
                     ['nama_rak' => 'Rak Karantina Dealer', 'tipe_rak' => 'KARANTINA']
                 );
             }

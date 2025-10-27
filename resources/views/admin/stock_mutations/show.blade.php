@@ -30,7 +30,7 @@
             <div class="col-md-6">
                 <h4>Detail Lokasi</h4>
                 <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><b>Lokasi Asal:</b> {{ $stockMutation->lokasiAsal->nama_gudang }}</li>
+                    <li class="list-group-item"><b>Lokasi Asal:</b> {{ $stockMutation->lokasiAsal->nama_lokasi }}</li>
                     <li class="list-group-item"><b>Rak Asal:</b>
                         @if ($stockMutation->rakAsal)
                             {{ $stockMutation->rakAsal->nama_rak }} ({{ $stockMutation->rakAsal->kode_rak }})
@@ -38,7 +38,7 @@
                             <span class="text-muted">Ditentukan saat approval (FIFO)</span>
                         @endif
                     </li>
-                    <li class="list-group-item"><b>Lokasi Tujuan:</b> {{ $stockMutation->lokasiTujuan->nama_gudang }}</li>
+                    <li class="list-group-item"><b>Lokasi Tujuan:</b> {{ $stockMutation->lokasiTujuan->nama_lokasi }}</li>
                     <li class="list-group-item"><b>Rak Tujuan:</b>
                         @if($stockMutation->rakTujuan)
                             {{ $stockMutation->rakTujuan->nama_rak }} ({{ $stockMutation->rakTujuan->kode_rak }})

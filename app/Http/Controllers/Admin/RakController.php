@@ -17,9 +17,9 @@ class RakController extends Controller
 
         // PERUBAHAN: Mengambil data rak dengan relasi 'lokasi'
         $raks = Rak::with('lokasi')->latest()->get();
-        
+
         // PERUBAHAN: Mengambil data lokasi untuk dropdown form
-        $lokasi = Lokasi::where('is_active', true)->orderBy('nama_gudang')->get();
+        $lokasi = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
 
         return view('admin.raks.index', compact('raks', 'lokasi'));
     }
@@ -28,12 +28,12 @@ class RakController extends Controller
     {
         $this->authorize('manage-locations');
         $validated = $request->validate([
-            'gudang_id' => 'required|exists:lokasi,id', // PERUBAHAN: validasi ke tabel lokasi
+            'lokasi_id' => 'required|exists:lokasi,id', // PERUBAHAN: validasi ke tabel lokasi
             'nama_rak' => 'required|string|max:100',
             'tipe_rak' => 'required|in:PENYIMPANAN,KARANTINA',
             'kode_rak' => [
                 'required', 'string', 'max:20',
-                Rule::unique('raks')->where(fn ($query) => $query->where('gudang_id', $request->gudang_id)),
+                Rule::unique('raks')->where(fn ($query) => $query->where('lokasi_id', $request->lokasi_id)),
             ],
         ]);
 
@@ -46,12 +46,12 @@ class RakController extends Controller
     {
         $this->authorize('manage-locations');
         $validated = $request->validate([
-            'gudang_id' => 'required|exists:lokasi,id', // PERUBAHAN: validasi ke tabel lokasi
+            'lokasi_id' => 'required|exists:lokasi,id', // PERUBAHAN: validasi ke tabel lokasi
             'nama_rak' => 'required|string|max:100',
             'tipe_rak' => 'required|in:PENYIMPANAN,KARANTINA',
             'kode_rak' => [
                 'required', 'string', 'max:20',
-                Rule::unique('raks')->where(fn ($query) => $query->where('gudang_id', $request->gudang_id))->ignore($rak->id),
+                Rule::unique('raks')->where(fn ($query) => $query->where('lokasi_id', $request->lokasi_id))->ignore($rak->id),
             ],
             'is_active' => 'required|boolean',
         ]);

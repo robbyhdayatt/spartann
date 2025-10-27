@@ -23,8 +23,8 @@ class LokasiSeeder extends Seeder
         // 1. Buat Gudang Pusat
         Lokasi::create([
             'tipe' => 'PUSAT',
-            'kode_gudang' => 'GSP',
-            'nama_gudang' => 'Gudang Pusat (Sentral)',
+            'kode_lokasi' => 'GSP',
+            'nama_lokasi' => 'Gudang Pusat (Sentral)',
             'alamat' => 'Jl. Ikan Tenggiri No. 24, Bandar Lampung',
             'is_active' => 1,
         ]);
@@ -79,14 +79,14 @@ class LokasiSeeder extends Seeder
             ['kode_lks' => 'UIUB002', 'subyek' => 'LTI KALIREJO', 'grup' => 'LT', 'nonaktif' => 0],
             ['kode_lks' => 'UKUA001', 'subyek' => 'LTI BLAMBANGAN UMPU', 'grup' => 'LT', 'nonaktif' => 0],
         ];
-        
+
         // 3. Masukkan setiap dealer sebagai Lokasi Tipe DEALER
         foreach ($dealers as $dealer) {
             if (strtoupper($dealer['grup']) === 'LT') {
                 Lokasi::create([
                     'tipe' => 'DEALER',
-                    'kode_gudang' => $dealer['kode_lks'],
-                    'nama_gudang' => $dealer['subyek'],
+                    'kode_lokasi' => $dealer['kode_lks'],
+                    'nama_lokasi' => $dealer['subyek'],
                     'is_active' => $dealer['nonaktif'] == 0,
                 ]);
             }

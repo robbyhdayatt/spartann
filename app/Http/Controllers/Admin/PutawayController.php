@@ -26,7 +26,7 @@ class PutawayController extends Controller
                             ->with(['purchaseOrder.supplier', 'lokasi']); // DIUBAH
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
-            $query->where('gudang_id', $user->gudang_id);
+            $query->where('lokasi_id', $user->lokasi_id);
         }
 
         $receivings = $query->latest('qc_at')->paginate(15);
@@ -40,16 +40,16 @@ class PutawayController extends Controller
         if ($receiving->status !== 'PENDING_PUTAWAY') {
             return redirect()->route('admin.putaway.index')->with('error', 'Penerimaan ini tidak siap untuk proses Putaway.');
         }
-        
+
         // Otorisasi tambahan untuk memastikan user berada di lokasi yang benar
-        if (Auth::user()->gudang_id != $receiving->gudang_id && !Auth::user()->hasRole(['SA', 'PIC'])) {
+        if (Auth::user()->lokasi_id != $receiving->lokasi_id && !Auth::user()->hasRole(['SA', 'PIC'])) {
             return redirect()->route('admin.putaway.index')->with('error', 'Anda tidak berwenang memproses putaway untuk lokasi ini.');
         }
 
         $receiving->load('details.part');
 
-        // Mengambil rak berdasarkan gudang_id dari dokumen penerimaan
-        $raks = Rak::where('gudang_id', $receiving->gudang_id)
+        // Mengambil rak berdasarkan lokasi_id dari dokumen penerimaan
+        $raks = Rak::where('lokasi_id', $receiving->lokasi_id)
                     ->where('is_active', true)
                     ->where('tipe_rak', 'PENYIMPANAN')
                     ->orderBy('kode_rak')
@@ -81,7 +81,7 @@ class PutawayController extends Controller
                 InventoryBatch::create([
                     'part_id'             => $detail->part_id,
                     'rak_id'              => $data['rak_id'],
-                    'gudang_id'           => $receiving->gudang_id,
+                    'lokasi_id'           => $receiving->lokasi_id,
                     'receiving_detail_id' => $detail->id,
                     'quantity'            => $jumlahMasuk,
                 ]);
@@ -107,7 +107,7 @@ class PutawayController extends Controller
                 // Catat di Stock Movement
                 $receiving->stockMovements()->create([
                     'part_id'      => $detail->part_id,
-                    'gudang_id'    => $receiving->gudang_id,
+                    'lokasi_id'    => $receiving->lokasi_id,
                     'rak_id'       => $data['rak_id'],
                     'jumlah'       => $jumlahMasuk,
                     'stok_sebelum' => $stokLamaTotal,

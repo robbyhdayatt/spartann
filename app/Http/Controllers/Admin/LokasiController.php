@@ -24,8 +24,8 @@ class LokasiController extends Controller
     {
         $this->authorize('manage-locations');
         $validated = $request->validate([
-            'kode_gudang' => 'required|string|max:10|unique:lokasi', // tabel diubah ke 'lokasi'
-            'nama_gudang' => 'required|string|max:100',
+            'kode_lokasi' => 'required|string|max:10|unique:lokasi', // tabel diubah ke 'lokasi'
+            'nama_lokasi' => 'required|string|max:100',
             'alamat' => 'nullable|string',
             'tipe' => 'required|in:PUSAT,DEALER', // validasi untuk tipe baru
         ]);
@@ -39,8 +39,8 @@ class LokasiController extends Controller
     {
         $this->authorize('manage-locations');
         $validated = $request->validate([
-            'kode_gudang' => 'required|string|max:10|unique:lokasi,kode_gudang,' . $lokasi->id,
-            'nama_gudang' => 'required|string|max:100',
+            'kode_lokasi' => 'required|string|max:10|unique:lokasi,kode_lokasi,' . $lokasi->id,
+            'nama_lokasi' => 'required|string|max:100',
             'alamat' => 'nullable|string',
             'tipe' => 'required|in:PUSAT,DEALER',
             'is_active' => 'required|boolean',

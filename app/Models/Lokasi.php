@@ -14,11 +14,19 @@ class Lokasi extends Model
 
     public function raks()
     {
-        return $this->hasMany(Rak::class, 'gudang_id');
+        return $this->hasMany(Rak::class, 'lokasi_id');
     }
 
     public function users()
     {
-        return $this->hasMany(User::class, 'gudang_id');
+        return $this->hasMany(User::class, 'lokasi_id');
+    }
+
+    // Di dalam App\Models\Lokasi.php
+    public function dealer()
+    {
+        // Sesuaikan 'kode_dealer' jika nama kolom di tabel dealers berbeda
+        // Sesuaikan 'kode_lokasi' jika nama kolom di tabel lokasi berbeda
+        return $this->belongsTo(Dealer::class, 'kode_lokasi', 'kode_dealer');
     }
 }

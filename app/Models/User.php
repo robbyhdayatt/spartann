@@ -13,7 +13,7 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'nik', 'nama', 'username', 'email', 'password', 'gudang_id', 'jabatan_id', 'is_active',
+        'nik', 'nama', 'username', 'email', 'password', 'lokasi_id', 'jabatan_id', 'is_active',
     ];
 
     protected $hidden = [ 'password', 'remember_token', ];
@@ -30,7 +30,7 @@ class User extends Authenticatable
      */
     public function lokasi()
     {
-        return $this->belongsTo(Lokasi::class, 'gudang_id');
+        return $this->belongsTo(Lokasi::class, 'lokasi_id');
     }
 
     public function adminlte_desc()

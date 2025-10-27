@@ -12,7 +12,7 @@ class InventoryValueExport implements FromCollection, WithHeadings, WithMapping
 {
     public function collection()
     {
-        return Inventory::with(['part', 'gudang', 'rak'])
+        return Inventory::with(['part', 'lokasi', 'rak'])
             ->where('quantity', '>', 0)
             ->get();
     }
@@ -20,7 +20,7 @@ class InventoryValueExport implements FromCollection, WithHeadings, WithMapping
     public function headings(): array
     {
         return [
-            'Gudang',
+            'Lokasi',
             'Kode Part',
             'Nama Part',
             'Rak',
@@ -35,7 +35,7 @@ class InventoryValueExport implements FromCollection, WithHeadings, WithMapping
         $subtotal = $inventory->quantity * $inventory->part->harga_beli_default;
 
         return [
-            $inventory->gudang->nama_gudang,
+            $inventory->lokasi->nama_lokasi,
             $inventory->part->kode_part,
             $inventory->part->nama_part,
             $inventory->rak->kode_rak,

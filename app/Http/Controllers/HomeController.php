@@ -29,7 +29,7 @@ class HomeController extends Controller
     {
         $user = Auth::user();
         $role = $user->jabatan->singkatan;
-        
+
         $viewName = 'dashboards._default';
         $data = [];
 
@@ -41,13 +41,13 @@ class HomeController extends Controller
                 $data = $this->getSuperAdminData();
                 break;
 
-            case 'KG': // Kepala Gudang (Pusat)
+            case 'KG': // Kepala lokasi (Pusat)
             case 'KC': // Kepala Cabang (Dealer)
                 $viewName = 'dashboards._approver'; // Kita akan buat view baru yg generik
                 $data = $this->getApproverData($user);
                 break;
-                
-            case 'AG': // Admin Gudang (Pusat)
+
+            case 'AG': // Admin lokasi (Pusat)
             case 'AD': // Admin Dealer
                 $viewName = 'dashboards._operator'; // View baru yg generik
                 $data = $this->getOperatorData($user);
@@ -58,7 +58,7 @@ class HomeController extends Controller
                 $viewName = 'dashboards._sales';
                 $data = $this->getSalesData($user);
                 break;
-            
+
             // KSR (Kasir) akan menggunakan _default view
         }
 
@@ -80,7 +80,7 @@ class HomeController extends Controller
             ->groupBy('parts.id', 'parts.nama_part', 'parts.kode_part', 'parts.stok_minimum')
             ->havingRaw('total_stock < parts.stok_minimum AND parts.stok_minimum > 0')
             ->get();
-            
+
         $salesData = Penjualan::select(DB::raw('DATE(tanggal_jual) as date'), DB::raw('SUM(total_harga) as total'))
             ->where('tanggal_jual', '>=', now()->subDays(30))
             ->groupBy('date')
@@ -94,44 +94,44 @@ class HomeController extends Controller
     }
 
     /**
-     * Data untuk dashboard approver (Kepala Gudang & Kepala Cabang).
+     * Data untuk dashboard approver (Kepala lokasi & Kepala Cabang).
      */
     private function getApproverData($user)
     {
-        $lokasiId = $user->gudang_id;
+        $lokasiId = $user->lokasi_id;
         $lokasi = Lokasi::find($lokasiId);
 
-        // Kepala Gudang melihat PO, Kepala Cabang tidak
+        // Kepala lokasi melihat PO, Kepala Cabang tidak
         $pendingPurchaseOrders = [];
         if ($user->hasRole('KG')) {
-             $pendingPurchaseOrders = PurchaseOrder::where('status', 'PENDING_APPROVAL')->where('gudang_id', $lokasiId)->get();
+             $pendingPurchaseOrders = PurchaseOrder::where('status', 'PENDING_APPROVAL')->where('lokasi_id', $lokasiId)->get();
         }
 
-        $pendingAdjustments = StockAdjustment::where('status', 'PENDING_APPROVAL')->where('gudang_id', $lokasiId)->get();
-        $pendingMutations = StockMutation::where('status', 'PENDING_APPROVAL')->where('gudang_asal_id', $lokasiId)->get();
+        $pendingAdjustments = StockAdjustment::where('status', 'PENDING_APPROVAL')->where('lokasi_id', $lokasiId)->get();
+        $pendingMutations = StockMutation::where('status', 'PENDING_APPROVAL')->where('lokasi_asal_id', $lokasiId)->get();
 
         return compact('pendingPurchaseOrders', 'pendingAdjustments', 'pendingMutations', 'lokasi');
     }
-    
+
     /**
-     * Data untuk dashboard operator (Admin Gudang & Admin Dealer).
+     * Data untuk dashboard operator (Admin lokasi & Admin Dealer).
      */
     private function getOperatorData($user)
     {
-        $lokasiId = $user->gudang_id;
+        $lokasiId = $user->lokasi_id;
         $lokasi = Lokasi::find($lokasiId);
         $isPusat = $lokasi->tipe === 'PUSAT';
-        
+
         $taskCounts = [];
         if ($isPusat) {
-            // Tugas Admin Gudang Pusat
-            $taskCounts['pending_receiving_po'] = PurchaseOrder::where('gudang_id', $lokasiId)->whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])->count();
-            $taskCounts['pending_qc'] = Receiving::where('gudang_id', $lokasiId)->where('status', 'PENDING_QC')->count();
-            $taskCounts['pending_putaway'] = Receiving::where('gudang_id', $lokasiId)->where('status', 'PENDING_PUTAWAY')->count();
+            // Tugas Admin lokasi Pusat
+            $taskCounts['pending_receiving_po'] = PurchaseOrder::where('lokasi_id', $lokasiId)->whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])->count();
+            $taskCounts['pending_qc'] = Receiving::where('lokasi_id', $lokasiId)->where('status', 'PENDING_QC')->count();
+            $taskCounts['pending_putaway'] = Receiving::where('lokasi_id', $lokasiId)->where('status', 'PENDING_PUTAWAY')->count();
         }
 
-        // Tugas bersama untuk Admin Gudang & Admin Dealer
-        $taskCounts['pending_receiving_mutation'] = StockMutation::where('gudang_tujuan_id', $lokasiId)->where('status', 'IN_TRANSIT')->count();
+        // Tugas bersama untuk Admin lokasi & Admin Dealer
+        $taskCounts['pending_receiving_mutation'] = StockMutation::where('lokasi_tujuan_id', $lokasiId)->where('status', 'IN_TRANSIT')->count();
 
         return compact('taskCounts', 'lokasi', 'isPusat');
     }
@@ -153,7 +153,7 @@ class HomeController extends Controller
             ->where('periode', now()->startOfMonth()->format('Y-m-d'))
             ->first();
         $incentiveAmount = $incentive->jumlah_insentif ?? 0;
-        
+
         $recentSales = Penjualan::where('sales_id', $user->id)->latest()->limit(5)->get();
 
         return compact('targetAmount', 'achievedAmount', 'achievementPercentage', 'incentiveAmount', 'recentSales');

@@ -7,7 +7,7 @@ $namaDealer = 'Data Lokasi Tidak Ditemukan';
 $alamatDealer = 'Alamat Tidak Tersedia';
 $npwpDealer = 'NPWP Tidak Tersedia';
 if ($service->lokasi) {
-    $namaDealer = $service->lokasi->nama_gudang ?? $namaDealer;
+    $namaDealer = $service->lokasi->nama_lokasi ?? $namaDealer;
     $alamatDealer = $service->lokasi->alamat && $service->lokasi->alamat !== '\N' ? $service->lokasi->alamat : '-';
     // $npwpDealer = $service->lokasi->npwp ?? $npwpDealer;
 }

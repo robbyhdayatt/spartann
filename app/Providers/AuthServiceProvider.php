@@ -45,7 +45,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('access-po-module', fn(User $user) => $user->hasRole(['KG', 'AG', 'PIC', 'SA']));
         Gate::define('create-po', fn(User $user) => $user->hasRole('AG'));
         Gate::define('approve-po', function (User $user, $purchaseOrder) { // Gate ini tetap (untuk aksi)
-            return $user->hasRole('KG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT' && $user->gudang_id === $purchaseOrder->gudang_id;
+            return $user->hasRole('KG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT' && $user->lokasi_id === $purchaseOrder->lokasi_id;
         });
         // ++ PERUBAHAN: Tambahkan 'is-pic' dan 'is-super-admin' untuk melihat menu ++
         Gate::define('manage-purchase-returns', function(User $user) {
@@ -55,26 +55,26 @@ class AuthServiceProvider extends ServiceProvider
         // --- OPERASIONAL GUDANG & DEALER ---
         // ++ PERUBAHAN: Tambahkan 'is-pic' dan 'is-super-admin' untuk melihat menu ++
         Gate::define('perform-warehouse-ops', fn(User $user) => $user->hasRole(['AG', 'AD', 'PIC', 'SA']));
-        Gate::define('create-stock-adjustment', fn(User $user) => $user->hasRole(['AG', 'AD']));
+        Gate::define('create-stock-adjustment', fn(User $user) => $user->hasRole(['SA', 'PIC', 'AG', 'AD']));
         Gate::define('manage-quarantine-stock', fn(User $user) => $user->hasRole(['AG', 'AD']));
         Gate::define('create-stock-transaction', fn(User $user) => $user->hasRole(['AG', 'AD']));
 
         Gate::define('approve-stock-transaction', function (User $user, $transaction) { // Gate ini tetap (untuk aksi)
-            $lokasiId = $transaction->gudang_id ?? $transaction->gudang_asal_id;
-            if (!$user->gudang_id) return false;
+            $lokasiId = $transaction->lokasi_id ?? $transaction->lokasi_asal_id;
+            if (!$user->lokasi_id) return false;
 
             if ($user->hasRole('KG') || $user->hasRole('KC')) {
-                return $user->gudang_id === $lokasiId;
+                return $user->lokasi_id === $lokasiId;
             }
             return false;
         });
 
         Gate::define('approve-stock-adjustment', function (User $user, $stockAdjustment) { // Gate ini tetap (untuk aksi)
-            if (!$user->gudang_id || !$stockAdjustment->gudang_id) {
+            if (!$user->lokasi_id || !$stockAdjustment->lokasi_id) {
                 return false;
             }
             if ($user->hasRole(['KG', 'KC'])) {
-                return $user->gudang_id === $stockAdjustment->gudang_id;
+                return $user->lokasi_id === $stockAdjustment->lokasi_id;
             }
             return false;
         });
@@ -112,7 +112,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-service', function(User $user) {
             return $user->hasRole('CS');
         });
-        
+
         Gate::define('export-service-report', function(User $user) {
             // Izinkan SA, PIC, Manager, Kpl Cabang, dan Counter Sales
             return $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS']);

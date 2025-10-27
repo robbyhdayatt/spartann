@@ -34,16 +34,16 @@ class ServiceController extends Controller
         $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
 
         if ($canFilterByDealer) { // Gunakan variabel baru
-            $dealers = Lokasi::where('tipe', 'DEALER')->orderBy('kode_gudang')->get(['kode_gudang', 'nama_gudang']);
+            $dealers = Lokasi::where('tipe', 'DEALER')->orderBy('kode_lokasi')->get(['kode_lokasi', 'nama_lokasi']);
             $selectedDealer = $request->input('dealer_code');
 
             if ($selectedDealer && $selectedDealer !== 'all') {
                 $query->where('dealer_code', $selectedDealer);
             }
         } else {
-            if ($user->lokasi && $user->lokasi->kode_gudang) {
-                $query->where('dealer_code', $user->lokasi->kode_gudang);
-                $selectedDealer = $user->lokasi->kode_gudang;
+            if ($user->lokasi && $user->lokasi->kode_lokasi) {
+                $query->where('dealer_code', $user->lokasi->kode_lokasi);
+                $selectedDealer = $user->lokasi->kode_lokasi;
             } else {
                 $query->whereRaw('1 = 0');
             }
@@ -81,10 +81,10 @@ class ServiceController extends Controller
 
         try {
             $user = Auth::user();
-            if (!$user->lokasi || !$user->lokasi->kode_gudang) {
+            if (!$user->lokasi || !$user->lokasi->kode_lokasi) {
                 return redirect()->back()->with('error', 'Gagal mengimpor: Akun Anda tidak terasosiasi dengan dealer manapun.');
             }
-            $userDealerCode = $user->lokasi->kode_gudang;
+            $userDealerCode = $user->lokasi->kode_lokasi;
 
             $import = new ServiceImport($userDealerCode);
             Excel::import($import, $request->file('file'));
@@ -128,7 +128,7 @@ class ServiceController extends Controller
         $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC']);
 
         if (!$isSuperAdminOrPic) {
-            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_gudang) {
+            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
                 abort(403, 'Anda tidak diizinkan melihat detail service ini.');
             }
         }
@@ -150,7 +150,7 @@ class ServiceController extends Controller
         $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC']);
 
         if (!$isSuperAdminOrPic) {
-            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_gudang) {
+            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
                 abort(403, 'Anda tidak diizinkan mengunduh PDF service ini.');
             }
         }
@@ -217,14 +217,14 @@ class ServiceController extends Controller
             if ($selectedDealer && $selectedDealer !== 'all') {
                 $dealerCodeForExport = $selectedDealer;
                 // Cari nama dealer untuk nama file
-                $dealerInfo = Lokasi::where('kode_gudang', $dealerCodeForExport)->first();
-                $dealerName = $dealerInfo ? str_replace(' ', '_', $dealerInfo->nama_gudang) : $dealerCodeForExport;
+                $dealerInfo = Lokasi::where('kode_lokasi', $dealerCodeForExport)->first();
+                $dealerName = $dealerInfo ? str_replace(' ', '_', $dealerInfo->nama_lokasi) : $dealerCodeForExport;
             }
         } else {
             // Jika bukan SA/PIC, otomatis filter berdasarkan dealernya
-            if ($user->lokasi && $user->lokasi->kode_gudang) {
-                $dealerCodeForExport = $user->lokasi->kode_gudang;
-                $dealerName = str_replace(' ', '_', $user->lokasi->nama_gudang);
+            if ($user->lokasi && $user->lokasi->kode_lokasi) {
+                $dealerCodeForExport = $user->lokasi->kode_lokasi;
+                $dealerName = str_replace(' ', '_', $user->lokasi->nama_lokasi);
             } else {
                 // Seharusnya tidak terjadi jika logic di index benar
                 return redirect()->back()->with('error', 'Akun Anda tidak terasosiasi dengan dealer.');

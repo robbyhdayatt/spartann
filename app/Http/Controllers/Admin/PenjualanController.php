@@ -27,13 +27,13 @@ class PenjualanController extends Controller
     public function index()
     {
         $this->authorize('view-sales');
-        
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $query = Penjualan::with(['konsumen', 'sales', 'lokasi'])->latest();
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
-            $query->where('gudang_id', $user->gudang_id);
+            $query->where('lokasi_id', $user->lokasi_id);
         }
 
         $penjualans = $query->get();
@@ -43,11 +43,11 @@ class PenjualanController extends Controller
     public function create()
     {
         $this->authorize('create-sale');
-        
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $konsumens = Konsumen::where('is_active', true)->orderBy('nama_konsumen')->get();
-        $lokasi = Lokasi::find($user->gudang_id);
+        $lokasi = Lokasi::find($user->lokasi_id);
 
         if (!$lokasi) {
             return redirect()->route('admin.home')->with('error', 'Anda tidak terasosiasi dengan lokasi manapun.');
@@ -61,7 +61,7 @@ class PenjualanController extends Controller
         $this->authorize('create-sale');
 
         $validated = $request->validate([
-            'gudang_id' => 'required|exists:lokasi,id',
+            'lokasi_id' => 'required|exists:lokasi,id',
             'konsumen_id' => 'required|exists:konsumens,id',
             'tanggal_jual' => 'required|date',
             'items' => 'required|array|min:1',
@@ -69,10 +69,10 @@ class PenjualanController extends Controller
             'items.*.batch_id' => 'required|exists:inventory_batches,id',
             'items.*.qty_jual' => 'required|integer|min:1',
         ]);
-        
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        if ($user->gudang_id != $validated['gudang_id']) {
+        if ($user->lokasi_id != $validated['lokasi_id']) {
             abort(403, 'Aksi tidak diizinkan. Anda hanya dapat membuat penjualan dari lokasi Anda.');
         }
 
@@ -81,12 +81,12 @@ class PenjualanController extends Controller
             $konsumen = Konsumen::find($validated['konsumen_id']);
             $totalSubtotalServer = 0;
             // Total diskon tidak lagi relevan karena kita pakai harga_satuan
-            $totalDiskonServer = 0; 
+            $totalDiskonServer = 0;
 
             $penjualan = Penjualan::create([
                 'nomor_faktur' => Penjualan::generateNomorFaktur(),
                 'tanggal_jual' => $validated['tanggal_jual'],
-                'gudang_id' => $validated['gudang_id'],
+                'lokasi_id' => $validated['lokasi_id'],
                 'konsumen_id' => $validated['konsumen_id'],
                 'sales_id' => $user->id,
                 'created_by' => $user->id,
@@ -105,7 +105,7 @@ class PenjualanController extends Controller
                 $finalPrice = $part->harga_satuan;
                 $itemSubtotal = $finalPrice * $qty;
                 $totalSubtotalServer += $itemSubtotal;
-                
+
                 // Kalkulasi diskon (jika ada) hanya untuk laporan, tidak mempengaruhi total
                 $discountResult = $this->discountService->calculateSalesDiscount($part, $konsumen, $part->harga_satuan);
                 $totalDiskonServer += ($part->harga_satuan - $discountResult['final_price']) * $qty;
@@ -123,7 +123,7 @@ class PenjualanController extends Controller
 
                 $penjualan->stockMovements()->create([
                     'part_id' => $part->id,
-                    'gudang_id' => $penjualan->gudang_id,
+                    'lokasi_id' => $penjualan->lokasi_id,
                     'rak_id' => $batch->rak_id,
                     'jumlah' => -$qty,
                     'stok_sebelum' => $stokSebelum,
@@ -167,10 +167,10 @@ class PenjualanController extends Controller
     {
         $this->authorize('create-sale');
         $parts = Part::whereHas('inventoryBatches', function ($query) use ($lokasi) {
-            $query->where('gudang_id', $lokasi->id)->where('quantity', '>', 0);
+            $query->where('lokasi_id', $lokasi->id)->where('quantity', '>', 0);
         })
         ->withSum(['inventoryBatches' => function ($query) use ($lokasi) {
-            $query->where('gudang_id', $lokasi->id);
+            $query->where('lokasi_id', $lokasi->id);
         }], 'quantity')
         ->orderBy('nama_part')
         ->get()
@@ -193,11 +193,11 @@ class PenjualanController extends Controller
         $this->authorize('create-sale');
         $validated = $request->validate([
             'part_id' => 'required|exists:parts,id',
-            'gudang_id' => 'required|exists:lokasi,id',
+            'lokasi_id' => 'required|exists:lokasi,id',
         ]);
 
         $batches = InventoryBatch::where('part_id', $validated['part_id'])
-            ->where('gudang_id', $validated['gudang_id'])
+            ->where('lokasi_id', $validated['lokasi_id'])
             ->where('quantity', '>', 0)
             ->with(['rak', 'receivingDetail.receiving'])
             ->get()
@@ -207,7 +207,7 @@ class PenjualanController extends Controller
                 }
                 return $batch->created_at;
             });
-            
+
         return response()->json($batches->values()->all());
     }
 

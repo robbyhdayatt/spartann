@@ -22,15 +22,14 @@ class StockMutation extends Model
         return $this->belongsTo(Part::class);
     }
 
-    // PERBAIKAN: Mengubah nama relasi dan menunjuk ke Model Lokasi
     public function lokasiAsal()
     {
-        return $this->belongsTo(Lokasi::class, 'gudang_asal_id');
+        return $this->belongsTo(Lokasi::class, 'lokasi_asal_id');
     }
 
     public function lokasiTujuan()
     {
-        return $this->belongsTo(Lokasi::class, 'gudang_tujuan_id');
+        return $this->belongsTo(Lokasi::class, 'lokasi_tujuan_id');
     }
 
     public function rakAsal()

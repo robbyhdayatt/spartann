@@ -35,7 +35,7 @@
             <thead>
                 <tr>
                     <th>Part</th>
-                    <th>Gudang</th>
+                    <th>lokasi</th>
                     <th>Rak Karantina</th>
                     <th class="text-right">Total Qty</th>
                     <th style="width: 150px">Aksi</th>
@@ -45,7 +45,7 @@
                 @forelse($quarantineItems as $item)
                 <tr>
                     <td>{{ $item->part->nama_part }} <br><small class="text-muted">{{ $item->part->kode_part }}</small></td>
-                    <td>{{ $item->lokasi->nama_gudang }}</td>
+                    <td>{{ $item->lokasi->nama_lokasi }}</td>
                     <td>{{ $item->rak->kode_rak }}</td>
                     <td class="text-right font-weight-bold">{{ $item->total_quantity }}</td>
                     <td>
@@ -53,7 +53,7 @@
                         <button class="btn btn-primary btn-xs process-btn"
                                 data-part-id="{{ $item->part_id }}"
                                 data-rak-id="{{ $item->rak_id }}"
-                                data-gudang-id="{{ $item->gudang_id }}"
+                                data-lokasi-id="{{ $item->lokasi_id }}"
                                 data-max-qty="{{ $item->total_quantity }}"
                                 data-part-name="{{ $item->part->nama_part }}"
                                 data-toggle="modal" data-target="#processModal">
@@ -86,7 +86,7 @@
                 @csrf
                 <input type="hidden" name="part_id" id="part_id">
                 <input type="hidden" name="rak_id" id="rak_id">
-                <input type="hidden" name="gudang_id" id="gudang_id">
+                <input type="hidden" name="lokasi_id" id="lokasi_id">
 
                 <div class="modal-body">
                     <p>Anda akan memproses part: <strong id="part_name"></strong></p>
@@ -133,18 +133,18 @@ $(document).ready(function() {
     $('#quarantine-table').DataTable({ "responsive": true, "autoWidth": false });
     $('.select2').select2({ dropdownParent: $('#processModal') });
 
-    const storageRaksByGudang = @json($storageRaks);
+    const storageRaksBylokasi = @json($storageRaks);
 
     $('.process-btn').on('click', function() {
         const partId = $(this).data('part-id');
         const rakId = $(this).data('rak-id');
-        const gudangId = $(this).data('gudang-id');
+        const lokasiId = $(this).data('lokasi-id');
         const maxQty = $(this).data('max-qty');
         const partName = $(this).data('part-name');
 
         $('#part_id').val(partId);
         $('#rak_id').val(rakId);
-        $('#gudang_id').val(gudangId);
+        $('#lokasi_id').val(lokasiId);
 
         $('#part_name').text(partName);
         $('#quantity').val(maxQty).attr('max', maxQty);
@@ -152,8 +152,8 @@ $(document).ready(function() {
         const destinationRakSelect = $('#destination_rak_id');
         destinationRakSelect.html('<option value="">-- Pilih Rak Tujuan --</option>');
 
-        if (storageRaksByGudang[gudangId]) {
-            storageRaksByGudang[gudangId].forEach(function(rak) {
+        if (storageRaksBylokasi[lokasiId]) {
+            storageRaksBylokasi[lokasiId].forEach(function(rak) {
                 destinationRakSelect.append(new Option(`${rak.kode_rak} - ${rak.nama_rak}`, rak.id));
             });
         }

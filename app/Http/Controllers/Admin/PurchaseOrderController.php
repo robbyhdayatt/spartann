@@ -34,8 +34,8 @@ class PurchaseOrderController extends Controller
         $this->authorize('create-po');
         $suppliers = Supplier::where('is_active', true)->orderBy('nama_supplier')->get();
         $parts = Part::where('is_active', true)->orderBy('nama_part')->get();
-        $gudangPusat = Lokasi::where('tipe', 'PUSAT')->firstOrFail();
-        return view('admin.purchase_orders.create', compact('suppliers', 'gudangPusat', 'parts'));
+        $lokasiPusat = Lokasi::where('tipe', 'PUSAT')->firstOrFail();
+        return view('admin.purchase_orders.create', compact('suppliers', 'lokasiPusat', 'parts'));
     }
 
     public function store(Request $request)
@@ -44,7 +44,7 @@ class PurchaseOrderController extends Controller
         $validated = $request->validate([
             'tanggal_po' => 'required|date',
             'supplier_id' => 'required|exists:suppliers,id',
-            'gudang_id' => 'required|exists:lokasi,id',
+            'lokasi_id' => 'required|exists:lokasi,id',
             'catatan' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.part_id' => 'required|exists:parts,id',
@@ -52,9 +52,9 @@ class PurchaseOrderController extends Controller
             // PERUBAHAN: Validasi 'use_ppn' dihapus
         ]);
 
-        $lokasi = Lokasi::find($validated['gudang_id']);
+        $lokasi = Lokasi::find($validated['lokasi_id']);
         if (!$lokasi || $lokasi->tipe !== 'PUSAT') {
-            return back()->with('error', 'Purchase Order hanya dapat dibuat untuk Gudang Pusat.')->withInput();
+            return back()->with('error', 'Purchase Order hanya dapat dibuat untuk lokasi Pusat.')->withInput();
         }
 
         DB::beginTransaction();
@@ -87,7 +87,7 @@ class PurchaseOrderController extends Controller
                 'nomor_po' => $this->generatePoNumber(),
                 'tanggal_po' => $validated['tanggal_po'],
                 'supplier_id' => $validated['supplier_id'],
-                'gudang_id' => $validated['gudang_id'],
+                'lokasi_id' => $validated['lokasi_id'],
                 'catatan' => $request->catatan,
                 'status' => 'PENDING_APPROVAL',
                 'created_by' => Auth::id(),
@@ -112,7 +112,7 @@ class PurchaseOrderController extends Controller
         $purchaseOrder->load(['supplier', 'lokasi', 'details.part', 'createdBy']);
         return view('admin.purchase_orders.show', compact('purchaseOrder'));
     }
-    
+
     // ++ PERUBAHAN: Fungsi disederhanakan untuk hanya mengembalikan harga_satuan ++
     public function getPartPurchaseDetails(Part $part)
     {

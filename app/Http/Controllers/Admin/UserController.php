@@ -24,8 +24,8 @@ class UserController extends Controller
         $users = User::with(['jabatan', 'lokasi'])->latest()->get();
         $jabatans = Jabatan::where('is_active', true)->orderBy('nama_jabatan')->get();
         // PERUBAHAN: Mengambil data dari model Lokasi
-        $lokasi = Lokasi::where('is_active', true)->orderBy('nama_gudang')->get();
-        
+        $lokasi = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
+
         return view('admin.users.index', compact('users', 'jabatans', 'lokasi'));
     }
 
@@ -36,7 +36,7 @@ class UserController extends Controller
             'nik' => 'required|string|max:50|unique:users',
             'username' => 'required|string|max:100|unique:users',
             'jabatan_id' => 'required|exists:jabatans,id',
-            'gudang_id' => 'nullable|exists:lokasi,id', // PERUBAHAN: Validasi ke tabel lokasi
+            'lokasi_id' => 'nullable|exists:lokasi,id', // PERUBAHAN: Validasi ke tabel lokasi
             'password' => 'required|string|min:8|confirmed',
         ]);
 
@@ -45,7 +45,7 @@ class UserController extends Controller
             'nik' => $validated['nik'],
             'username' => $validated['username'],
             'jabatan_id' => $validated['jabatan_id'],
-            'gudang_id' => $validated['gudang_id'],
+            'lokasi_id' => $validated['lokasi_id'],
             'password' => Hash::make($validated['password']),
         ]);
 
@@ -59,7 +59,7 @@ class UserController extends Controller
             'nik' => 'required|string|max:50|unique:users,nik,' . $user->id,
             'username' => 'required|string|max:100|unique:users,username,' . $user->id,
             'jabatan_id' => 'required|exists:jabatans,id',
-            'gudang_id' => 'nullable|exists:lokasi,id', // PERUBAHAN: Validasi ke tabel lokasi
+            'lokasi_id' => 'nullable|exists:lokasi,id', // PERUBAHAN: Validasi ke tabel lokasi
             'password' => 'nullable|string|min:8|confirmed',
             'is_active' => 'required|boolean',
         ]);

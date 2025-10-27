@@ -29,8 +29,8 @@ class ReportController extends Controller
         $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         $movements = collect(); // Buat koleksi kosong secara default
 
-        // Cek jika user adalah Kepala Gudang
-        if ($user->jabatan->nama_jabatan === 'Kepala Gudang') {
+        // Cek jika user adalah Kepala lokasi
+        if ($user->jabatan->nama_jabatan === 'Kepala lokasi') {
             // Jika ya, paksa pilihan lokasi hanya lokasinya sendiri
             $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
         } else {
@@ -47,34 +47,34 @@ class ReportController extends Controller
         // Jika ada part yang dipilih dari form, cari datanya
         if ($request->filled('part_id')) {
             $query = StockMovement::where('part_id', $request->part_id)
-                ->with(['gudang', 'user']) // Eager load untuk efisiensi
+                ->with(['lokasi', 'user']) // Eager load untuk efisiensi
                 ->whereDate('created_at', '>=', $startDate)
                 ->whereDate('created_at', '<=', $endDate);
 
-            // Tambahkan filter gudang jika dipilih
-            if ($request->filled('gudang_id')) {
-                $query->where('gudang_id', $request->gudang_id);
+            // Tambahkan filter lokasi jika dipilih
+            if ($request->filled('lokasi_id')) {
+                $query->where('lokasi_id', $request->lokasi_id);
             }
 
-            // Jika yang login Kepala Gudang, paksa filter gudang
-            if ($user->jabatan->nama_jabatan === 'Kepala Gudang') {
-                $query->where('gudang_id', $user->gudang_id);
+            // Jika yang login Kepala lokasi, paksa filter lokasi
+            if ($user->jabatan->nama_jabatan === 'Kepala lokasi') {
+                $query->where('lokasi_id', $user->lokasi_id);
             }
 
             $movements = $query->oldest()->get();
         }
 
-        return view('admin.reports.stock_card', compact('parts', 'gudangs', 'movements', 'startDate', 'endDate'));
+        return view('admin.reports.stock_card', compact('parts', 'lokasis', 'movements', 'startDate', 'endDate'));
     }
 
     public function stockByWarehouse(Request $request)
     {
         $user = Auth::user();
         $inventoryItems = collect();
-        $gudangs = collect();
-        $selectedGudang = null;
+        $lokasis = collect();
+        $selectedlokasi = null;
 
-        if ($user->jabatan->nama_jabatan === 'Kepala Gudang') {
+        if ($user->jabatan->nama_jabatan === 'Kepala lokasi') {
             $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
             if (!$request->filled('lokasi_id')) {
                 $request->merge(['lokasi_id' => $user->lokasi_id]);
@@ -100,18 +100,18 @@ class ReportController extends Controller
                     'part.category:id,nama_kategori',
                     'rak:id,kode_rak'
                 ])
-                ->groupBy('part_id', 'rak_id', 'gudang_id')
+                ->groupBy('part_id', 'rak_id', 'lokasi_id')
                 ->get()
                 ->sortBy('part.nama_part');
         }
 
-        return view('admin.reports.stock_by_warehouse', compact('inventoryItems', 'gudangs', 'selectedGudang'));
+        return view('admin.reports.stock_by_warehouse', compact('inventoryItems', 'lokasis', 'selectedlokasi'));
     }
 
     public function exportStockByWarehouse(Request $request)
     {
         $request->validate([
-            'gudang_id' => 'required|exists:gudangs,id'
+            'lokasi_id' => 'required|exists:lokasis,id'
         ]);
 
         $lokasi = Lokasi::find($request->lokasi_id);
@@ -173,13 +173,13 @@ class ReportController extends Controller
         // Mengambil data dari inventory_batches dan mengelompokkannya
         $inventoryDetails = InventoryBatch::select(
                 'part_id',
-                'gudang_id',
+                'lokasi_id',
                 'rak_id',
                 DB::raw('SUM(quantity) as quantity')
             )
             ->where('quantity', '>', 0)
-            ->with(['part', 'gudang', 'rak'])
-            ->groupBy('part_id', 'gudang_id', 'rak_id')
+            ->with(['part', 'lokasi', 'rak'])
+            ->groupBy('part_id', 'lokasi_id', 'rak_id')
             ->get();
 
         // Menghitung total nilai persediaan
@@ -250,15 +250,15 @@ class ReportController extends Controller
         // Mengambil data dari inventory_batches, menjumlahkan, dan mengelompokkan
         $inventoryDetails = InventoryBatch::select(
                 'part_id',
-                'gudang_id',
+                'lokasi_id',
                 'rak_id',
                 DB::raw('SUM(quantity) as quantity')
             )
             ->where('quantity', '>', 0)
-            ->with(['part', 'gudang', 'rak'])
-            ->groupBy('part_id', 'gudang_id', 'rak_id')
+            ->with(['part', 'lokasi', 'rak'])
+            ->groupBy('part_id', 'lokasi_id', 'rak_id')
             ->get()
-            ->sortBy(['part.nama_part', 'gudang.nama_gudang']);
+            ->sortBy(['part.nama_part', 'lokasi.nama_lokasi']);
 
         return view('admin.reports.stock_report', compact('inventoryDetails'));
     }
@@ -269,7 +269,7 @@ class ReportController extends Controller
             'part_id' => 'required|exists:parts,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date',
-            'gudang_id' => 'nullable|exists:gudangs,id'
+            'lokasi_id' => 'nullable|exists:lokasis,id'
         ]);
 
         $part = Part::findOrFail($request->part_id);
@@ -277,7 +277,7 @@ class ReportController extends Controller
 
         return Excel::download(new StockCardExport(
             $request->part_id,
-            $request->gudang_id,
+            $request->lokasi_id,
             $request->start_date,
             $request->end_date
         ), $fileName);

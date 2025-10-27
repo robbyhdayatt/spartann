@@ -1,11 +1,9 @@
 @extends('adminlte::page')
 
-@section('title', 'Buat Adjusment Stok')
-
-@section('plugins.Select2', true)
+@section('title', 'Buat Adjusment Stok Baru')
 
 @section('content_header')
-    <h1>Buat Permintaan Adjusment Stok</h1>
+    <h1>Buat Adjusment Stok Baru</h1>
 @stop
 
 @section('content')
@@ -13,110 +11,182 @@
     <form action="{{ route('admin.stock-adjustments.store') }}" method="POST">
         @csrf
         <div class="card-body">
-             @if ($errors->any())
-                <div class="alert alert-danger">
-                    <ul class="mb-0">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
-            <div class="row">
-                <div class="col-md-6 form-group">
-                    <label>Lokasi</label>
-                    {{-- Logika ini memastikan user hanya bisa memilih lokasinya sendiri --}}
-                    @if($lokasi)
-                        <input type="text" class="form-control" value="{{ $lokasi->nama_gudang }}" readonly>
-                        <input type="hidden" id="lokasi_id" name="gudang_id" value="{{ $lokasi->id }}">
-                    @else
-                        <p class="form-control-static text-danger">Anda tidak terasosiasi dengan lokasi manapun.</p>
-                    @endif
-                </div>
 
-                <div class="col-md-6 form-group">
-                    <label>Rak</label>
-                    <select name="rak_id" id="rak_id" class="form-control select2" required>
-                        <option value="">-- Pilih Lokasi Terlebih Dahulu --</option>
+            {{-- ++ PERBAIKAN: Input Lokasi ++ --}}
+            <div class="form-group">
+                <label for="lokasi_id">Lokasi Adjusment</label>
+                @php
+                    $isSuperUser = auth()->user()->hasRole(['SA', 'PIC']);
+                    // Jika user biasa, lokasi sudah ditentukan ($userLokasi). Jika SA/PIC, mereka memilih ($allLokasi).
+                    $selectedLokasiId = old('lokasi_id', $userLokasi ? $userLokasi->id : null);
+                @endphp
+
+                @if($isSuperUser)
+                    {{-- Dropdown untuk SA/PIC --}}
+                    <select name="lokasi_id" id="lokasi_id" class="form-control select2 @error('lokasi_id') is-invalid @enderror" required>
+                        <option value="">-- Pilih Lokasi --</option>
+                        @foreach($allLokasi as $lok)
+                            <option value="{{ $lok->id }}" {{ $selectedLokasiId == $lok->id ? 'selected' : '' }}>
+                                {{ $lok->nama_lokasi }} ({{ $lok->kode_lokasi }})
+                            </option>
+                        @endforeach
                     </select>
-                </div>
+                @elseif($userLokasi)
+                    {{-- Tampilkan nama lokasi untuk user biasa & sertakan input hidden --}}
+                    <input type="text" class="form-control" value="{{ $userLokasi->nama_lokasi }} ({{ $userLokasi->kode_lokasi }})" readonly>
+                    <input type="hidden" name="lokasi_id" id="lokasi_id" value="{{ $userLokasi->id }}">
+                @else
+                     {{-- Seharusnya tidak terjadi karena sudah dicek di controller --}}
+                     <div class="alert alert-danger">Lokasi tidak ditemukan.</div>
+                @endif
+
+                @error('lokasi_id')
+                    <span class="invalid-feedback" role="alert">
+                        <strong>{{ $message }}</strong>
+                    </span>
+                @enderror
             </div>
+            {{-- Akhir Input Lokasi --}}
+
 
             <div class="form-group">
-                <label>Part</label>
-                <select name="part_id" class="form-control select2" required>
-                    <option value="" disabled selected>Pilih Part</option>
+                <label for="part_id">Part</label>
+                <select name="part_id" id="part_id" class="form-control select2 @error('part_id') is-invalid @enderror" required>
+                    <option value="">-- Pilih Part --</option>
                     @foreach($parts as $part)
-                        <option value="{{ $part->id }}">{{ $part->nama_part }} ({{$part->kode_part}})</option>
+                        <option value="{{ $part->id }}" {{ old('part_id') == $part->id ? 'selected' : '' }}>
+                            {{ $part->nama_part }} ({{ $part->kode_part }})
+                        </option>
                     @endforeach
                 </select>
+                @error('part_id')
+                    <span class="invalid-feedback" role="alert">
+                        <strong>{{ $message }}</strong>
+                    </span>
+                @enderror
             </div>
-            <div class="row">
-                <div class="col-md-6 form-group">
-                    <label>Tipe Adjusment</label>
-                    <select name="tipe" class="form-control" required>
-                        <option value="TAMBAH">Penambahan (+)</option>
-                        <option value="KURANG">Pengurangan (-)</option>
-                    </select>
-                </div>
-                <div class="col-md-6 form-group">
-                    <label>Jumlah</label>
-                    <input type="number" name="jumlah" class="form-control" min="1" required>
-                </div>
-            </div>
+
             <div class="form-group">
-                <label>Alasan</label>
-                <textarea name="alasan" class="form-control" rows="3" required placeholder="Contoh: Hasil stock opname, barang rusak, dll."></textarea>
+                <label for="rak_id">Rak</label>
+                <select name="rak_id" id="rak_id" class="form-control select2 @error('rak_id') is-invalid @enderror" required disabled>
+                    <option value="">-- Pilih Lokasi Terlebih Dahulu --</option>
+                    {{-- Opsi rak akan diisi oleh JavaScript --}}
+                </select>
+                 @error('rak_id')
+                    <span class="invalid-feedback d-block" role="alert"> {{-- Tambah d-block agar error tampil --}}
+                        <strong>{{ $message }}</strong>
+                    </span>
+                @enderror
             </div>
+
+            <div class="form-group">
+                <label for="tipe">Tipe Adjusment</label>
+                <select name="tipe" id="tipe" class="form-control @error('tipe') is-invalid @enderror" required>
+                    <option value="TAMBAH" {{ old('tipe') == 'TAMBAH' ? 'selected' : '' }}>Tambah Stok</option>
+                    <option value="KURANG" {{ old('tipe') == 'KURANG' ? 'selected' : '' }}>Kurang Stok</option>
+                </select>
+                 @error('tipe')
+                    <span class="invalid-feedback" role="alert">
+                        <strong>{{ $message }}</strong>
+                    </span>
+                @enderror
+            </div>
+
+            <div class="form-group">
+                <label for="jumlah">Jumlah</label>
+                <input type="number" name="jumlah" id="jumlah" class="form-control @error('jumlah') is-invalid @enderror" value="{{ old('jumlah') }}" required min="1">
+                 @error('jumlah')
+                    <span class="invalid-feedback" role="alert">
+                        <strong>{{ $message }}</strong>
+                    </span>
+                @enderror
+            </div>
+
+            <div class="form-group">
+                <label for="alasan">Alasan Adjusment</label>
+                <textarea name="alasan" id="alasan" class="form-control @error('alasan') is-invalid @enderror" rows="3" required>{{ old('alasan') }}</textarea>
+                 @error('alasan')
+                    <span class="invalid-feedback" role="alert">
+                        <strong>{{ $message }}</strong>
+                    </span>
+                @enderror
+            </div>
+
         </div>
         <div class="card-footer">
-            <button type="submit" class="btn btn-primary">Ajukan Permintaan</button>
+            <button type="submit" class="btn btn-primary">Submit Permintaan</button>
             <a href="{{ route('admin.stock-adjustments.index') }}" class="btn btn-secondary">Batal</a>
         </div>
     </form>
 </div>
 @stop
 
-@push('js')
+@section('js')
 <script>
 $(document).ready(function() {
-    $('.select2').select2({ theme: 'bootstrap4' });
+    // Inisialisasi Select2
+    $('.select2').select2({
+        theme: 'bootstrap4'
+    });
 
-    function fetchRaks(lokasiId) {
+    // Fungsi untuk memuat Rak berdasarkan Lokasi
+    function loadRaks(lokasiId, selectedRakId = null) {
         const rakSelect = $('#rak_id');
-        if (lokasiId) {
-            // PERBAIKAN: Gunakan route dan parameter yang benar
-            let url = "{{ route('admin.api.lokasi.raks', ['lokasi' => ':id']) }}";
-            url = url.replace(':id', lokasiId);
+        rakSelect.empty().prop('disabled', true); // Kosongkan dan disable
 
-            rakSelect.prop('disabled', true).html('<option value="">Memuat...</option>');
-
-            $.ajax({
-                url: url,
-                type: 'GET',
-                dataType: 'json',
-                success: function(data) {
-                    rakSelect.prop('disabled', false).empty().append('<option value="">-- Pilih Rak --</option>');
-                    if (data.length > 0) {
-                        $.each(data, function(key, value) {
-                            rakSelect.append('<option value="' + value.id + '">' + value.nama_rak + ' (' + value.kode_rak + ')</option>');
-                        });
-                    } else {
-                        rakSelect.html('<option value="">-- Tidak ada rak di lokasi ini --</option>');
-                    }
-                },
-                error: function() {
-                    rakSelect.prop('disabled', false).html('<option value="">-- Gagal memuat data --</option>');
-                }
-            });
+        if (!lokasiId) {
+            rakSelect.append('<option value="">-- Pilih Lokasi Terlebih Dahulu --</option>');
+            return; // Keluar jika tidak ada lokasi dipilih
         }
+
+        rakSelect.append('<option value="">Memuat Rak...</option>'); // Placeholder loading
+
+        // URL ke endpoint API, pastikan route 'admin.api.lokasi.raks' ada
+        // Anda mungkin perlu membuat route ini di web.php
+        // Route::get('/api/lokasi/{lokasi}/raks', [StockAdjustmentController::class, 'getRaksByLokasi'])->name('admin.api.lokasi.raks');
+        const url = `/spartann/admin/api/lokasi/${lokasiId}/raks`; // Sesuaikan URL jika perlu
+
+        $.getJSON(url, function(data) {
+            rakSelect.empty(); // Kosongkan lagi sebelum mengisi
+            if (data && data.length > 0) {
+                 rakSelect.append('<option value="">-- Pilih Rak --</option>');
+                 $.each(data, function(key, rak) {
+                    // Cek jika rak ini harus dipilih (misalnya saat validation error)
+                    const isSelected = selectedRakId && rak.id == selectedRakId;
+                    rakSelect.append(`<option value="${rak.id}" ${isSelected ? 'selected' : ''}>${rak.nama_rak} (${rak.kode_rak})</option>`);
+                });
+                rakSelect.prop('disabled', false); // Aktifkan select rak
+            } else {
+                rakSelect.append('<option value="">-- Tidak ada rak aktif di lokasi ini --</option>');
+                 // Tetap disable jika tidak ada rak
+            }
+        }).fail(function() {
+             rakSelect.empty().append('<option value="">Gagal memuat rak.</option>');
+             console.error("Error loading raks for lokasi ID:", lokasiId);
+        });
     }
 
-    // Ambil ID dari hidden input dan panggil fungsi
-    const lokasiId = $('#lokasi_id').val();
-    if (lokasiId) {
-        fetchRaks(lokasiId);
+    // Event listener saat pilihan lokasi berubah (hanya jika dropdown lokasi ada)
+    $('#lokasi_id').on('change', function() {
+        const selectedLokasiId = $(this).val();
+        loadRaks(selectedLokasiId);
+    });
+
+    // Saat halaman dimuat, cek apakah sudah ada lokasi yang terpilih
+    // (baik dari user biasa atau dari old() input SA/PIC)
+    const initialLokasiId = $('#lokasi_id').val();
+    if (initialLokasiId) {
+        // Ambil ID rak yang mungkin sudah terpilih dari old input
+        const oldRakId = "{{ old('rak_id') }}";
+        loadRaks(initialLokasiId, oldRakId);
+    } else if (!{{ $isSuperUser ? 'true' : 'false' }}) {
+         // Jika user biasa dan tidak ada lokasi awal (error state), tampilkan pesan
+         $('#rak_id').empty().append('<option value="">Lokasi user tidak valid.</option>');
     }
+
+
 });
 </script>
-@endpush
+@stop
+
+@section('plugins.Select2', true)

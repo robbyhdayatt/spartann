@@ -36,19 +36,16 @@ class Part extends Model
         return $this->hasMany(PurchaseOrderDetail::class);
     }
 
-    // ++ TAMBAHKAN FUNGSI INI ++
     /**
      * Menghitung total stok part di gudang tertentu.
      *
-     * @param int $gudangId
+     * @param int $lokasiId
      * @return int
      */
-    public function getStockByGudang($gudangId)
+    public function getStockByGudang($lokasiId)
     {
-        // Menjumlahkan 'quantity' dari semua batch yang cocok
-        // dengan part ini dan gudang yang diberikan.
         return $this->inventoryBatches()
-                    ->where('gudang_id', $gudangId)
+                    ->where('lokasi_id', $lokasiId)
                     ->sum('quantity');
     }
 }

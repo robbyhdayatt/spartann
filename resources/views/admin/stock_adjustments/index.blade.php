@@ -27,7 +27,7 @@
             <thead>
                 <tr>
                     <th>Detail Part</th>
-                    <th>Gudang / Rak</th>
+                    <th>Lokasi / Rak</th>
                     <th class="text-center">Tipe</th>
                     <th class="text-center">Jumlah</th>
                     <th>Alasan</th>
@@ -42,7 +42,7 @@
                         <strong>{{ $adj->part->nama_part }}</strong><br>
                         <small class="text-muted">{{ $adj->created_at->format('d M Y H:i') }}</small>
                     </td>
-                    <td>{{ $adj->lokasi->nama_gudang }} / {{ $adj->rak->nama_rak ?? 'N/A' }}</td>
+                    <td>{{ $adj->lokasi->nama_lokasi}} / {{ $adj->rak->nama_rak ?? 'N/A' }}</td>
                     <td class="text-center">
                         @if($adj->tipe == 'TAMBAH')
                             <span class="badge badge-success">TAMBAH</span>

@@ -20,7 +20,7 @@ class ReceivingController extends Controller
         $query = Receiving::with(['purchaseOrder', 'lokasi', 'receivedBy']);
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
-            $query->where('gudang_id', $user->gudang_id);
+            $query->where('lokasi_id', $user->lokasi_id);
         }
 
         $receivings = $query->latest()->paginate(15);
@@ -38,7 +38,7 @@ class ReceivingController extends Controller
         elseif ($user->hasRole('AG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT') {
             $this->authorize('perform-warehouse-ops');
             $query = PurchaseOrder::whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])
-                                  ->where('gudang_id', $user->gudang_id);
+                                  ->where('lokasi_id', $user->lokasi_id);
         }
         else {
             $this->authorize('perform-warehouse-ops');
@@ -69,13 +69,13 @@ class ReceivingController extends Controller
         try {
             $po = PurchaseOrder::with('details')->findOrFail($request->purchase_order_id);
 
-            if ($user->gudang_id != $po->gudang_id && !$user->hasRole(['SA', 'PIC'])) {
+            if ($user->lokasi_id != $po->lokasi_id && !$user->hasRole(['SA', 'PIC'])) {
                 return back()->with('error', 'Anda tidak berwenang menerima barang untuk lokasi ini.')->withInput();
             }
 
             $receiving = Receiving::create([
                 'purchase_order_id' => $po->id,
-                'gudang_id' => $po->gudang_id,
+                'lokasi_id' => $po->lokasi_id,
                 'nomor_penerimaan' => Receiving::generateReceivingNumber(),
                 'tanggal_terima' => $request->tanggal_terima,
                 'status' => 'PENDING_QC',

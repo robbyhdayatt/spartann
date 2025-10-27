@@ -9,11 +9,11 @@ class Rak extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'gudang_id', 'kode_rak', 'nama_rak', 'tipe_rak', 'is_active'
+        'lokasi_id', 'kode_rak', 'nama_rak', 'tipe_rak', 'is_active'
     ];
 
     public function lokasi()
     {
-        return $this->belongsTo(Lokasi::class, 'gudang_id');
+        return $this->belongsTo(Lokasi::class, 'lokasi_id');
     }
 }

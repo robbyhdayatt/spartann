@@ -36,9 +36,9 @@
                         </select>
                     </div>
                     <div class="col-md-4 form-group">
-                        <label>Tujuan Gudang</label>
-                            <input type="text" class="form-control" value="{{ $gudangPusat->nama_gudang }}" readonly>
-                            <input type="hidden" name="gudang_id" value="{{ $gudangPusat->id }}">
+                        <label>Tujuan lokasi</label>
+                            <input type="text" class="form-control" value="{{ $lokasiPusat->nama_lokasi }}" readonly>
+                            <input type="hidden" name="lokasi_id" value="{{ $lokasiPusat->id }}">
                     </div>
                 </div>
                  <div class="form-group">
@@ -156,13 +156,13 @@
                 $(this).closest('tr').remove();
                 calculateAll();
             });
-            
+
             // ++ PERUBAHAN UTAMA: Logika AJAX diganti, harga diambil dari data-attribute ++
             itemsTable.on('change', '.item-part', function() {
                 let row = $(this).closest('tr');
                 let selectedOption = $(this).find('option:selected');
                 let harga = parseFloat(selectedOption.data('harga')) || 0;
-                
+
                 row.find('.item-harga').val(formatRupiah(harga));
                 updateSubtotal(row);
             });

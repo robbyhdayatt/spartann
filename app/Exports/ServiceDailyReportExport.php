@@ -46,7 +46,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
     {
         $this->dealerCode = $dealerCode;
         $this->filterDate = $filterDate;
-        $this->dealers = Lokasi::where('tipe', 'DEALER')->pluck('nama_gudang', 'kode_gudang');
+        $this->dealers = Lokasi::where('tipe', 'DEALER')->pluck('nama_lokasi', 'kode_lokasi');
     }
 
     // Binder: paksa beberapa kolom ke string (KTP(L), Telepon(O), No Rangka(R), Parts No.(V))

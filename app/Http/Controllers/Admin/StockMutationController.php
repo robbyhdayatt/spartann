@@ -24,8 +24,8 @@ class StockMutationController extends Controller
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where(function($q) use ($user) {
-                $q->where('gudang_asal_id', $user->gudang_id)
-                  ->orWhere('gudang_tujuan_id', $user->gudang_id);
+                $q->where('lokasi_asal_id', $user->lokasi_id)
+                  ->orWhere('lokasi_tujuan_id', $user->lokasi_id);
             });
         }
 
@@ -40,12 +40,12 @@ class StockMutationController extends Controller
         $user = Auth::user();
 
         if ($user->hasRole(['SA', 'PIC', 'MA'])) {
-            $lokasiAsal = Lokasi::where('is_active', true)->orderBy('nama_gudang')->get();
+            $lokasiAsal = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         } else {
-            $lokasiAsal = Lokasi::where('id', $user->gudang_id)->get();
+            $lokasiAsal = Lokasi::where('id', $user->lokasi_id)->get();
         }
 
-        $lokasiTujuan = Lokasi::where('is_active', true)->orderBy('nama_gudang')->get();
+        $lokasiTujuan = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
 
         return view('admin.stock_mutations.create', compact('lokasiAsal', 'lokasiTujuan'));
     }
@@ -58,19 +58,19 @@ class StockMutationController extends Controller
 
         $validated = $request->validate([
             'part_id' => 'required|exists:parts,id',
-            'gudang_asal_id' => 'required|exists:lokasi,id',
-            'gudang_tujuan_id' => 'required|exists:lokasi,id|different:gudang_asal_id',
+            'lokasi_asal_id' => 'required|exists:lokasi,id',
+            'lokasi_tujuan_id' => 'required|exists:lokasi,id|different:lokasi_asal_id',
             'jumlah' => 'required|integer|min:1',
             'keterangan' => 'nullable|string',
         ]);
 
-        $lokasiAsal = Lokasi::find($validated['gudang_asal_id']);
-        $lokasiTujuan = Lokasi::find($validated['gudang_tujuan_id']);
+        $lokasiAsal = Lokasi::find($validated['lokasi_asal_id']);
+        $lokasiTujuan = Lokasi::find($validated['lokasi_tujuan_id']);
         if ($lokasiAsal->tipe === 'DEALER' && $lokasiTujuan->tipe === 'PUSAT') {
             return back()->with('error', 'Mutasi dari Dealer ke Gudang Pusat tidak diizinkan.')->withInput();
         }
 
-        $totalStock = InventoryBatch::where('gudang_id', $validated['gudang_asal_id'])
+        $totalStock = InventoryBatch::where('lokasi_id', $validated['lokasi_asal_id'])
             ->where('part_id', $validated['part_id'])
             ->sum('quantity');
 
@@ -101,7 +101,7 @@ class StockMutationController extends Controller
          try {
                DB::transaction(function () use ($stockMutation) {
                    $jumlahToMutate = $stockMutation->jumlah;
-                   $totalStock = InventoryBatch::where('gudang_id', $stockMutation->gudang_asal_id)
+                   $totalStock = InventoryBatch::where('lokasi_id', $stockMutation->lokasi_asal_id)
                          ->where('part_id', $stockMutation->part_id)
                          ->sum('quantity');
 
@@ -109,7 +109,7 @@ class StockMutationController extends Controller
                        throw new \Exception('Stok tidak mencukupi. Stok tersedia: ' . $totalStock);
                    }
 
-                   $batches = InventoryBatch::where('gudang_id', $stockMutation->gudang_asal_id)
+                   $batches = InventoryBatch::where('lokasi_id', $stockMutation->lokasi_asal_id)
                          ->where('part_id', $stockMutation->part_id)
                          ->where('quantity', '>', 0)
                          ->orderBy('created_at', 'asc')
@@ -128,14 +128,14 @@ class StockMutationController extends Controller
 
                        StockMovement::create([
                            'part_id' => $stockMutation->part_id,
-                           'gudang_id' => $stockMutation->gudang_asal_id,
+                           'lokasi_id' => $stockMutation->lokasi_asal_id,
                            'rak_id' => $batch->rak_id,
                            'jumlah' => -$stokKeluar,
                            'stok_sebelum' => $stokSebelum,
                            'stok_sesudah' => $batch->quantity,
                            'referensi_type' => get_class($stockMutation),
                            'referensi_id' => $stockMutation->id,
-                           'keterangan' => 'Mutasi Keluar ke ' . $stockMutation->lokasiTujuan->kode_gudang,
+                           'keterangan' => 'Mutasi Keluar ke ' . $stockMutation->lokasiTujuan->kode_lokasi,
                            'user_id' => Auth::id(),
                        ]);
 
@@ -190,7 +190,7 @@ class StockMutationController extends Controller
 
     public function getPartsWithStock(Lokasi $lokasi)
     {
-        $partIds = InventoryBatch::where('gudang_id', $lokasi->id)
+        $partIds = InventoryBatch::where('lokasi_id', $lokasi->id)
             ->where('quantity', '>', 0)
             ->pluck('part_id')
             ->unique();
@@ -202,11 +202,11 @@ class StockMutationController extends Controller
     public function getPartStockDetails(Request $request)
     {
         $request->validate([
-            'gudang_id' => 'required|exists:lokasi,id',
+            'lokasi_id' => 'required|exists:lokasi,id',
             'part_id' => 'required|exists:parts,id',
         ]);
 
-        $totalStock = InventoryBatch::where('gudang_id', $request->gudang_id)
+        $totalStock = InventoryBatch::where('lokasi_id', $request->lokasi_id)
             ->where('part_id', $request->part_id)
             ->sum('quantity');
 

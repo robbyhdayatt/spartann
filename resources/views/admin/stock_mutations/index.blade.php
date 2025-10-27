@@ -45,8 +45,8 @@
                     <td class="text-center">{{ $mutation->jumlah }}</td>
                     <td>
                         {{-- PERUBAHAN: Menggunakan relasi baru --}}
-                        <i class="fas fa-arrow-up text-danger"></i> {{ $mutation->lokasiAsal->nama_gudang }}<br>
-                        <i class="fas fa-arrow-down text-success"></i> {{ $mutation->lokasiTujuan->nama_gudang }}
+                        <i class="fas fa-arrow-up text-danger"></i> {{ $mutation->lokasiAsal->nama_lokasi }}<br>
+                        <i class="fas fa-arrow-down text-success"></i> {{ $mutation->lokasiTujuan->nama_lokasi }}
                     </td>
                     <td class="text-center">
                         @if($mutation->status == 'PENDING_APPROVAL') <span class="badge badge-warning">Menunggu Persetujuan</span>
