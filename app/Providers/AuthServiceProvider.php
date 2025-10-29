@@ -100,6 +100,8 @@ class AuthServiceProvider extends ServiceProvider
 
         // --- LAPORAN & MARKETING ---
         Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC']));
+        Gate::define('view-global-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
+        Gate::define('view-purchase-journal', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG']));
         Gate::define('manage-marketing', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
 
         // --- AKSES KHUSUS KEPALA CABANG (READ-ONLY) ---

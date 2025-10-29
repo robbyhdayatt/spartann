@@ -54,7 +54,7 @@ class HomeController extends Controller
                 break;
 
             case 'SLS': // Sales
-            case 'CS':  // Counter Sales
+            // case 'CS':  // Counter Sales
                 $viewName = 'dashboards._sales';
                 $data = $this->getSalesData($user);
                 break;
@@ -138,21 +138,31 @@ class HomeController extends Controller
 
     private function getSalesData($user)
     {
-        $salesTarget = SalesTarget::where('user_id', $user->id)->where('bulan', now()->month)->where('tahun', now()->year)->first();
+        $salesTarget = SalesTarget::where('user_id', $user->id)
+            ->where('bulan', now()->month)
+            ->where('tahun', now()->year)
+            ->first();
+
         $targetAmount = $salesTarget ? $salesTarget->target_amount : 0;
 
         $achievedAmount = Penjualan::where('sales_id', $user->id)
             ->whereMonth('tanggal_jual', now()->month)
             ->whereYear('tanggal_jual', now()->year)
-            ->sum('total_harga');
+            ->sum('total_harga'); // Asumsi pencapaian berdasarkan total_harga, ganti ke subtotal jika perlu
 
         $achievementPercentage = ($targetAmount > 0) ? (($achievedAmount / $targetAmount) * 100) : 0;
 
-        // PERBAIKAN: Menambahkan kembali logika untuk mengambil data insentif
-        $incentive = Incentive::where('user_id', $user->id)
-            ->where('periode', now()->startOfMonth()->format('Y-m-d'))
-            ->first();
-        $incentiveAmount = $incentive->jumlah_insentif ?? 0;
+        // ++ PERBAIKAN LOGIKA INSENTIF ++
+        // Hitung insentif secara real-time, jangan baca dari database
+        $jumlahInsentif = 0;
+        if ($achievementPercentage >= 100) {
+            $jumlahInsentif = $achievedAmount * 0.02; // 2%
+        } elseif ($achievementPercentage >= 80) {
+            $jumlahInsentif = $achievedAmount * 0.01; // 1%
+        }
+        // Gunakan variabel yang baru dihitung
+        $incentiveAmount = $jumlahInsentif;
+        // ++ AKHIR PERBAIKAN ++
 
         $recentSales = Penjualan::where('sales_id', $user->id)->latest()->limit(5)->get();
 

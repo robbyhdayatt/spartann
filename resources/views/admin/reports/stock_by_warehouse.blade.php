@@ -1,22 +1,24 @@
 @extends('adminlte::page')
 
-@section('title', 'Laporan Stok per Gudang')
+@section('title', 'Laporan Stok per Lokasi') {{-- DIUBAH --}}
 
 @section('plugins.Datatables', true)
 @section('plugins.Select2', true)
 
 @section('content_header')
-    <h1>Laporan Stok per Gudang</h1>
+    <h1>Laporan Stok per Lokasi</h1> {{-- DIUBAH --}}
 @stop
 
 @section('content')
 @php
-    $isKepalaGudang = Auth::user()->jabatan->nama_jabatan === 'Kepala Gudang';
+    // Logika untuk menentukan siapa yang bisa mem-filter (SA, PIC, MA)
+    // Selain peran ini (misal KG, KC), mereka akan otomatis melihat lokasi mereka.
+    $canFilter = Auth::user()->hasRole(['SA', 'PIC', 'MA']);
 @endphp
 
-<div class="card">
-    {{-- Form Filter hanya ditampilkan jika BUKAN Kepala Gudang --}}
-    @unless($isKepalaGudang)
+{{-- Form Filter hanya ditampilkan jika user BISA mem-filter --}}
+@if($canFilter)
+<div class="card card-outline card-primary">
     <div class="card-header">
         <h3 class="card-title">Filter Laporan</h3>
     </div>
@@ -25,12 +27,17 @@
             <div class="row align-items-end">
                 <div class="col-md-4">
                     <div class="form-group">
-                        <label for="gudang_id">Pilih Gudang</label>
-                        <select name="gudang_id" id="gudang_id" class="form-control select2" required>
-                            <option value="">-- Pilih Gudang --</option>
-                            @foreach ($gudangs as $gudang)
-                                <option value="{{ $gudang->id }}" {{ optional($selectedGudang)->id == $gudang->id ? 'selected' : '' }}>
-                                    {{ $gudang->nama_gudang }}
+                        {{-- DIUBAH: Label dan ID --}}
+                        <label for="lokasi_id">Pilih Lokasi (Gudang / Dealer)</label>
+                        {{-- DIUBAH: name, id --}}
+                        <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
+                            <option value="">-- Pilih Lokasi --</option>
+                            {{-- DIUBAH: Variabel $lokasiList (dari Controller) --}}
+                            @foreach ($lokasiList as $lokasi)
+                                {{-- DIUBAH: Variabel $selectedLokasi (dari Controller) --}}
+                                <option value="{{ $lokasi->id }}" {{ optional($selectedLokasi)->id == $lokasi->id ? 'selected' : '' }}>
+                                    {{-- DIUBAH: Tampilkan tipe dan nama lokasi --}}
+                                    [{{ $lokasi->tipe }}] - {{ $lokasi->nama_lokasi }} ({{ $lokasi->kode_lokasi }})
                                 </option>
                             @endforeach
                         </select>
@@ -44,22 +51,24 @@
             </div>
         </form>
     </div>
-    @endunless
 </div>
+@endif
 
-{{-- Tabel Hasil akan ditampilkan jika ada data atau jika login sebagai Kepala Gudang --}}
-@if($inventoryItems->isNotEmpty() || $isKepalaGudang)
+{{-- Tabel Hasil akan ditampilkan jika ada data ATAU jika login sebagai staf (non-filter) --}}
+@if($inventoryItems->isNotEmpty() || !$canFilter)
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">
             Rincian Stok Part Tersedia
-            @if($selectedGudang)
-                di {{ $selectedGudang->nama_gudang }}
+            {{-- DIUBAH: Variabel $selectedLokasi --}}
+            @if($selectedLokasi)
+                di {{ $selectedLokasi->nama_lokasi }}
             @endif
         </h3>
-        @if($selectedGudang)
+        @if($selectedLokasi)
         <div class="card-tools">
-            <a href="{{ route('admin.reports.stock-by-warehouse.export', ['gudang_id' => $selectedGudang->id]) }}" class="btn btn-sm btn-success">
+            {{-- DIUBAH: Parameter route ke lokasi_id --}}
+            <a href="{{ route('admin.reports.stock-by-warehouse.export', ['lokasi_id' => $selectedLokasi->id]) }}" class="btn btn-sm btn-success">
                 <i class="fas fa-file-excel"></i> Export
             </a>
         </div>
@@ -84,9 +93,9 @@
                         <tr>
                             <td>{{ $item->part->kode_part }}</td>
                             <td>{{ $item->part->nama_part }}</td>
-                            <td>{{ $item->part->brand->nama_brand }}</td>
-                            <td>{{ $item->part->category->nama_kategori }}</td>
-                            <td>{{ $item->rak->kode_rak }}</td>
+                            <td>{{ $item->part->brand->nama_brand ?? 'N/A' }}</td>
+                            <td>{{ $item->part->category->nama_kategori ?? 'N/A' }}</td>
+                            <td>{{ $item->rak->kode_rak ?? 'N/A' }}</td>
                             <td class="text-right">{{ $item->quantity }}</td>
                             <td>{{ $item->part->satuan }}</td>
                         </tr>
@@ -94,7 +103,8 @@
                 </tbody>
             </table>
         @else
-            <p class="text-center mt-4">Tidak ada data stok untuk gudang ini.</p>
+             {{-- DIUBAH: Teks "gudang" menjadi "lokasi" --}}
+            <p class="text-center mt-4">Tidak ada data stok untuk lokasi ini.</p>
         @endif
     </div>
 </div>
@@ -127,7 +137,8 @@
             "responsive": true,
             "lengthChange": true,
             "autoWidth": false,
-        });
+            "buttons": ["excel", "pdf", "print", "colvis"]
+        }).buttons().container().appendTo('#stock-table_wrapper .col-md-6:eq(0)');
     });
 </script>
 @stop

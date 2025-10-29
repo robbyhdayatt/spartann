@@ -36,23 +36,23 @@
             <table id="inventory-table" class="table table-bordered table-striped">
                 <thead>
                     <tr>
-                        <th>Gudang</th>
+                        <th>Lokasi</th>
                         <th>Part</th>
                         <th>Rak</th>
                         <th class="text-right">Stok</th>
-                        <th class="text-right">Harga Beli Rata-Rata</th>
+                        <th class="text-right">Harga Satuan</th>
                         <th class="text-right">Subtotal Nilai</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($inventoryDetails as $item)
                     <tr>
-                        <td>{{ $item->gudang->nama_gudang }}</td>
+                        <td>{{ $item->lokasi->nama_lokasi }}</td>
                         <td>{{ $item->part->nama_part }} ({{ $item->part->kode_part }})</td>
                         <td>{{ $item->rak->nama_rak }} ({{ $item->rak->kode_rak }})</td>
                         <td class="text-right">{{ $item->quantity }}</td>
-                        <td class="text-right">{{ number_format($item->part->harga_beli_rata_rata, 0, ',', '.') }}</td>
-                        <td class="text-right font-weight-bold">{{ number_format($item->quantity * $item->part->harga_beli_rata_rata, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($item->part->harga_satuan, 0, ',', '.') }}</td>
+                        <td class="text-right font-weight-bold">{{ number_format($item->quantity * $item->part->harga_satuan, 0, ',', '.') }}</td>
                     </tr>
                     @empty
                     <tr>

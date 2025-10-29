@@ -17,18 +17,20 @@
         </div>
         <div class="card-body">
             <form action="{{ route('admin.reports.stock-card') }}" method="GET">
-                {{-- PERBAIKAN 1: Logika untuk user Kepala Gudang --}}
+
                 @php
                     $user = Auth::user();
-                    $isKepalaGudang = $user->jabatan->nama_jabatan === 'Kepala Gudang';
+                    // Cek apakah user BISA mem-filter lokasi (SA, PIC, MA)
+                    $canFilterLokasi = $user->hasRole(['SA', 'PIC', 'MA']);
                 @endphp
+
                 <div class="row align-items-end">
                     {{-- Filter Part --}}
                     <div class="col-md-4">
                         <div class="form-group">
-                            <label>Spare Part</label>
+                            <label>Spare Part <span class="text-danger">*</span></label>
                             <select name="part_id" id="part_id" class="form-control" required>
-                                <option></option> {{-- Placeholder --}}
+                                <option></option> {{-- Placeholder untuk Select2 --}}
                                 @foreach($parts as $part)
                                     <option value="{{ $part->id }}" {{ request('part_id') == $part->id ? 'selected' : '' }}>
                                         {{ $part->nama_part }} ({{ $part->kode_part }})
@@ -38,21 +40,22 @@
                         </div>
                     </div>
 
-                    {{-- Filter Gudang --}}
+                    {{-- Filter Lokasi --}}
                     <div class="col-md-3">
                         <div class="form-group">
-                            <label>Gudang</label>
-                            @if($isKepalaGudang)
-                                {{-- Jika Kepala Gudang, tampilkan sebagai teks biasa --}}
-                                <input type="text" class="form-control" value="{{ $user->gudang->nama_gudang }}" readonly>
-                                <input type="hidden" name="gudang_id" value="{{ $user->gudang_id }}">
+                            <label>Lokasi</label>
+                            @if(!$canFilterLokasi && $user->lokasi)
+                                {{-- Jika Staf (KG/KC), tampilkan sebagai teks biasa --}}
+                                <input type="text" class="form-control" value="{{ $user->lokasi->nama_lokasi }}" readonly>
+                                <input type="hidden" name="lokasi_id" value="{{ $user->lokasi_id }}">
                             @else
-                                {{-- Jika bukan, tampilkan dropdown --}}
-                                <select name="gudang_id" id="gudang_id" class="form-control">
-                                    <option value="">Semua Gudang</option>
-                                    @foreach($gudangs as $gudang)
-                                         <option value="{{ $gudang->id }}" {{ request('gudang_id') == $gudang->id ? 'selected' : '' }}>
-                                            {{ $gudang->nama_gudang }}
+                                {{-- Jika SA/PIC/MA, tampilkan dropdown --}}
+                                <select name="lokasi_id" id="lokasi_id" class="form-control">
+                                    <option value="">Semua lokasi</option>
+                                    @foreach($lokasis as $lokasi)
+                                        {{-- Gunakan $selectedLokasiId dari controller --}}
+                                        <option value="{{ $lokasi->id }}" {{ $selectedLokasiId == $lokasi->id ? 'selected' : '' }}>
+                                            [{{ $lokasi->tipe }}] {{ $lokasi->nama_lokasi }}
                                         </option>
                                     @endforeach
                                 </select>
@@ -76,9 +79,10 @@
 
                     <div class="col-md-1">
                         <div class="form-group">
-                             <button type="submit" class="btn btn-primary btn-block">
+                            <label>&nbsp;</label>
+                            <button type="submit" class="btn btn-primary btn-block">
                                 <i class="fas fa-search"></i>
-                             </button>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -102,7 +106,7 @@
                 <thead>
                     <tr>
                         <th>Tanggal</th>
-                        <th>Gudang</th>
+                        <th>Lokasi</th>
                         <th>Keterangan</th>
                         <th class="text-right">Jumlah</th>
                         <th class="text-right">Stok Sebelum</th>
@@ -114,7 +118,7 @@
                     @forelse($movements as $move)
                     <tr>
                         <td>{{ $move->created_at->format('d-m-Y H:i') }}</td>
-                        <td>{{ $move->gudang->nama_gudang ?? 'N/A' }}</td>
+                        <td>{{ $move->lokasi->nama_lokasi ?? 'N/A' }}</td>
                         <td>{{ $move->keterangan }}</td>
                         <td class="text-right font-weight-bold {{ $move->jumlah > 0 ? 'text-success' : 'text-danger' }}">
                             {{ ($move->jumlah > 0 ? '+' : '') . $move->jumlah }}
@@ -125,7 +129,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="7" class="text-center">Tidak ada riwayat pergerakan untuk part ini pada periode yang dipilih.</td>
+                        <td colspan="7" class="text-center">Tidak ada riwayat pergerakan untuk part ini pada periode dan lokasi yang dipilih.</td>
                     </tr>
                     @endforelse
                 </tbody>
@@ -135,7 +139,7 @@
     @endif
 @stop
 
-{{-- PERBAIKAN 2: Tambahkan CSS kustom untuk Select2 --}}
+{{-- (CSS Anda sudah benar) --}}
 @push('css')
 <style>
     .select2-container .select2-selection--single {
@@ -160,16 +164,16 @@
             placeholder: "--- Pilih Spare Part ---"
         });
 
-        // Hanya inisialisasi Select2 untuk gudang jika elemennya ada (bukan readonly input)
-        if ($('#gudang_id').is('select')) {
-            $('#gudang_id').select2();
+        // Hanya inisialisasi Select2 untuk lokasi jika elemennya ada (bukan readonly input)
+        if ($('#lokasi_id').is('select')) {
+            $('#lokasi_id').select2();
         }
 
         // Inisialisasi DataTable
         $('#stock-table').DataTable({
             "responsive": true,
             "lengthMenu": [ [10, 25, 50, -1], [10, 25, 50, "All"] ],
-            "order": [[ 0, "asc" ]]
+            "order": [[ 0, "asc" ]] // Urutkan berdasarkan tanggal (kolom pertama)
         });
     });
 </script>

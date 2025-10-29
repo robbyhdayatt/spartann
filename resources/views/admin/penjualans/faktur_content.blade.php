@@ -2,26 +2,62 @@
 use App\Helpers\NumberHelper;
 @endphp
 
-{{-- CSS Kustom untuk Faktur Penjualan --}}
+{{-- CSS Kustom untuk Faktur Penjualan PDF --}}
 <style>
     .faktur-box {
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 12px;
+        /* Font tebal dan jelas, ukuran dikecilkan agar muat */
+        font-family: 'Helvetica', 'Arial', sans-serif;
+        font-weight: bold;
+        font-size: 10px; /* Ukuran font dikecilkan agar muat di 24x12cm */
         color: #000;
-        padding: 20px;
+        /* Beri sedikit padding agar tidak terlalu mentok */
+        padding: 10px;
     }
-    .faktur-box table { width: 100%; line-height: 1.2; text-align: left; border-collapse: collapse; }
-    .faktur-box table td, .faktur-box table th { padding: 2px 4px; vertical-align: top; }
-    .header-main { font-size: 16px; font-weight: bold; }
-    .header-sub { font-size: 14px; font-weight: bold; }
-    .items-table th, .items-table td { border: 1px solid #000; padding: 4px; }
-    .items-table th { text-align: center; }
+    .faktur-box table {
+        width: 100%;
+        line-height: 1.3;
+        text-align: left;
+        border-collapse: collapse;
+    }
+    .faktur-box table td, .faktur-box table th {
+        padding: 2px 4px;
+        vertical-align: top;
+    }
+    .header-main { font-size: 14px; font-weight: bold; }
+    .header-sub { font-size: 12px; font-weight: bold; }
+
+    /* Tabel Item */
+    .items-table {
+        margin-top: 10px;
+        border: none; /* Hapus border luar tabel */
+    }
+    .items-table thead th {
+        /* Garis pembatas utuh di header tabel */
+        border: none;
+        border-bottom: 1px solid #000; /* Garis utuh di header */
+        padding: 4px;
+        text-align: center;
+    }
+    .items-table tbody tr {
+        /* Tidak ada garis di setiap baris part */
+        border-bottom: none;
+    }
+    .items-table td {
+        border: none; /* Hapus border sel */
+        padding: 3px 4px; /* Perkecil padding baris */
+    }
+
     .text-right { text-align: right; }
     .text-center { text-align: center; }
     .font-bold { font-weight: bold; }
-    .signature-box { margin-top: 20px; }
-    hr { border: none; border-top: 1px solid #000; margin: 5px 0; }
-    .dotted-hr { border: none; border-top: 1px dotted #000; margin: 3px 0; }
+    .signature-box { margin-top: 15px; }
+
+    /* Garis utuh (bukan putus-putus) */
+    hr {
+        border: none;
+        border-top: 1px solid #000;
+        margin: 5px 0;
+    }
 </style>
 
 <div class="faktur-box">
@@ -30,12 +66,13 @@ use App\Helpers\NumberHelper;
         <tr>
             <td style="width: 60%;"><div class="header-main">FAKTUR PENJUALAN</div></td>
             <td style="width: 40%;" class="text-right">
-                <div class="header-sub">SENTRAL YAMAHA LAMPUNG</div>
-                <div>JL. IKAN TENGGIRI NO. 24</div>
+                {{-- Ambil dari $penjualan->lokasi --}}
+                <div class="header-sub">{{ $penjualan->lokasi->nama_lokasi ?? 'N/A' }}</div>
+                <div>{{ $penjualan->lokasi->alamat ?? 'Alamat tidak tersedia' }}</div>
             </td>
         </tr>
     </table>
-    <hr>
+    <hr> {{-- Ini akan menjadi garis utuh --}}
 
     {{-- Info Pelanggan & Transaksi --}}
     <table style="width: 100%;">
@@ -55,20 +92,20 @@ use App\Helpers\NumberHelper;
             <td><strong>Sales</strong></td>
             <td>: {{ $penjualan->sales->nama ?? 'N/A' }}</td>
             <td><strong>Lokasi</strong></td>
-            <td>: {{ $penjualan->lokasi->nama_gudang }}</td>
+            <td>: {{ $penjualan->lokasi->kode_lokasi }}</td> {{-- Tampilkan kode lokasi --}}
         </tr>
     </table>
 
     {{-- Tabel Item --}}
-    <table class="items-table" style="margin-top: 10px;">
+    <table class="items-table">
         <thead>
             <tr>
                 <th style="width: 3%;">No.</th>
                 <th style="width: 15%;">Kode Part</th>
                 <th>Nama Part</th>
-                <th style="width: 15%;">Harga Satuan</th>
-                <th style="width: 8%;">Qty</th>
-                <th style="width: 15%;">Total</th>
+                <th style="width: 15%;" class="text-right">Harga Satuan</th>
+                <th style="width: 8%;" class="text-center">Qty</th>
+                <th style="width: 15%;" class="text-right">Total</th>
             </tr>
         </thead>
         <tbody>
@@ -77,18 +114,23 @@ use App\Helpers\NumberHelper;
                     <td class="text-center">{{ $loop->iteration }}</td>
                     <td>{{ $detail->part->kode_part ?? '' }}</td>
                     <td>{{ $detail->part->nama_part ?? '' }}</td>
-                    <td class="text-right">@rupiah($detail->harga_jual)</td>
+                    {{-- ++ PERBAIKAN: Ganti @rupiah ke PHP standar ++ --}}
+                    <td class="text-right">{{ 'Rp ' . number_format($detail->harga_jual, 0, ',', '.') }}</td>
                     <td class="text-center">{{ $detail->qty_jual }}</td>
-                    <td class="text-right">@rupiah($detail->subtotal)</td>
+                    <td class="text-right">{{ 'Rp ' . number_format($detail->subtotal, 0, ',', '.') }}</td>
                 </tr>
             @empty
                 <tr><td colspan="6" class="text-center">Tidak ada item detail.</td></tr>
             @endforelse
+             {{-- Baris pembatas utuh HANYA di akhir tabel --}}
+             <tr>
+                 <td colspan="6" style="padding: 1px; border-bottom: 1px solid #000;"></td>
+             </tr>
         </tbody>
     </table>
 
     {{-- Footer --}}
-    <table style="margin-top: 10px;">
+    <table style="margin-top: 5px;">
         <tr>
             <td style="width: 60%; vertical-align: top;">
                 <div class="font-bold">Harga sudah termasuk PPN 11%</div>
@@ -97,13 +139,14 @@ use App\Helpers\NumberHelper;
                 <table style="width: 100%;">
                     <tr>
                         <td class="font-bold">Grand Total:</td>
-                        <td class="text-right font-bold">@rupiah($penjualan->total_harga)</td>
+                        {{-- ++ PERBAIKAN: Ganti @rupiah ke PHP standar ++ --}}
+                        <td class="text-right font-bold">{{ 'Rp ' . number_format($penjualan->total_harga, 0, ',', '.') }}</td>
                     </tr>
                 </table>
             </td>
         </tr>
     </table>
-    
+
     {{-- Tiga Tanda Tangan --}}
     <table class="signature-box" style="width: 100%;">
         <tr>
@@ -112,9 +155,9 @@ use App\Helpers\NumberHelper;
             <td class="text-center" style="width: 34%;">Kasir,</td>
         </tr>
         <tr>
-            <td class="text-center" style="padding-top: 40px;">(__________________)</td>
-            <td class="text-center" style="padding-top: 40px;">(__________________)</td>
-            <td class="text-center" style="padding-top: 40px;">(__________________)</td>
+            <td class="text-center" style="padding-top: 30px;">(__________________)</td>
+            <td class="text-center" style="padding-top: 30px;">(__________________)</td>
+            <td class="text-center" style="padding-top: 30px;">(__________________)</td>
         </tr>
     </table>
 </div>

@@ -28,27 +28,43 @@
             </div>
         </div>
     </div>
-     {{-- Info Box Persentase --}}
-    <div class="col-md-6 col-lg-3">
+    {{-- Info Box Persentase --}}
+   <div class="col-md-6 col-lg-3">
         <div class="info-box">
             <span class="info-box-icon bg-info"><i class="fas fa-percentage"></i></span>
             <div class="info-box-content">
                 <span class="info-box-text">Pencapaian Target</span>
-                 <div class="progress" style="height: 20px;">
-                    <div class="progress-bar" role="progressbar" style="width: {{ $data['achievementPercentage'] }}%;" aria-valuenow="{{ $data['achievementPercentage'] }}" aria-valuemin="0" aria-valuemax="100">
-                        <strong>{{ number_format($data['achievementPercentage'], 1) }}%</strong>
+
+                {{-- ++ PERBAIKAN PADA PROGRESS BAR ++ --}}
+                <div class="progress" style="height: 20px; background-color: #e9ecef;">
+                    {{-- 1. Tambah kelas bg-info --}}
+                    {{-- 2. Batasi lebar visual maks 100% menggunakan min() --}}
+                    <div class="progress-bar bg-info"
+                         role="progressbar"
+                         style="width: {{ min($data['achievementPercentage'], 100) }}%;"
+                         aria-valuenow="{{ $data['achievementPercentage'] }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+
+                        {{-- 3. Tambah kelas text-dark agar teks terlihat --}}
+                        <strong class="text-dark">{{ number_format($data['achievementPercentage'], 1) }}%</strong>
                     </div>
                 </div>
+                {{-- ++ AKHIR PERBAIKAN ++ --}}
+
             </div>
         </div>
     </div>
-     {{-- Info Box Insentif --}}
-    <div class="col-md-6 col-lg-3">
-        <div class="info-box bg-gradient-warning">
-            <span class="info-box-icon"><i class="fas fa-gift"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Perolehan Insentif</span>
-                <span class="info-box-number">Rp {{ number_format($data['incentiveAmount'], 0, ',', '.') }}</span>
+
+        {{-- Info Box Insentif --}}
+        <div class="col-md-6 col-lg-3">
+            <div class="info-box bg-gradient-warning">
+                <span class="info-box-icon"><i class="fas fa-gift"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Perolehan Insentif</span>
+                    {{-- Ini sekarang akan menampilkan nilai yang dihitung real-time --}}
+                    <span class="info-box-number">Rp {{ number_format($data['incentiveAmount'], 0, ',', '.') }}</span>
+                </div>
             </div>
         </div>
     </div>

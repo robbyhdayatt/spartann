@@ -16,7 +16,7 @@
             </div>
             <div class="col-md-6">
                 <p><strong>Referensi Faktur:</strong> <a href="{{ route('admin.penjualans.show', $salesReturn->penjualan_id) }}">{{ $salesReturn->penjualan->nomor_faktur }}</a></p>
-                <p><strong>Gudang Penerima:</strong> {{ $salesReturn->gudang->nama_gudang }}</p>
+                <p><strong>lokasi Penerima:</strong> {{ $salesReturn->lokasi->nama_lokasi }}</p>
                 <p><strong>Dibuat oleh:</strong> {{ $salesReturn->createdBy->nama }}</p>
             </div>
         </div>

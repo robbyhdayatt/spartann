@@ -95,6 +95,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('penjualans/{penjualan}/print', [PenjualanController::class, 'print'])->name('penjualans.print');
     Route::get('penjualans/{penjualan}/pdf', [PdfController::class, 'penjualan'])->name('penjualans.pdf');
 
+
     Route::get('incentives/targets', [IncentiveController::class, 'targets'])->name('incentives.targets');
     Route::post('incentives/targets', [IncentiveController::class, 'storeTarget'])->name('incentives.targets.store');
     Route::get('incentives/report', [IncentiveController::class, 'report'])->name('incentives.report');
@@ -108,15 +109,20 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     // Route dengan parameter setelahnya
     Route::get('services/{service}', [ServiceController::class, 'show'])->name('services.show');
     Route::get('services/{id}/pdf', [ServiceController::class, 'downloadPDF'])->name('services.pdf');
-    
+
     // === LAPORAN ===
     Route::get('reports/stock-card', [ReportController::class, 'stockCard'])->name('reports.stock-card');
     Route::get('reports/stock-by-warehouse', [ReportController::class, 'stockByWarehouse'])->name('reports.stock-by-warehouse');
     Route::get('reports/stock-report', [ReportController::class, 'stockReport'])->name('reports.stock-report');
     Route::get('reports/sales-journal', [ReportController::class, 'salesJournal'])->name('reports.sales-journal');
+    Route::get('reports/sales-journal/export', [ReportController::class, 'exportSalesJournal'])->name('reports.sales-journal.export');
     Route::get('reports/purchase-journal', [ReportController::class, 'purchaseJournal'])->name('reports.purchase-journal');
     Route::get('reports/inventory-value', [ReportController::class, 'inventoryValue'])->name('reports.inventory-value');
     Route::get('reports/rekomendasi-po', [ReportController::class, 'rekomendasiPo'])->name('reports.rekomendasi-po');
+    Route::get('reports/stock-card/export', [ReportController::class, 'exportStockCard'])->name('reports.stock-card.export');
+    Route::get('reports/purchase-journal/export', [ReportController::class, 'exportPurchaseJournal'])->name('reports.purchase-journal.export');
+    Route::get('reports/inventory-value/export', [ReportController::class, 'exportInventoryValue'])->name('reports.inventory-value.export');
+    Route::get('reports/stock-by-warehouse/export', [ReportController::class, 'exportStockByWarehouse'])->name('reports.stock-by-warehouse.export');
 
     // === CONVERT ===
     // Rute Resource standar untuk Convert
@@ -131,7 +137,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::get('api/parts/{part}/stock', [PenjualanController::class, 'getPartStockDetails'])->name('api.part.stock');
         Route::get('/api/lokasi/{lokasi}/raks', [StockAdjustmentController::class, 'getRaksByLokasi'])->name('api.lokasi.raks');
         Route::get('api/lokasi/{lokasi}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
-        Route::get('api/receivings/{receiving}/failed-items', [PurchaseReturnController::class, 'getFailedItems'])->name('api.receivings.failed-items');
+        Route::get('/api/receivings/{receiving}/failed-items', [PurchaseReturnController::class, 'getFailedItems'])->name('api.receivings.failed-items');
         Route::get('/api/penjualans/{penjualan}/returnable-items', [SalesReturnController::class, 'getReturnableItems'])->name('penjualans.returnable-items');
         Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
         Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');

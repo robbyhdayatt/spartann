@@ -11,7 +11,7 @@
 @section('content')
 <div class="card">
     <div class="card-header">
-        <h3 class="card-title">Rincian Stok Part di Semua Gudang dan Rak</h3>
+        <h3 class="card-title">Rincian Stok Part di Semua lokasi dan Rak</h3>
     </div>
     <div class="card-body">
         <table id="stock-report-table" class="table table-bordered table-striped">
@@ -19,7 +19,7 @@
                 <tr>
                     <th>Kode Part</th>
                     <th>Nama Part</th>
-                    <th>Gudang</th>
+                    <th>lokasi</th>
                     <th>Rak</th>
                     <th class="text-right">Stok Tersedia</th>
                 </tr>
@@ -30,7 +30,7 @@
                 <tr>
                     <td>{{ $item->part->kode_part ?? 'N/A' }}</td>
                     <td>{{ $item->part->nama_part ?? 'N/A' }}</td>
-                    <td>{{ $item->gudang->nama_gudang ?? 'N/A' }}</td>
+                    <td>{{ $item->lokasi->nama_lokasi ?? 'N/A' }}</td>
                     <td>{{ $item->rak->kode_rak ?? 'N/A' }}</td>
                     <td class="text-right font-weight-bold">{{ $item->quantity }}</td>
                 </tr>

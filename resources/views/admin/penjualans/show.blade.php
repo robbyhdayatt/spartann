@@ -11,7 +11,11 @@
     <div class="card-header no-print">
         <div class="d-flex justify-content-between">
             <a href="{{ route('admin.penjualans.index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Kembali</a>
-            <a href="{{ route('admin.penjualans.print', $penjualan) }}" target="_blank" class="btn btn-primary"><i class="fas fa-print"></i> Cetak Faktur</a>
+
+            {{-- ++ PERBAIKAN DI BARIS INI ++ --}}
+            <a href="{{ route('admin.penjualans.pdf', $penjualan) }}" class="btn btn-danger"><i class="fas fa-file-pdf"></i> Export PDF</a>
+            {{-- ++ AKHIR PERBAIKAN ++ --}}
+
         </div>
     </div>
     <div class="card-body">

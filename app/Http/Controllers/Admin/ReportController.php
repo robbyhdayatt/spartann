@@ -22,19 +22,25 @@ use App\Exports\StockCardExport;
 
 class ReportController extends Controller
 {
-    public function stockCard(Request $request)
+public function stockCard(Request $request)
     {
-        // Ambil semua part dan lokasi untuk pilihan dropdown
+        /** @var \App\Models\User $user */
         $user = Auth::user();
-        $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
-        $movements = collect(); // Buat koleksi kosong secara default
+        $movements = collect(); // Koleksi kosong by default
+        $lokasis = collect(); // Koleksi lokasi kosong by default
+        $selectedLokasiId = $request->input('lokasi_id'); // Ambil dari request
 
-        // Cek jika user adalah Kepala lokasi
-        if ($user->jabatan->nama_jabatan === 'Kepala lokasi') {
+        // Cek jika user BUKAN admin/manajer (yaitu, staf lokasi seperti KG atau KC)
+        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             // Jika ya, paksa pilihan lokasi hanya lokasinya sendiri
-            $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
+            if ($user->lokasi_id) {
+                $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
+                // Paksa ID lokasi filter ke lokasi user, abaikan input request
+                $selectedLokasiId = $user->lokasi_id;
+            }
+            // Jika mereka tidak punya lokasi_id, $lokasis akan tetap kosong
         } else {
-            // Jika bukan, tampilkan semua lokasi
+            // Jika SA/PIC/MA, tampilkan semua lokasi
             $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
 
@@ -44,46 +50,53 @@ class ReportController extends Controller
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
 
-        // Jika ada part yang dipilih dari form, cari datanya
+        // Hanya jalankan query jika part_id diisi
         if ($request->filled('part_id')) {
             $query = StockMovement::where('part_id', $request->part_id)
-                ->with(['lokasi', 'user']) // Eager load untuk efisiensi
+                ->with(['lokasi', 'user']) // Eager load
                 ->whereDate('created_at', '>=', $startDate)
                 ->whereDate('created_at', '<=', $endDate);
 
-            // Tambahkan filter lokasi jika dipilih
-            if ($request->filled('lokasi_id')) {
-                $query->where('lokasi_id', $request->lokasi_id);
+            // Terapkan filter lokasi
+            if ($selectedLokasiId) {
+                $query->where('lokasi_id', $selectedLokasiId);
             }
-
-            // Jika yang login Kepala lokasi, paksa filter lokasi
-            if ($user->jabatan->nama_jabatan === 'Kepala lokasi') {
-                $query->where('lokasi_id', $user->lokasi_id);
-            }
+            // Jika SA/PIC/MA dan tidak memilih lokasi, mereka melihat semua (tidak ada filter lokasi)
 
             $movements = $query->oldest()->get();
         }
 
-        return view('admin.reports.stock_card', compact('parts', 'lokasis', 'movements', 'startDate', 'endDate'));
+        // Kirim $selectedLokasiId ke view untuk menandai <option> yang dipilih
+        return view('admin.reports.stock_card', compact('parts', 'lokasis', 'movements', 'startDate', 'endDate', 'selectedLokasiId'));
     }
 
-    public function stockByWarehouse(Request $request)
+public function stockByWarehouse(Request $request)
     {
+        /** @var \App\Models\User $user */
         $user = Auth::user();
         $inventoryItems = collect();
-        $lokasis = collect();
-        $selectedlokasi = null;
 
-        if ($user->jabatan->nama_jabatan === 'Kepala lokasi') {
-            $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
+        // ++ PERBAIKAN: Ubah nama variabel $lokasis menjadi $lokasiList ++
+        $lokasiList = collect();
+        // ++ PERBAIKAN: Ubah nama variabel $selectedlokasi menjadi $selectedLokasi (L besar) ++
+        $selectedLokasi = null;
+
+        // ++ PERBAIKAN: Gunakan hasRole untuk cek jabatan KG atau KC ++
+        // (Asumsi 'Kepala lokasi' di database Anda sesuai dengan role 'KG' atau 'KC')
+        if ($user->hasRole(['KG', 'KC'])) {
+            // Jika user adalah Kepala Gudang/Cabang, hanya tampilkan lokasi mereka
+            $lokasiList = Lokasi::where('id', $user->lokasi_id)->get();
+            // Langsung set request agar data mereka tampil
             if (!$request->filled('lokasi_id')) {
                 $request->merge(['lokasi_id' => $user->lokasi_id]);
             }
         } else {
-            $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
+            // Jika SA, PIC, MA, dll., tampilkan semua lokasi
+            $lokasiList = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
 
         if ($request->filled('lokasi_id')) {
+            // ++ PERBAIKAN: Pastikan konsisten menggunakan $selectedLokasi (L besar) ++
             $selectedLokasi = Lokasi::find($request->lokasi_id);
 
             $inventoryItems = InventoryBatch::select(
@@ -98,14 +111,20 @@ class ReportController extends Controller
                     'part:id,kode_part,nama_part,satuan,brand_id,category_id',
                     'part.brand:id,nama_brand',
                     'part.category:id,nama_kategori',
-                    'rak:id,kode_rak'
+                    'rak:id,kode_rak',
+                    'lokasi:id,nama_lokasi,kode_lokasi' // Tambahkan relasi lokasi
                 ])
                 ->groupBy('part_id', 'rak_id', 'lokasi_id')
                 ->get()
                 ->sortBy('part.nama_part');
         }
 
-        return view('admin.reports.stock_by_warehouse', compact('inventoryItems', 'lokasis', 'selectedlokasi'));
+        // ++ PERBAIKAN: Sesuaikan nama variabel di compact() agar cocok dengan view ++
+        return view('admin.reports.stock_by_warehouse', compact(
+            'inventoryItems',
+            'lokasiList',     // Kirim sebagai 'lokasiList'
+            'selectedLokasi'  // Kirim sebagai 'selectedLokasi'
+        ));
     }
 
     public function exportStockByWarehouse(Request $request)
@@ -122,15 +141,24 @@ class ReportController extends Controller
 
     public function salesJournal(Request $request)
     {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
 
-        $salesDetails = PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'part'])
-            ->whereHas('penjualan', function ($query) use ($startDate, $endDate) {
-                $query->whereBetween('tanggal_jual', [$startDate, $endDate]);
-            })
-            ->latest()
-            ->get();
+        // Mulai query dasar
+        $query = PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'part'])
+            ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $user) {
+                $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
+
+                // ++ TAMBAHKAN FILTER LOKASI INI ++
+                // Jika user bukan Manajer ke atas (artinya KG/KC) dan punya lokasi_id
+                if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
+                    $q->where('lokasi_id', $user->lokasi_id);
+                }
+            });
+
+        $salesDetails = $query->latest()->get();
 
         return view('admin.reports.sales_journal', compact('salesDetails', 'startDate', 'endDate'));
     }
@@ -146,15 +174,26 @@ class ReportController extends Controller
 
     public function purchaseJournal(Request $request)
     {
+        $this->authorize('view-purchase-journal');
+
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
 
-        $purchaseDetails = ReceivingDetail::with(['receiving.purchaseOrder.supplier', 'part'])
-            ->whereHas('receiving', function ($query) use ($startDate, $endDate) {
-                $query->whereBetween('tanggal_terima', [$startDate, $endDate]);
-            })
-            ->latest()
-            ->get();
+        // Mulai query dasar
+        $query = ReceivingDetail::with(['receiving.purchaseOrder.supplier', 'part'])
+            ->whereHas('receiving', function ($q) use ($startDate, $endDate, $user) {
+                $q->whereBetween('tanggal_terima', [$startDate, $endDate]);
+
+                // ++ TAMBAHKAN FILTER LOKASI INI ++
+                // (Relasi: ReceivingDetail -> Receiving -> lokasi_id)
+                if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
+                    $q->where('lokasi_id', $user->lokasi_id);
+                }
+            });
+
+        $purchaseDetails = $query->latest()->get();
 
         return view('admin.reports.purchase_journal', compact('purchaseDetails', 'startDate', 'endDate'));
     }
@@ -170,8 +209,9 @@ class ReportController extends Controller
 
     public function inventoryValue()
     {
-        // Mengambil data dari inventory_batches dan mengelompokkannya
-        $inventoryDetails = InventoryBatch::select(
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $inventoryQuery = InventoryBatch::select(
                 'part_id',
                 'lokasi_id',
                 'rak_id',
@@ -179,14 +219,17 @@ class ReportController extends Controller
             )
             ->where('quantity', '>', 0)
             ->with(['part', 'lokasi', 'rak'])
-            ->groupBy('part_id', 'lokasi_id', 'rak_id')
-            ->get();
+            ->groupBy('part_id', 'lokasi_id', 'rak_id');
 
-        // Menghitung total nilai persediaan
+        if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
+            $inventoryQuery->where('lokasi_id', $user->lokasi_id);
+        }
+
+        $inventoryDetails = $inventoryQuery->get();
+
         $totalValue = $inventoryDetails->sum(function($item) {
-            // Pastikan relasi part tidak null untuk menghindari error
             if ($item->part) {
-                return $item->quantity * $item->part->harga_beli_rata_rata;
+                return $item->quantity * $item->part->harga_satuan;
             }
             return 0;
         });
