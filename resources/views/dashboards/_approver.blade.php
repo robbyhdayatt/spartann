@@ -1,6 +1,6 @@
 <div class="row">
     <div class="col-12">
-        <h4>Tugas Persetujuan di {{ $data['lokasi']->nama_gudang }}</h4>
+        <h4>Tugas Persetujuan di {{ $data['lokasi']->nama_lokasi }}</h4>
         <hr>
     </div>
 

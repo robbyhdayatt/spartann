@@ -28,8 +28,8 @@
                         <td>{{ $user->jabatan->nama_jabatan ?? 'N/A' }}</td>
                     </tr>
                     <tr>
-                        <th>Gudang (Jika Ada)</th>
-                        <td>{{ $user->gudang->nama_gudang ?? 'Tidak terikat gudang' }}</td>
+                        <th>lokasi (Jika Ada)</th>
+                        <td>{{ $user->lokasi->nama_lokasi ?? 'Tidak terikat lokasi' }}</td>
                     </tr>
                 </tbody>
             </table>
