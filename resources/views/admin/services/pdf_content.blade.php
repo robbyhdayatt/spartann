@@ -13,30 +13,21 @@ if ($service->lokasi) {
 }
 $npwpDealer = 'NPWP No.: ';
 
-// ++ LOGIKA UNTUK SINGLE PAGE & BOLD FONT (PENYESUAIAN) ++
+// ... (Logika $conditionalStyles dan $baseFontSize Anda tetap sama) ...
 $totalDetailsCount = $service->details->count();
-// Naikkan threshold sedikit, misal kembali ke 15 atau 16
-$itemThreshold = 16; // <<<< NAIKKAN SEDIKIT (misal: 15 atau 16)
-
-// Ukuran font dasar 14px sepertinya sudah cukup, mari pertahankan
-$baseFontSize = '14px'; // Tetap 14px
-$itemRowPadding = '2px 4px'; // Padding Y X
+$itemThreshold = 16;
+$baseFontSize = '14px';
+$itemRowPadding = '2px 4px';
 $lineHeight = '1.25';
-$signaturePaddingTop = '40px'; // Jarak TTD default
+$signaturePaddingTop = '40px';
 
 if ($totalDetailsCount > $itemThreshold) {
-    // Kurangi agresivitas faktor pengecilan, mungkin 0.02 atau 0.018?
-    // Juga, set batas minimum reduction factor agar tidak terlalu kecil (misal 0.75 -> ~10.5px)
-    $reductionFactor = max(0.75, 1 - (($totalDetailsCount - $itemThreshold) * 0.018)); // <<<< Ubah 0.025 jadi 0.018
-    $baseFontSize = floor(14 * $reductionFactor) . 'px'; // Hitung dari 14px
-    // Tetap gunakan padding vertikal kecil
-    $itemRowPadding = '1px 3px'; // <<<< Padding Y sedikit lebih besar dari 0px
-    // Line height sedikit lebih besar saat dikecilkan
-    $lineHeight = '1.15'; // <<<< Naikkan sedikit dari 1.1
-    $signaturePaddingTop = '25px'; // Jarak TTD saat item banyak
+    $reductionFactor = max(0.75, 1 - (($totalDetailsCount - $itemThreshold) * 0.018));
+    $baseFontSize = floor(14 * $reductionFactor) . 'px';
+    $itemRowPadding = '1px 3px';
+    $lineHeight = '1.15';
+    $signaturePaddingTop = '25px';
 }
-
-// Persiapan style kondisional (sudah termasuk $signaturePaddingTop)
 $conditionalStyles = '';
 if ($totalDetailsCount > $itemThreshold) {
     $conditionalStyles = "
@@ -45,13 +36,10 @@ if ($totalDetailsCount > $itemThreshold) {
         .signature-box td[style*=\"padding-top\"] { padding-top: {$signaturePaddingTop} !important; }
     ";
 } else {
-     $conditionalStyles = "
-        /* Tidak perlu !important jika ini style default */
+   $conditionalStyles = "
         .signature-box td[style*=\"padding-top\"] { padding-top: {$signaturePaddingTop}; }
     ";
 }
-// ++ END LOGIKA ++
-
 @endphp
 
 {{-- CSS Kustom untuk Faktur --}}
@@ -60,7 +48,7 @@ if ($totalDetailsCount > $itemThreshold) {
     *, *:before, *:after { box-sizing: inherit; }
 
     .invoice-box {
-        font-family: 'DejaVu Sans Mono', monospace; /* Tetap pakai DejaVu Sans Mono */
+        font-family: 'DejaVu Sans Mono', monospace;
         font-size: {{ $baseFontSize }};
         color: #000;
         padding: 0 !important;
@@ -74,7 +62,7 @@ if ($totalDetailsCount > $itemThreshold) {
         text-align: left;
         border-collapse: collapse;
     }
-    /* ... (CSS lainnya sebagian besar tetap sama) ... */
+    /* ... (CSS lainnya tetap sama) ... */
      .invoice-box table:not(.info-table):not(.items-table) td,
     .invoice-box table:not(.info-table):not(.items-table) th {
         padding: 2px 4px;
@@ -86,14 +74,13 @@ if ($totalDetailsCount > $itemThreshold) {
 
     .invoice-box table.info-table { line-height: 1.1 !important; margin-top: 5px !important; margin-bottom: 5px !important; }
     .invoice-box table.info-table td { padding-top: 1px !important; padding-bottom: 1px !important; padding-left: 5px; padding-right: 5px; vertical-align: top; border: none !important; }
-    /* .invoice-box table.info-table td:not(:first-child) { font-weight: normal; } */
 
     .items-table th {
-        padding: {{ $itemRowPadding }}; /* Padding dinamis */
+        padding: {{ $itemRowPadding }};
         vertical-align: top; text-align: center; border: none !important; border-bottom: 1px solid #000 !important; padding-bottom: 4px; font-weight: bold;
     }
     .items-table td {
-         padding: {{ $itemRowPadding }}; /* Padding dinamis */
+         padding: {{ $itemRowPadding }};
          vertical-align: top;
          border: none !important;
     }
@@ -102,10 +89,6 @@ if ($totalDetailsCount > $itemThreshold) {
          font-weight: bold; text-align: left; padding: 4px 4px 2px 4px;
          border-top: 1px solid #000 !important; background-color: transparent; font-size: 1.05em;
     }
-    /* Optional: non-bold value item */
-    /* .items-table tbody td { font-weight: normal; } */
-    /* .items-table tbody td.text-right,
-       .items-table tbody td.text-center { font-weight: normal; } */
 
     hr, .dotted-hr { display: none; }
     .text-right { text-align: right; }
@@ -113,14 +96,10 @@ if ($totalDetailsCount > $itemThreshold) {
     .font-bold { font-weight: bold; }
     .terbilang-box { padding: 3px 5px; font-style: italic; font-weight: normal; }
 
-    .signature-box { margin-top: 15px; } /* Margin atas default */
-
-    /* Terapkan style kondisional */
+    .signature-box { margin-top: 15px; }
     {!! $conditionalStyles !!}
-
 </style>
 
-{{-- Konten HTML (Header, Info, Tabel Item, Footer, Tanda Tangan) TETAP SAMA seperti sebelumnya --}}
 <div class="invoice-box">
     {{-- Header --}}
     <table>
@@ -149,8 +128,8 @@ if ($totalDetailsCount > $itemThreshold) {
              <td>: {{ $service->invoice_no ?? '-' }}</td>
              <td><strong>Alamat</strong></td>
              <td>: -</td>
-             <td><strong>No. Mesin</strong></td>
-             <td>: -</td>
+             {{-- ++ PERMINTAAN 1: Hapus "No. Mesin" ++ --}}
+             <td colspan="2"></td> {{-- Dikosongkan --}}
          </tr>
          <tr>
              <td><strong>Order No.</strong></td>
@@ -170,18 +149,15 @@ if ($totalDetailsCount > $itemThreshold) {
              <td style="width: 15%;"><strong>YSS Code</strong></td>
              <td style="width: 19%;">: {{ $service->yss ?? '-' }}</td>
          </tr>
-         <tr>
-             <td><strong>Members</strong></td>
-             <td>: -</td>
-             <td colspan="4"></td>
-         </tr>
+         {{-- ++ PERMINTAAN 2: Hapus Baris "Members" ++ --}}
+         {{-- Baris <tr>...Members...</tr> dihapus --}}
     </table>
 
     {{-- Tabel Item --}}
+    {{-- ... (Bagian Tabel Item tidak berubah, biarkan seperti aslinya) ... --}}
     <table class="items-table" style="margin-top: 8px;">
         <thead>
             <tr>
-                {{-- Lebar kolom dari percobaan sebelumnya --}}
                 <th style="width: 3%;">No.</th>
                 <th style="width: 22%;">Package</th>
                 <th style="width: 15%;">Nomor Item</th>
@@ -237,6 +213,8 @@ if ($totalDetailsCount > $itemThreshold) {
             @endif
         </tbody>
     </table>
+    {{-- ... (Akhir Tabel Item) ... --}}
+
 
     {{-- Footer --}}
     <table style="margin-top: 8px;">
@@ -245,7 +223,7 @@ if ($totalDetailsCount > $itemThreshold) {
                 <div><strong>Harga sudah termasuk PPN 11%</strong></div>
                 <div>
                     <strong>Terbilang:</strong>
-                    <div class="terbilang-box"># {{ trim(NumberHelper::terbilang($service->total_payment ?? 0)) }} Rupiah #</div>
+                    <div class="terbilang-box"># {{ trim(NumberHelper::terbilang($service->total_amount ?? 0)) }} Rupiah #</div>
                 </div>
             </td>
             <td style="width: 40%; vertical-align: top;">
@@ -253,7 +231,10 @@ if ($totalDetailsCount > $itemThreshold) {
                      @php
                          $totalService = $service->details->where('item_category', 'JASA')->sum(function($d){ return ($d->quantity ?? 0) * ($d->price ?? 0); });
                          $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->sum(function($d){ return ($d->quantity ?? 0) * ($d->price ?? 0); });
-                         $grandTotal = $service->total_payment ?? 0;
+                         $grandTotal = $service->total_amount ?? 0;
+                         // Ambil nilai DP dan Benefit
+                         $totalDP = $service->total_down_payment ?? 0;
+                         $benefitAmount = $service->benefit_amount ?? 0;
                      @endphp
                      <tr>
                          <td><strong>Total Service:</strong></td>
@@ -263,6 +244,19 @@ if ($totalDetailsCount > $itemThreshold) {
                          <td><strong>Total Sparepart:</strong></td>
                          <td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td>
                      </tr>
+
+                     {{-- ++ PERMINTAAN 3: Tambah Total Down Payment (DP) ++ --}}
+                     <tr>
+                         <td><strong>Total Down Payment (DP):</strong></td>
+                         <td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td>
+                     </tr>
+
+                     {{-- ++ PERMINTAAN 4: Tambah Benefit Amount ++ --}}
+                     <tr>
+                         <td><strong>Benefit Amount:</strong></td>
+                         <td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td>
+                     </tr>
+
                      <tr>
                          <td><strong>Grand Total:</strong></td>
                          <td class="text-right"><strong>Rp {{ number_format($grandTotal, 0, ',', '.') }}</strong></td>
@@ -280,7 +274,6 @@ if ($totalDetailsCount > $itemThreshold) {
             <td class="text-center" style="width: 34%;">Kasir,</td>
         </tr>
         <tr>
-            {{-- Padding atas dikontrol oleh $conditionalStyles dan $signaturePaddingTop --}}
             <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
             <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
             <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
