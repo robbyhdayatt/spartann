@@ -43,10 +43,21 @@ class ConvertController extends Controller
     {
         // Validasi berdasarkan input form BARU
         $validator = Validator::make($request->all(), [
-            'nama_job' => ['required', 'string', 'max:255', Rule::unique($this->convertsMainTable)], // Validasi ke tabel fisik
+            'nama_job' => 'required|string|max:255', // <-- Hapus aturan unique dari sini
             'quantity' => 'required|integer|min:1',
             'keterangan' => 'nullable|string',
-            'part_code' => 'required|string|exists:barangs,part_code', // Validasi ke tabel barangs
+            'part_code' => [
+                'required',
+                'string',
+                'exists:barangs,part_code',
+                // Tambahkan aturan unique untuk kombinasi nama_job dan part_code
+                Rule::unique($this->convertsMainTable)->where(function ($query) use ($request) {
+                    return $query->where('nama_job', $request->nama_job);
+                }),
+            ],
+        ], [
+            // Tambahkan pesan error kustom
+            'part_code.unique' => 'Part ini sudah terdaftar untuk nama job tersebut.'
         ]);
 
         if ($validator->fails()) {
@@ -62,12 +73,12 @@ class ConvertController extends Controller
                 'part_code' => $request->part_code,
                 'created_at' => now(),
                 'updated_at' => now()
-                // 'is_active' => true // Jika Anda menambahkan kolom ini
             ]);
 
             return response()->json(['success' => 'Data convert berhasil ditambahkan.']);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Gagal menambahkan data convert. Silakan coba lagi.'], 500);
+            // Tampilkan error database jika ada (termasuk unique constraint lama)
+            return response()->json(['error' => 'Gagal menambahkan data convert. ' . $e->getMessage()], 500);
         }
     }
 
@@ -86,10 +97,21 @@ class ConvertController extends Controller
     public function update(Request $request, $id) // Terima $id, bukan model
     {
          $validator = Validator::make($request->all(), [
-            'nama_job' => ['required', 'string', 'max:255', Rule::unique($this->convertsMainTable)->ignore($id)], // Validasi ke tabel fisik
+            'nama_job' => 'required|string|max:255', // <-- Hapus aturan unique dari sini
             'quantity' => 'required|integer|min:1',
             'keterangan' => 'nullable|string',
-            'part_code' => 'required|string|exists:barangs,part_code', // Validasi ke tabel barangs
+            'part_code' => [
+                'required',
+                'string',
+                'exists:barangs,part_code',
+                // Tambahkan aturan unique untuk kombinasi nama_job dan part_code, abaikan ID saat ini
+                Rule::unique($this->convertsMainTable)->where(function ($query) use ($request) {
+                    return $query->where('nama_job', $request->nama_job);
+                })->ignore($id),
+            ],
+        ], [
+            // Tambahkan pesan error kustom
+            'part_code.unique' => 'Part ini sudah terdaftar untuk nama job tersebut.'
         ]);
 
         if ($validator->fails()) {
@@ -108,7 +130,7 @@ class ConvertController extends Controller
 
             return response()->json(['success' => 'Data convert berhasil diperbarui.']);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Gagal memperbarui data convert. Silakan coba lagi.'], 500);
+            return response()->json(['error' => 'Gagal memperbarui data convert. ' . $e->getMessage()], 500);
         }
     }
 

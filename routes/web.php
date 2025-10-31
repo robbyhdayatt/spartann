@@ -153,6 +153,6 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
         // Route::get('api/get-fifo-batches', [PenjualanController::class, 'getFifoBatches'])->name('api.get-fifo-batches');
         Route::get('/parts/search', [PartController::class, 'search'])->name('parts.search');
-        Route::get('api/get-convert-items', [PenjualanController::class, 'getConvertItems'])->name('api.get-convert-items');
+        Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
     });
 

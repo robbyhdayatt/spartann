@@ -35,10 +35,10 @@ class PenjualanDetail extends Model
     }
 
     /**
-     * ++ BARU: Relasi ke item Convert ++
+     * ++ BARU: Relasi ke item Barang ++
      */
-    public function convert()
+    public function barang()
     {
-        return $this->belongsTo(Convert::class);
+        return $this->belongsTo(Barang::class);
     }
 }

@@ -300,7 +300,7 @@ return [
             'submenu' => [
                 ['text' => 'Buat Transaksi', 'icon' => 'fas fa-fw fa-plus-circle', 'route' => 'admin.penjualans.create', 'can' => 'create-sale'],
                 ['text' => 'Riwayat Penjualan', 'icon' => 'fas fa-fw fa-history', 'route' => 'admin.penjualans.index'],
-                ['text' => 'Retur Penjualan', 'icon' => 'fas fa-fw fa-exchange-alt', 'route' => 'admin.sales-returns.index', 'can' => 'create-sale'],
+                // ['text' => 'Retur Penjualan', 'icon' => 'fas fa-fw fa-exchange-alt', 'route' => 'admin.sales-returns.index', 'can' => 'create-sale'],
             ],
         ],
 

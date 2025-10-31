@@ -15,7 +15,7 @@
         <div class="card-body">
             {{-- Tampilkan Error Validasi & Session --}}
             @if(session('error'))
-                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     {{ session('error') }}
                     <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
@@ -100,82 +100,78 @@
                 <table class="table table-bordered table-sm" id="items-table">
                     <thead class="thead-light">
                         <tr>
-                            {{-- ++ DIUBAH: Lebar kolom disesuaikan --}}
-                            <th style="width: 55%;">Item / Jasa (dari tabel Converts) <span class="text-danger">*</span></th>
-                            {{-- ++ DIHAPUS: Kolom Stok Tersedia --}}
-                            <th style="width: 10%;" class="text-center">Qty</th>
+                            {{-- === DIUBAH === --}}
+                            <th style="width: 55%;">Item / Barang <span class="text-danger">*</span></th>
+                            <th style="width: 10%;" class="text-center">Qty <span class="text-danger">*</span></th>
                             <th style="width: 15%;" class="text-right">Harga Satuan</th>
                             <th style="width: 15%;" class="text-right">Subtotal</th>
                             <th style="width: 50px;">Aksi</th>
                         </tr>
                     </thead>
                     <tbody id="items-container">
-                         {{-- Render baris dari old input jika ada --}}
-                         @if(old('items'))
+                        {{-- === SELURUH BLOK INI DIUBAH === --}}
+                        @if(old('items'))
                              @foreach(old('items') as $index => $item)
-                                 @php
-                                     $convert = !empty($item['convert_id']) ? \App\Models\Convert::find($item['convert_id']) : null;
-                                    //  $namaJob = $convert ? $convert->nama_job : 'N/A';
-                                     $partName = $convert ? $convert->part_name : 'N/A';
-                                     $qty = $convert ? $convert->quantity : 0;
-                                     $harga = $convert ? $convert->harga_jual : 0;
-                                     $subtotal = $harga * $qty;
-                                 @endphp
-                                 <tr class="item-row">
-                                     <td>
-                                         <select name="items[{{ $index }}][convert_id]" class="form-control item-select select2-lazy" required>
-                                              @if($convert)
-                                              <option value="{{ $convert->id }}" selected
-                                                  data-qty="{{ $qty }}"
-                                                  data-harga="{{ $harga }}">
-                                                  {{ $partName }}
-                                              </option>
-                                              @endif
-                                         </select>
-                                         @error("items.{$index}.convert_id") <span class="invalid-feedback d-block">{{$message}}</span> @enderror
-                                     </td>
-                                     {{-- ++ DIHAPUS: Kolom Stok Tersedia --}}
-                                     <td>
-                                         <input type="number" class="form-control qty-input text-center" value="{{ $qty }}" readonly>
-                                     </td>
-                                     <td>
-                                         <input type="text" class="form-control harga-text text-right" value="{{ number_format($harga, 0, ',', '.') }}" readonly>
-                                     </td>
-                                     <td>
-                                         <input type="text" class="form-control subtotal-text text-right" value="{{ number_format($subtotal, 0, ',', '.') }}" readonly>
-                                     </td>
-                                     <td>
-                                         <button type="button" class="btn btn-danger btn-sm remove-item-btn"><i class="fas fa-trash"></i></button>
-                                     </td>
-                                 </tr>
+                                @php
+                                    $barang = !empty($item['barang_id']) ? \App\Models\Barang::find($item['barang_id']) : null;
+                                    $partName = $barang ? "{$barang->part_name} ({$barang->part_code}) - {$barang->merk}" : 'N/A';
+                                    $qty = $item['qty'] ?? 1; // Ambil qty dari old input
+                                    $harga = $barang ? $barang->harga_jual : 0;
+                                    $subtotal = $harga * $qty;
+                                @endphp
+                                <tr class="item-row">
+                                    <td>
+                                        <select name="items[{{ $index }}][barang_id]" class="form-control item-select select2-lazy" required>
+                                            @if($barang)
+                                            <option value="{{ $barang->id }}" selected
+                                                data-harga="{{ $harga }}">
+                                                {{ $partName }}
+                                            </option>
+                                            @endif
+                                        </select>
+                                        @error("items.{$index}.barang_id") <span class="invalid-feedback d-block">{{$message}}</span> @enderror
+                                    </td>
+                                    <td>
+                                        <input type="number" name="items[{{ $index }}][qty]" class="form-control qty-input text-center" value="{{ $qty }}" min="1" required>
+                                        @error("items.{$index}.qty") <span class="invalid-feedback d-block">{{$message}}</span> @enderror
+                                    </td>
+                                    <td>
+                                        <input type="text" class="form-control harga-text text-right" value="{{ number_format($harga, 0, ',', '.') }}" readonly>
+                                    </td>
+                                    <td>
+                                        <input type="text" class="form-control subtotal-text text-right" value="{{ number_format($subtotal, 0, ',', '.') }}" readonly>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-danger btn-sm remove-item-btn"><i class="fas fa-trash"></i></button>
+                                    </td>
+                                </tr>
                              @endforeach
-                         @else
-                             {{-- Baris pertama jika tidak ada old input --}}
-                             <tr class="item-row">
-                                 <td>
-                                     <select name="items[0][convert_id]" class="form-control item-select select2-lazy" required>
-                                         <option value="">Pilih Item/Jasa</option>
-                                     </select>
-                                 </td>
-                                 {{-- ++ DIHAPUS: Kolom Stok Tersedia --}}
-                                 <td>
-                                     <input type="number" class="form-control qty-input text-center" value="0" readonly>
-                                 </td>
-                                 <td>
-                                     <input type="text" class="form-control harga-text text-right" value="0" readonly>
-                                 </td>
-                                 <td>
-                                     <input type="text" class="form-control subtotal-text text-right" value="0" readonly>
-                                 </td>
-                                 <td>
-                                     <button type="button" class="btn btn-danger btn-sm remove-item-btn"><i class="fas fa-trash"></i></button>
-                                 </td>
-                             </tr>
-                         @endif
+                        @else
+                            {{-- Baris pertama jika tidak ada old input --}}
+                            <tr class="item-row">
+                                <td>
+                                    <select name="items[0][barang_id]" class="form-control item-select select2-lazy" required>
+                                        <option value="">Pilih Item/Barang</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="number" name="items[0][qty]" class="form-control qty-input text-center" value="1" min="1" required>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control harga-text text-right" value="0" readonly>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control subtotal-text text-right" value="0" readonly>
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-danger btn-sm remove-item-btn"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>
+                        @endif
+                        {{-- === AKHIR BLOK PERUBAHAN === --}}
                     </tbody>
                     <tfoot>
                         <tr>
-                            {{-- ++ DIUBAH: Colspan disesuaikan --}}
                             <td colspan="4">
                                 <button type="button" class="btn btn-secondary btn-sm" id="add-item-btn">
                                     <i class="fas fa-plus"></i> Tambah Baris
@@ -208,11 +204,17 @@
 </div>
 @stop
 
+{{--
+================================================================================
+SECTION JAVASCRIPT ('js')
+================================================================================
+--}}
 @section('js')
 <script>
 $(document).ready(function() {
     let itemIndex = {{ count(old('items', [])) > 0 ? count(old('items', [])) : 1 }};
-    let convertsDataCache = {};
+    // === DIUBAH ===
+    let barangsDataCache = {};
     let activeLokasiId = null;
 
     $('.select2bs4').select2({ theme: 'bootstrap4' });
@@ -220,15 +222,18 @@ $(document).ready(function() {
     function initSelect2(element) {
          $(element).select2({
             theme: 'bootstrap4',
-            placeholder: 'Pilih Item/Jasa',
+            // === DIUBAH ===
+            placeholder: 'Pilih Item/Barang',
             allowClear: true,
             ajax: {
-                url: `{{ route('admin.api.get-convert-items') }}`,
+                // === DIUBAH ===
+                url: `{{ route('admin.api.get-barang-items') }}`, // Pastikan route ini ada di web.php
                 dataType: 'json',
                 delay: 250,
                 processResults: function (data) {
-                    if (Object.keys(convertsDataCache).length === 0) {
-                         (data || []).forEach(item => convertsDataCache[item.id] = item.data);
+                    // === DIUBAH ===
+                    if (Object.keys(barangsDataCache).length === 0) {
+                         (data || []).forEach(item => barangsDataCache[item.id] = item.data);
                     }
                     return {
                         results: data
@@ -236,20 +241,12 @@ $(document).ready(function() {
                 },
                 cache: true
             }
-        });
+         });
     }
 
+    // Inisialisasi Select2 untuk semua baris yang sudah ada (termasuk dari old input)
     $('.select2-lazy').each(function() {
         initSelect2(this);
-        let selectedConvertId = $(this).val();
-        if(selectedConvertId) {
-             let option = $(this).find('option:selected');
-             let data = {
-                 quantity: option.data('qty'),
-                 harga_jual: option.data('harga')
-             };
-             updateRowData($(this).closest('tr'), data, false);
-        }
     });
 
     function formatRupiah(angka) {
@@ -270,38 +267,42 @@ $(document).ready(function() {
         $('#total-text').text(formatRupiah(subtotal));
     }
 
+    // === FUNGSI INI DIUBAH TOTAL ===
     function updateRowData(row, itemData, resetQty = true) {
          if (itemData) {
-             let qty = parseInt(itemData.quantity) || 0;
-             let harga = parseFloat(itemData.harga_jual) || 0;
-             let subtotal = qty * harga;
+            let harga = parseFloat(itemData.harga_jual) || 0;
+            row.find('.harga-text').val(formatRupiah(harga));
 
-             row.find('.qty-input').val(qty);
-             row.find('.harga-text').val(formatRupiah(harga));
-             row.find('.subtotal-text').val(formatRupiah(subtotal));
+            let qtyInput = row.find('.qty-input');
+            if (resetQty) {
+                qtyInput.val(1);
+            }
+
+            // Trigger 'change' pada input Qty untuk menghitung ulang subtotal baris
+            qtyInput.trigger('change');
+
          } else {
-             row.find('.qty-input').val('0');
-             row.find('.harga-text').val('0');
-             row.find('.subtotal-text').val('0');
+            row.find('.qty-input').val('0');
+            row.find('.harga-text').val('0');
+            row.find('.subtotal-text').val('0');
          }
-         calculateTotal();
-     }
+         // calculateTotal() akan dipanggil oleh event 'change' dari qtyInput
+    }
 
     // === EVENT LISTENERS ===
 
-    // 1. Tambah Baris
+    // 1. Tambah Baris (Template diubah)
     $('#add-item-btn').on('click', function() {
         let newIndex = itemIndex++;
         let newRow = `
             <tr class="item-row">
                 <td>
-                    <select name="items[${newIndex}][convert_id]" class="form-control item-select select2-lazy" required>
-                        <option value="">Pilih Item/Jasa</option>
+                    <select name="items[${newIndex}][barang_id]" class="form-control item-select select2-lazy" required>
+                        <option value="">Pilih Item/Barang</option>
                     </select>
                 </td>
-                {{-- ++ DIHAPUS: Kolom Stok Tersedia --}}
                 <td>
-                    <input type="number" class="form-control qty-input text-center" value="0" readonly>
+                    <input type="number" name="items[${newIndex}][qty]" class="form-control qty-input text-center" value="1" min="1" required>
                 </td>
                 <td>
                     <input type="text" class="form-control harga-text text-right" value="0" readonly>
@@ -318,7 +319,7 @@ $(document).ready(function() {
         initSelect2($(`#items-container tr:last-child .select2-lazy`));
     });
 
-    // 2. Hapus Baris
+    // 2. Hapus Baris (Tidak berubah)
     $('#items-container').on('click', '.remove-item-btn', function() {
         $(this).closest('tr').remove();
         calculateTotal();
@@ -332,37 +333,49 @@ $(document).ready(function() {
         if (selectedData && selectedData.data) {
             updateRowData(row, selectedData.data, true);
         }
-        else if (selectedData && selectedData.id && convertsDataCache[selectedData.id]) {
-             updateRowData(row, convertsDataCache[selectedData.id], true);
+        // === DIUBAH ===
+        else if (selectedData && selectedData.id && barangsDataCache[selectedData.id]) {
+             updateRowData(row, barangsDataCache[selectedData.id], true);
         }
     });
 
-    // 4. Saat Pilihan Item dikosongkan
-     $('#items-container').on('select2:unselect', '.item-select', function(e) {
+    // 4. Saat Pilihan Item dikosongkan (kode 'Hl' yang salah sudah dihapus)
+    $('#items-container').on('select2:unselect', '.item-select', function(e) {
         let row = $(this).closest('tr');
         updateRowData(row, null);
+        calculateTotal(); // Panggil calculateTotal saat mengosongkan
     });
 
-    // 5. Panggil kalkulasi total saat pertama kali load (untuk old input)
+    // === LISTENER BARU UNTUK QTY ===
+    // 5. Saat Qty diubah (baik ketik atau panah)
+    $('#items-container').on('change keyup', '.qty-input', function() {
+        let row = $(this).closest('tr');
+        let qty = parseInt($(this).val()) || 0;
+
+        // Validasi minimal qty
+        if (qty < 1) {
+            qty = 1;
+            $(this).val(1); // Set nilai di input field
+        }
+
+        let hargaText = row.find('.harga-text').val() || '0';
+        let harga = parseFloat(hargaText.replace(/[^0-9,-]+/g, '').replace(',', '.')) || 0;
+
+        let subtotal = qty * harga;
+        row.find('.subtotal-text').val(formatRupiah(subtotal));
+
+        calculateTotal(); // Hitung ulang total keseluruhan
+    });
+
+    // 6. Panggil kalkulasi total saat pertama kali load (untuk old input)
     calculateTotal();
 
-    // 6. Update data untuk baris old() input (jika ada)
+    // 7. Hapus logic `hasOldData` lama
+    // Inisialisasi baris pertama HANYA jika TIDAK ADA old data
     const hasOldData = {{ old('items') ? 'true' : 'false' }};
-    if (hasOldData) {
-         $('.item-row').each(function(){
-              let row = $(this);
-              let convertId = row.find('.item-select').val();
-              if(convertId){
-                   let option = row.find('option:selected');
-                   let data = {
-                       quantity: option.data('qty'),
-                       harga_jual: option.data('harga')
-                   };
-                   updateRowData(row, data, false);
-              }
-         });
-    } else {
-        // Inisialisasi baris pertama jika BUKAN old input
+    if (!hasOldData) {
+        // (baris pertama sudah ada di HTML, kita hanya perlu inisialisasi select2-nya)
+        // kode 'g' yang salah sudah dihapus
         initSelect2($('#items-container tr:first-child .select2-lazy'));
     }
 
@@ -370,6 +383,11 @@ $(document).ready(function() {
 </script>
 @stop
 
+{{--
+================================================================================
+SECTION CSS ('css')
+================================================================================
+--}}
 @section('css')
 <style>
     /* Mengatasi tampilan input readonly agar terlihat seperti teks biasa */
@@ -427,12 +445,12 @@ $(document).ready(function() {
     }
     /* Menyelaraskan teks yang dipilih (dan placeholder) */
     #items-table .select2-container--bootstrap4 .select2-selection--single .select2-selection__rendered {
-         padding-top: 0.25rem !important; /* Padding-top untuk form-sm */
-         line-height: 1.5;
-         padding-left: .5rem;
-         /* Pastikan placeholder juga terpengaruh */
-         margin-top: 0;
-         margin-bottom: 0;
+        padding-top: 0.25rem !important; /* Padding-top untuk form-sm */
+        line-height: 1.5;
+        padding-left: .5rem;
+        /* Pastikan placeholder juga terpengaruh */
+        margin-top: 0;
+        margin-bottom: 0;
     }
      /* Menyelaraskan panah dropdown */
      #items-table .select2-container--bootstrap4 .select2-selection--single .select2-selection__arrow {
@@ -444,33 +462,40 @@ $(document).ready(function() {
     }
     /* Menyelaraskan tombol 'x' (clear) */
      #items-table .select2-container--bootstrap4 .select2-selection--single .select2-selection__clear {
-         position: absolute;
-         top: 50%;
-         right: 1.75rem; /* Sesuaikan untuk -sm */
-         transform: translateY(-50%);
-         padding: 0;
-         margin: 0;
-         line-height: 1; /* Pastikan 'x' nya center */
+        position: absolute;
+        top: 50%;
+        right: 1.75rem; /* Sesuaikan untuk -sm */
+        transform: translateY(-50%);
+        padding: 0;
+        margin: 0;
+        line-height: 1; /* Pastikan 'x' nya center */
     }
 
     /* Gaya untuk input di dalam tabel */
      #items-table th, #items-table td {
-         vertical-align: middle;
+        vertical-align: middle;
     }
      #items-table .qty-input {
-         width: 100px;
-         text-align: center;
-         height: calc(1.8125rem + 2px);
-         padding: .25rem .5rem;
+        width: 100px;
+        text-align: center;
+        height: calc(1.8125rem + 2px);
+        padding: .25rem .5rem;
+        /* === CSS BARU: Hapus tampilan default browser untuk input number === */
+        -moz-appearance: textfield;
     }
-     /* Hapus style untuk stok-tersedia karena kolomnya dihapus */
+     #items-table .qty-input::-webkit-outer-spin-button,
+     #items-table .qty-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
      #items-table .harga-text, #items-table .subtotal-text {
-         background-color: #e9ecef;
-         border: none;
-         box-shadow: none;
-         text-align: right;
-         height: calc(1.8125rem + 2px);
-         padding: .25rem .5rem;
+        background-color: #e9ecef;
+        border: none;
+        box-shadow: none;
+        text-align: right;
+        height: calc(1.8125rem + 2px);
+        padding: .25rem .5rem;
     }
 </style>
 @stop

@@ -140,13 +140,13 @@ class ServiceImport implements OnEachRow, WithChunkReading
                         'service_category_code' => $serviceCategoryCode,
                         'service_package_name' => null,
                         'labor_cost_service' => 0,
-                        'item_code' => $convertData->original_part_code,
+                        'item_code' => $convertData->part_code,
                         'item_name' => $convertData->part_name,
                         'quantity' => $convertData->quantity,
                         'price' => $convertData->harga_jual,
                     ]);
                     $hasActivity = true;
-                    Log::info("Baris {$rowIndex}: Konversi berhasil untuk '{$servicePackageNameRaw}' menjadi PART '{$convertData->original_part_code}'.");
+                    Log::info("Baris {$rowIndex}: Konversi berhasil untuk '{$servicePackageNameRaw}' menjadi PART '{$convertData->part_code}'.");
                 } catch (\Exception $e) {
                     Log::error("Baris {$rowIndex}: Gagal membuat detail konversi untuk '{$servicePackageNameRaw}'. Error: " . $e->getMessage());
                     $this->skippedCount++;

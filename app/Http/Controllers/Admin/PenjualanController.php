@@ -7,7 +7,7 @@ use App\Models\Penjualan;
 use App\Models\Konsumen;
 use App\Models\Lokasi;
 use App\Models\User;
-use App\Models\Convert; // Model yang kita gunakan
+use App\Models\Barang; // Import model Barang
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -59,9 +59,6 @@ class PenjualanController extends Controller
         return view('admin.penjualans.create', compact('konsumens', 'userLokasi', 'allLokasi'));
     }
 
-    /**
-     * Menyimpan penjualan baru berdasarkan item dari tabel 'converts'.
-     */
     public function store(Request $request)
     {
         $this->authorize('create-sale');
@@ -71,10 +68,14 @@ class PenjualanController extends Controller
             'konsumen_id' => 'required|exists:konsumens,id',
             'tanggal_jual' => 'required|date',
             'items' => 'required|array|min:1',
-            'items.*.convert_id' => 'required|exists:converts,id',
+            // --- VALIDASI DIUBAH ---
+            'items.*.barang_id' => 'required|exists:barangs,id',
+            'items.*.qty' => 'required|integer|min:1',
         ], [
             'items.required' => 'Setidaknya satu item harus ditambahkan ke penjualan.',
-            'items.*.convert_id.required' => 'Item/Jasa harus dipilih pada semua baris.',
+            'items.*.barang_id.required' => 'Item/Barang harus dipilih pada semua baris.',
+            'items.*.qty.required' => 'Kuantitas (Qty) harus diisi pada semua baris.',
+            'items.*.qty.min' => 'Kuantitas (Qty) minimal 1.',
         ]);
 
         /** @var \App\Models\User $user */
@@ -98,46 +99,30 @@ class PenjualanController extends Controller
                 'created_by' => $user->id,
             ]);
 
-            $aggregatedItems = [];
+            // --- LOGIKA PENYIMPANAN DIUBAH (HAPUS AGREGASI) ---
             foreach ($validated['items'] as $item) {
-                $convertId = $item['convert_id'];
-                if (isset($aggregatedItems[$convertId])) {
-                     $aggregatedItems[$convertId]['count'] += 1;
-                } else {
-                    $convertObject = Convert::find($convertId);
-                    if (!$convertObject) {
-                         throw new \Exception("Item dengan ID {$convertId} tidak ditemukan.");
-                    }
-                    $aggregatedItems[$convertId] = [
-                        'convert_id' => $convertId,
-                        'count' => 1,
-                        'convert_object' => $convertObject
-                    ];
+                $barang = Barang::find($item['barang_id']);
+                if (!$barang) {
+                    throw new \Exception("Item dengan ID {$item['barang_id']} tidak ditemukan.");
                 }
-            }
 
-            foreach ($aggregatedItems as $convertId => $item) {
-                $convert = $item['convert_object'];
+                $qty = $item['qty'];
+                $hargaJual = $barang->harga_jual; // Ambil harga dari master barang
+                $subtotal = $hargaJual * $qty;
 
-                $qtyPerItem = $convert->quantity;
-                $hargaPerItem = $convert->harga_jual;
-                $itemSubtotal = $hargaPerItem * $qtyPerItem;
-
-                $totalCount = $item['count'];
-                $totalQty = $qtyPerItem * $totalCount;
-                $totalSubtotal = $itemSubtotal * $totalCount;
-
-                $totalSubtotalServer += $totalSubtotal;
+                $totalSubtotalServer += $subtotal;
 
                 $penjualan->details()->create([
-                    'convert_id' => $convert->id,
-                    'part_id' => null,
-                    'rak_id' => null,
-                    'qty_jual' => $totalQty,
-                    'harga_jual' => $hargaPerItem,
-                    'subtotal' => $totalSubtotal,
+                    'barang_id' => $barang->id,  // <-- BARU
+                    'convert_id' => null,     // <-- LAMA (null)
+                    'part_id' => null,        // <-- LAMA (null)
+                    'rak_id' => null,         // <-- LAMA (null)
+                    'qty_jual' => $qty,
+                    'harga_jual' => $hargaJual,
+                    'subtotal' => $subtotal,
                 ]);
             }
+            // --- AKHIR PERUBAHAN LOGIKA ---
 
             $penjualan->update([
                 'subtotal' => $totalSubtotalServer,
@@ -151,7 +136,7 @@ class PenjualanController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Store Penjualan (Convert) Gagal: " . $e->getMessage());
+            Log::error("Store Penjualan (Barang) Gagal: " . $e->getMessage()); // Pesan log diubah
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage())->withInput();
         }
     }
@@ -159,10 +144,11 @@ class PenjualanController extends Controller
     public function show(Penjualan $penjualan)
     {
         $this->authorize('view-sales');
-        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.convert']);
+        // --- UBAH 'details.convert' menjadi 'details.barang' ---
+        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.barang']);
 
         if ($penjualan->details->contains('part_id', '!=', null)) {
-             $penjualan->load('details.part', 'details.rak');
+            $penjualan->load('details.part', 'details.rak');
         }
 
         return view('admin.penjualans.show', compact('penjualan'));
@@ -175,7 +161,8 @@ class PenjualanController extends Controller
             'konsumen',
             'lokasi',
             'sales',
-            'details.convert',
+            // --- UBAH 'details.convert' menjadi 'details.barang' ---
+            'details.barang',
             'details.part',
             'details.rak'
         ]);
@@ -185,30 +172,35 @@ class PenjualanController extends Controller
     // --- API Methods ---
 
     /**
-     * API BARU: Mengambil item dari tabel CONVERTS
+     * API BARU: Mengambil item dari tabel BARANGS
      */
-    public function getConvertItems(Request $request)
+    public function getBarangItems(Request $request)
     {
         $this->authorize('create-sale');
 
-        // ++ PERBAIKAN: Hapus 'where('is_active', true)' ++
-        $items = Convert::orderBy('nama_job')
+        // Mengambil dari tabel 'barangs'
+        $items = Barang::orderBy('part_name')
                         ->get([
                             'id',
-                            // 'nama_job',
                             'part_name',
-                            'quantity',
-                            'harga_jual'
+                            'part_code',
+                            'merk',
+                            'harga_jual' // Kita perlu harga jual
                         ]);
 
         // Ubah format untuk Select2
         $formattedItems = $items->map(function($item) {
-             return [
-                 'id' => $item->id,
-                 'text' => $item->part_name,
-                 'data' => $item // Kirim data lengkap
-             ];
-         });
+            $text = "{$item->part_name} ({$item->part_code})";
+            if ($item->merk) {
+                $text .= " - {$item->merk}";
+            }
+
+            return [
+                'id' => $item->id,
+                'text' => $text,
+                'data' => $item // Kirim data lengkap
+            ];
+        });
 
         return response()->json($formattedItems);
     }

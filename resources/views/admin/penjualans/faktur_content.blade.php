@@ -108,10 +108,10 @@ use App\Helpers\NumberHelper;
                 <tr>
                     <td class="text-center">{{ $loop->iteration }}</td>
 
-                    {{-- ++ PERBAIKAN: Gunakan relasi 'convert' ++ --}}
-                    @if($detail->convert) {{-- Cek jika data dari 'converts' --}}
-                        <td>{{ $detail->convert->original_part_code ?? $detail->convert->part_code_input ?? 'N/A' }}</td>
-                        <td>{{ $detail->convert->part_name ?? 'N/A' }}</td>
+                    {{-- ++ PERBAIKAN: Gunakan relasi 'barang' ++ --}}
+                    @if($detail->barang) {{-- Cek jika data dari 'barangs' --}}
+                        <td>{{ $detail->barang->part_code ?? 'N/A' }}</td>
+                        <td>{{ $detail->barang->part_name ?? 'N/A' }}</td>
                     @elseif($detail->part) {{-- Fallback untuk data penjualan lama --}}
                         <td>{{ $detail->part->kode_part ?? '' }}</td>
                         <td>{{ $detail->part->nama_part ?? '' }}</td>
