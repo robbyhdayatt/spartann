@@ -7,27 +7,19 @@ use App\Models\Penjualan;
 use App\Models\Konsumen;
 use App\Models\Lokasi;
 use App\Models\User;
-use App\Models\Part;
-use App\Models\InventoryBatch;
-use App\Models\StockMovement;
+use App\Models\Convert; // Model yang kita gunakan
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use App\Services\DiscountService; // Asumsi Anda masih menggunakan ini
+use Illuminate\Support\Facades\Log; // Import Log
 
 class PenjualanController extends Controller
 {
-    protected $discountService;
-
-    public function __construct(DiscountService $discountService)
-    {
-        $this->discountService = $discountService;
-    }
+    // construct DiscountService dihapus karena tidak dipakai lagi
 
     public function index()
     {
         $this->authorize('view-sales');
-
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $query = Penjualan::with(['konsumen', 'sales', 'lokasi'])->latest();
@@ -40,17 +32,15 @@ class PenjualanController extends Controller
         return view('admin.penjualans.index', compact('penjualans'));
     }
 
-    // Method create() ini sudah benar dari perbaikan sebelumnya
     public function create()
     {
         $this->authorize('create-sale');
-
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $konsumens = Konsumen::where('is_active', true)->orderBy('nama_konsumen')->get();
 
-        $userLokasi = null;     // Untuk staf biasa
-        $allLokasi = collect(); // Untuk SA/PIC
+        $userLokasi = null;
+        $allLokasi = collect();
 
         if ($user->hasRole(['SA', 'PIC'])) {
             $allLokasi = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
@@ -69,6 +59,9 @@ class PenjualanController extends Controller
         return view('admin.penjualans.create', compact('konsumens', 'userLokasi', 'allLokasi'));
     }
 
+    /**
+     * Menyimpan penjualan baru berdasarkan item dari tabel 'converts'.
+     */
     public function store(Request $request)
     {
         $this->authorize('create-sale');
@@ -78,29 +71,23 @@ class PenjualanController extends Controller
             'konsumen_id' => 'required|exists:konsumens,id',
             'tanggal_jual' => 'required|date',
             'items' => 'required|array|min:1',
-            'items.*.part_id' => 'required|exists:parts,id',
-            // 'batch_id' sudah tidak ada
-            'items.*.qty_jual' => 'required|integer|min:1',
+            'items.*.convert_id' => 'required|exists:converts,id',
         ], [
             'items.required' => 'Setidaknya satu item harus ditambahkan ke penjualan.',
-            'items.*.part_id.required' => 'Part harus dipilih pada semua baris item.',
-            'items.*.qty_jual.min' => 'Jumlah jual harus minimal 1 pada semua baris item.',
+            'items.*.convert_id.required' => 'Item/Jasa harus dipilih pada semua baris.',
         ]);
 
         /** @var \App\Models\User $user */
         $user = Auth::user();
+        $lokasiId = $validated['lokasi_id'];
 
-        // Otorisasi (sudah benar dari perbaikan sebelumnya)
-        if (!$user->hasRole(['SA', 'PIC']) && $user->lokasi_id != $validated['lokasi_id']) {
+        if (!$user->hasRole(['SA', 'PIC']) && $user->lokasi_id != $lokasiId) {
             abort(403, 'Aksi tidak diizinkan. Anda hanya dapat membuat penjualan dari lokasi Anda.');
         }
 
         DB::beginTransaction();
         try {
-            $konsumen = Konsumen::find($validated['konsumen_id']);
-            $lokasiId = $validated['lokasi_id'];
             $totalSubtotalServer = 0;
-            $totalDiskonServer = 0; // Tetap hitung diskon untuk laporan
 
             $penjualan = Penjualan::create([
                 'nomor_faktur' => Penjualan::generateNomorFaktur(),
@@ -109,112 +96,54 @@ class PenjualanController extends Controller
                 'konsumen_id' => $validated['konsumen_id'],
                 'sales_id' => $user->id,
                 'created_by' => $user->id,
-                // Total akan di-update di akhir
             ]);
 
-            // Agregasi item (jika user memilih part yang sama di baris berbeda)
             $aggregatedItems = [];
             foreach ($validated['items'] as $item) {
-                $partId = $item['part_id'];
-                $qty = (int)$item['qty_jual'];
-                if (isset($aggregatedItems[$partId])) {
-                    $aggregatedItems[$partId]['qty_jual'] += $qty;
+                $convertId = $item['convert_id'];
+                if (isset($aggregatedItems[$convertId])) {
+                     $aggregatedItems[$convertId]['count'] += 1;
                 } else {
-                    $aggregatedItems[$partId] = [
-                        'part_id' => $partId,
-                        'qty_jual' => $qty,
-                        'part_object' => Part::find($partId) // Ambil objek part sekali
+                    $convertObject = Convert::find($convertId);
+                    if (!$convertObject) {
+                         throw new \Exception("Item dengan ID {$convertId} tidak ditemukan.");
+                    }
+                    $aggregatedItems[$convertId] = [
+                        'convert_id' => $convertId,
+                        'count' => 1,
+                        'convert_object' => $convertObject
                     ];
                 }
             }
 
-            // Proses setiap part yang sudah diagregasi
-            foreach ($aggregatedItems as $partId => $item) {
-                $part = $item['part_object'];
-                $qtyDiminta = $item['qty_jual'];
-                $sisaQtyDiminta = $qtyDiminta;
+            foreach ($aggregatedItems as $convertId => $item) {
+                $convert = $item['convert_object'];
 
-                // Ambil semua batch untuk part ini di lokasi ini (FIFO)
-                $batches = InventoryBatch::where('part_id', $partId)
-                    ->where('lokasi_id', $lokasiId)
-                    ->where('quantity', '>', 0)
-                    ->with(['rak', 'receivingDetail.receiving']) // Load relasi
-                    ->get()
-                    ->sortBy(function($batch) { // Sort by FIFO
-                        if ($batch->receivingDetail && $batch->receivingDetail->receiving) {
-                            return $batch->receivingDetail->receiving->tanggal_terima;
-                        }
-                        return $batch->created_at; // Fallback ke created_at batch
-                    });
+                $qtyPerItem = $convert->quantity;
+                $hargaPerItem = $convert->harga_jual;
+                $itemSubtotal = $hargaPerItem * $qtyPerItem;
 
-                // Cek stok total
-                $totalStokTersedia = $batches->sum('quantity');
-                if ($totalStokTersedia < $qtyDiminta) {
-                    throw new \Exception("Stok tidak mencukupi untuk part '{$part->nama_part}'. Diminta: {$qtyDiminta}, Tersedia: {$totalStokTersedia}");
-                }
+                $totalCount = $item['count'];
+                $totalQty = $qtyPerItem * $totalCount;
+                $totalSubtotal = $itemSubtotal * $totalCount;
 
-                // Ambil harga jual dari part
-                $finalPrice = $part->harga_satuan;
+                $totalSubtotalServer += $totalSubtotal;
 
-                // Hitung diskon (jika ada) untuk laporan
-                $discountResult = $this->discountService->calculateSalesDiscount($part, $konsumen, $part->harga_satuan);
-                $totalDiskonServer += ($part->harga_satuan - $discountResult['final_price']) * $qtyDiminta;
-
-
-                // Loop per batch (FIFO) untuk memenuhi kuantitas
-                foreach ($batches as $batch) {
-                    if ($sisaQtyDiminta <= 0) break; // Kebutuhan sudah terpenuhi
-
-                    $qtyAmbil = min($sisaQtyDiminta, $batch->quantity);
-
-                    $itemSubtotal = $finalPrice * $qtyAmbil;
-                    $totalSubtotalServer += $itemSubtotal;
-
-                    $stokSebelumBatch = $batch->quantity;
-
-                    // Kurangi stok batch
-                    $batch->decrement('quantity', $qtyAmbil);
-
-                    // Buat PenjualanDetail untuk SETIAP batch yang diambil
-                    $penjualan->details()->create([
-                        'part_id' => $part->id,
-                        'rak_id' => $batch->rak_id,
-                        'qty_jual' => $qtyAmbil,
-                        'harga_jual' => $finalPrice,
-                        'subtotal' => $itemSubtotal,
-                        // Anda mungkin perlu menyimpan referensi batch_id di sini
-                        // 'inventory_batch_id' => $batch->id
-                    ]);
-
-                    // Buat StockMovement untuk SETIAP batch
-                    $penjualan->stockMovements()->create([
-                        'part_id' => $part->id,
-                        'lokasi_id' => $lokasiId,
-                        'rak_id' => $batch->rak_id,
-                        'jumlah' => -$qtyAmbil,
-                        'stok_sebelum' => $stokSebelumBatch, // Stok batch sebelum
-                        'stok_sesudah' => $batch->quantity, // Stok batch sesudah
-                        'user_id' => $user->id,
-                        'keterangan' => 'Penjualan via Faktur #' . $penjualan->nomor_faktur,
-                         // 'referensi_type' & 'referensi_id' di-handle oleh relasi morphMany
-                    ]);
-
-                    $sisaQtyDiminta -= $qtyAmbil;
-                }
+                $penjualan->details()->create([
+                    'convert_id' => $convert->id,
+                    'part_id' => null,
+                    'rak_id' => null,
+                    'qty_jual' => $totalQty,
+                    'harga_jual' => $hargaPerItem,
+                    'subtotal' => $totalSubtotal,
+                ]);
             }
 
-            // Hapus batch yang stoknya 0
-            InventoryBatch::where('quantity', '<=', 0)->delete();
-
-            $pajak = 0; // Pajak 0
-            $totalHarga = $totalSubtotalServer; // Total = Subtotal
-
-            // Update total di dokumen penjualan
             $penjualan->update([
                 'subtotal' => $totalSubtotalServer,
-                'total_diskon' => $totalDiskonServer, // Simpan diskon untuk laporan
-                'pajak' => $pajak,
-                'total_harga' => $totalHarga,
+                'total_diskon' => 0,
+                'pajak' => 0,
+                'total_harga' => $totalSubtotalServer,
             ]);
 
             DB::commit();
@@ -222,6 +151,7 @@ class PenjualanController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error("Store Penjualan (Convert) Gagal: " . $e->getMessage());
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage())->withInput();
         }
     }
@@ -229,99 +159,57 @@ class PenjualanController extends Controller
     public function show(Penjualan $penjualan)
     {
         $this->authorize('view-sales');
-        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.part', 'details.rak']);
+        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.convert']);
+
+        if ($penjualan->details->contains('part_id', '!=', null)) {
+             $penjualan->load('details.part', 'details.rak');
+        }
+
         return view('admin.penjualans.show', compact('penjualan'));
     }
-    /**
-     * @param  \App\Models\Penjualan  $penjualan
-     * @return \Illuminate\View\View
-     */
+
     public function print(Penjualan $penjualan)
     {
-        // Otorisasi, sesuaikan jika ada gate khusus untuk print
-        // Kita gunakan 'view-sales' untuk sementara
         $this->authorize('view-sales');
-
-        // Load relasi yang diperlukan untuk mencetak faktur
         $penjualan->load([
             'konsumen',
             'lokasi',
             'sales',
+            'details.convert',
             'details.part',
             'details.rak'
         ]);
-
-        // Kembalikan view 'print.blade.php' dengan data penjualan
         return view('admin.penjualans.print', compact('penjualan'));
     }
 
     // --- API Methods ---
 
-    // API ini (getPartsByLokasi) masih SANGAT diperlukan untuk mengisi dropdown
-    public function getPartsByLokasi(Lokasi $lokasi)
+    /**
+     * API BARU: Mengambil item dari tabel CONVERTS
+     */
+    public function getConvertItems(Request $request)
     {
         $this->authorize('create-sale');
-        $parts = Part::whereHas('inventoryBatches', function ($query) use ($lokasi) {
-            $query->where('lokasi_id', $lokasi->id)->where('quantity', '>', 0);
-        })
-        ->withSum(['inventoryBatches' => function ($query) use ($lokasi) {
-            $query->where('lokasi_id', $lokasi->id);
-        }], 'quantity')
-        ->orderBy('nama_part')
-        ->get()
-        ->map(function($part) {
-            return [
-                'id' => $part->id,
-                'kode_part' => $part->kode_part,
-                'nama_part' => $part->nama_part,
-                'total_stock' => (int) $part->inventory_batches_sum_quantity,
-                'harga_satuan' => $part->harga_satuan, // Kirim harga satuan
-            ];
-        });
 
-        return response()->json($parts);
-    }
+        // ++ PERBAIKAN: Hapus 'where('is_active', true)' ++
+        $items = Convert::orderBy('nama_job')
+                        ->get([
+                            'id',
+                            // 'nama_job',
+                            'part_name',
+                            'quantity',
+                            'harga_jual'
+                        ]);
 
-    public function getFifoBatches(Request $request)
-    {
-        // ... (Logika ini sekarang ada di method store) ...
-        // Jika tidak ada tempat lain yang memakai, ini bisa dihapus
-        // Jika masih dipakai, biarkan saja
-         $this->authorize('create-sale');
-        $validated = $request->validate([
-            'part_id' => 'required|exists:parts,id',
-            'lokasi_id' => 'required|exists:lokasi,id',
-        ]);
+        // Ubah format untuk Select2
+        $formattedItems = $items->map(function($item) {
+             return [
+                 'id' => $item->id,
+                 'text' => $item->part_name,
+                 'data' => $item // Kirim data lengkap
+             ];
+         });
 
-        $batches = InventoryBatch::where('part_id', $validated['part_id'])
-            ->where('lokasi_id', $validated['lokasi_id'])
-            ->where('quantity', '>', 0)
-            ->with(['rak', 'receivingDetail.receiving'])
-            ->get()
-            ->sortBy(function($batch) {
-                if ($batch->receivingDetail && $batch->receivingDetail->receiving) {
-                    return $batch->receivingDetail->receiving->tanggal_terima;
-                }
-                return $batch->created_at;
-            });
-
-        return response()->json($batches->values()->all());
-    }
-
-    public function calculateDiscount(Request $request)
-    {
-         // ... (Logika ini sekarang ada di method store) ...
-         // Jika tidak ada tempat lain yang memakai, ini bisa dihapus
-        $request->validate(['part_id' => 'required|exists:parts,id']);
-        try {
-            $part = Part::findOrFail($request->part_id);
-            return response()->json(['success' => true, 'data' => [
-                'original_price' => $part->harga_satuan,
-                'final_price' => $part->harga_satuan,
-                'applied_discounts' => []
-            ]]);
-        } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal mengambil harga: ' . $e->getMessage()], 500);
-        }
+        return response()->json($formattedItems);
     }
 }

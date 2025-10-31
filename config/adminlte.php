@@ -235,13 +235,19 @@ return [
                 ['text' => 'Brand', 'icon' => 'far fa-fw fa-copyright', 'route' => 'admin.brands.index'],
                 ['text' => 'Kategori', 'icon' => 'far fa-fw fa-folder-open', 'route' => 'admin.categories.index'],
                 ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index'],
-                ['text' => 'Part', 'icon' => 'fas fa-fw fa-cogs', 'route' => 'admin.parts.index'],
+                ['text' => 'Part (Stok)', 'icon' => 'fas fa-fw fa-cogs', 'route' => 'admin.parts.index'],
                 ['text' => 'Konsumen', 'icon' => 'fas fa-fw fa-user-friends', 'route' => 'admin.konsumens.index'],
                 [
                     'text' => 'Master Convert',
                     'url'  => 'admin/converts', // Sesuaikan dengan URI rute
                     'icon' => 'fas fa-fw fa-exchange-alt', // Contoh ikon
                     'can'  => 'manage-converts',
+                ],
+                [
+                    'text' => 'Barang (Jasa/Paket)', // Nama menu baru
+                    'icon' => 'fas fa-fw fa-box-open',
+                    'route' => 'admin.barangs.index',
+                    'can'  => 'manage-barangs' // Gunakan Gate baru
                 ],
             ],
         ],

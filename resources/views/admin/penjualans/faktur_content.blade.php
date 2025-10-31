@@ -5,12 +5,10 @@ use App\Helpers\NumberHelper;
 {{-- CSS Kustom untuk Faktur Penjualan PDF --}}
 <style>
     .faktur-box {
-        /* Font tebal dan jelas, ukuran dikecilkan agar muat */
         font-family: 'Helvetica', 'Arial', sans-serif;
         font-weight: bold;
-        font-size: 10px; /* Ukuran font dikecilkan agar muat di 24x12cm */
+        font-size: 10px;
         color: #000;
-        /* Beri sedikit padding agar tidak terlalu mentok */
         padding: 10px;
     }
     .faktur-box table {
@@ -29,22 +27,20 @@ use App\Helpers\NumberHelper;
     /* Tabel Item */
     .items-table {
         margin-top: 10px;
-        border: none; /* Hapus border luar tabel */
+        border: none;
     }
     .items-table thead th {
-        /* Garis pembatas utuh di header tabel */
         border: none;
-        border-bottom: 1px solid #000; /* Garis utuh di header */
+        border-bottom: 1px solid #000;
         padding: 4px;
         text-align: center;
     }
     .items-table tbody tr {
-        /* Tidak ada garis di setiap baris part */
         border-bottom: none;
     }
     .items-table td {
-        border: none; /* Hapus border sel */
-        padding: 3px 4px; /* Perkecil padding baris */
+        border: none;
+        padding: 3px 4px;
     }
 
     .text-right { text-align: right; }
@@ -66,13 +62,12 @@ use App\Helpers\NumberHelper;
         <tr>
             <td style="width: 60%;"><div class="header-main">FAKTUR PENJUALAN</div></td>
             <td style="width: 40%;" class="text-right">
-                {{-- Ambil dari $penjualan->lokasi --}}
                 <div class="header-sub">{{ $penjualan->lokasi->nama_lokasi ?? 'N/A' }}</div>
                 <div>{{ $penjualan->lokasi->alamat ?? 'Alamat tidak tersedia' }}</div>
             </td>
         </tr>
     </table>
-    <hr> {{-- Ini akan menjadi garis utuh --}}
+    <hr>
 
     {{-- Info Pelanggan & Transaksi --}}
     <table style="width: 100%;">
@@ -92,7 +87,7 @@ use App\Helpers\NumberHelper;
             <td><strong>Sales</strong></td>
             <td>: {{ $penjualan->sales->nama ?? 'N/A' }}</td>
             <td><strong>Lokasi</strong></td>
-            <td>: {{ $penjualan->lokasi->kode_lokasi }}</td> {{-- Tampilkan kode lokasi --}}
+            <td>: {{ $penjualan->lokasi->kode_lokasi }}</td>
         </tr>
     </table>
 
@@ -101,10 +96,10 @@ use App\Helpers\NumberHelper;
         <thead>
             <tr>
                 <th style="width: 3%;">No.</th>
-                <th style="width: 15%;">Kode Part</th>
-                <th>Nama Part</th>
+                <th style="width: 15%;" class="text-left">Kode Item</th> {{-- ++ DIUBAH: Dari Kode Part --}}
+                <th style="width: 15%;" class="text-left">Nama Item / Jasa</th> {{-- ++ DIUBAH: Dari Nama Part --}}
                 <th style="width: 15%;" class="text-right">Harga Satuan</th>
-                <th style="width: 8%;" class="text-center">Qty</th>
+                <th style="width: 8%;" class="text-right">Qty</th>
                 <th style="width: 15%;" class="text-right">Total</th>
             </tr>
         </thead>
@@ -112,11 +107,20 @@ use App\Helpers\NumberHelper;
             @forelse ($penjualan->details as $detail)
                 <tr>
                     <td class="text-center">{{ $loop->iteration }}</td>
-                    <td>{{ $detail->part->kode_part ?? '' }}</td>
-                    <td>{{ $detail->part->nama_part ?? '' }}</td>
-                    {{-- ++ PERBAIKAN: Ganti @rupiah ke PHP standar ++ --}}
+
+                    {{-- ++ PERBAIKAN: Gunakan relasi 'convert' ++ --}}
+                    @if($detail->convert) {{-- Cek jika data dari 'converts' --}}
+                        <td>{{ $detail->convert->original_part_code ?? $detail->convert->part_code_input ?? 'N/A' }}</td>
+                        <td>{{ $detail->convert->part_name ?? 'N/A' }}</td>
+                    @elseif($detail->part) {{-- Fallback untuk data penjualan lama --}}
+                        <td>{{ $detail->part->kode_part ?? '' }}</td>
+                        <td>{{ $detail->part->nama_part ?? '' }}</td>
+                    @else
+                        <td colspan="2">Data Item Tidak Ditemukan</td>
+                    @endif
+
                     <td class="text-right">{{ 'Rp ' . number_format($detail->harga_jual, 0, ',', '.') }}</td>
-                    <td class="text-center">{{ $detail->qty_jual }}</td>
+                    <td class="text-right">{{ $detail->qty_jual }}</td>
                     <td class="text-right">{{ 'Rp ' . number_format($detail->subtotal, 0, ',', '.') }}</td>
                 </tr>
             @empty
@@ -133,13 +137,13 @@ use App\Helpers\NumberHelper;
     <table style="margin-top: 5px;">
         <tr>
             <td style="width: 60%; vertical-align: top;">
-                <div class="font-bold">Harga sudah termasuk PPN 11%</div>
+                {{-- Hapus tulisan PPN jika tidak relevan lagi --}}
+                {{-- <div class="font-bold">Harga sudah termasuk PPN 11%</div> --}}
             </td>
             <td style="width: 40%; vertical-align: top;">
                 <table style="width: 100%;">
                     <tr>
                         <td class="font-bold">Grand Total:</td>
-                        {{-- ++ PERBAIKAN: Ganti @rupiah ke PHP standar ++ --}}
                         <td class="text-right font-bold">{{ 'Rp ' . number_format($penjualan->total_harga, 0, ',', '.') }}</td>
                     </tr>
                 </table>

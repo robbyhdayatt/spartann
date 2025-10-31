@@ -1,108 +1,98 @@
-{{-- resources/views/admin/converts/index.blade.php --}}
 @extends('adminlte::page')
 
 @section('title', 'Master Convert')
+@section('plugins.Datatables', true)
+@section('plugins.Select2', true)
 
 @section('content_header')
     <h1 class="m-0 text-dark">Master Convert</h1>
 @stop
 
-{{-- Tambahkan CSS kustom jika perlu --}}
-@push('css')
-<style>
-    /* Agar tombol aksi tidak terlalu rapat */
-    #table_converts .btn {
-        margin-left: 2px;
-        margin-right: 2px;
-    }
-    /* Atur lebar kolom action agar pas */
-     #table_converts th:last-child, #table_converts td:last-child {
-        width: 100px; /* Sesuaikan lebar sesuai kebutuhan */
-        text-align: center;
-    }
-     /* Rata kanan untuk kolom angka */
-    #table_converts th.text-right, #table_converts td.text-right {
-        text-align: right;
-    }
-    /* Rata tengah untuk kolom # dan Action */
-    #table_converts th.text-center, #table_converts td.text-center {
-        text-align: center;
-    }
-
-</style>
-@endpush
-
 @section('content')
     <div class="row">
         <div class="col-12">
-            <div class="card card-primary card-outline"> {{-- Tambahkan kelas styling card --}}
+            <div class="card card-primary card-outline">
                 <div class="card-header">
-                     <h3 class="card-title mt-1">
-                        <i class="fas fa-exchange-alt mr-1"></i> Data Konversi Job/Part
-                     </h3>
-                     <div class="card-tools"> {{-- Pindahkan tombol ke kanan --}}
+                    <h3 class="card-title mt-1">
+                        <i class="fas fa-exchange-alt mr-1"></i> Data Konversi (Job/Part)
+                    </h3>
+                    <div class="card-tools">
                         <button type="button" class="btn btn-sm btn-primary" id="btn-add" data-toggle="modal" data-target="#convertModal">
                             <i class="fas fa-plus mr-1"></i> Tambah Data
                         </button>
-                     </div>
+                    </div>
                 </div>
                 <div class="card-body">
+                    {{-- Tampilkan Pesan Sukses/Error dari redirect (Destroy) --}}
+                    @if(session('success'))
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            {{ session('success') }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    @endif
+                     @if(session('error'))
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            {{ session('error') }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    @endif
+
                     @php
-                    // Definisikan header dengan kelas untuk styling
                     $heads = [
                         ['label' => '#', 'width' => 3, 'class' => 'text-center'],
                         'Nama Job (Excel)',
-                        'Part Code Hasil',
-                        'Nama Part Hasil',
-                        ['label' => 'Qty', 'width' => 5, 'class' => 'text-right'], // Rata kanan
-                        ['label' => 'Harga Jual', 'width' => 15, 'class' => 'text-right'], // Rata kanan
-                        ['label' => 'Actions', 'no-export' => true, 'width' => 10, 'class' => 'text-center'] // Rata tengah
+                        'Nama Part',
+                        'Kode Part',
+                        ['label' => 'Qty', 'width' => 5, 'class' => 'text-right'],
+                        ['label' => 'Harga Jual', 'width' => 15, 'class' => 'text-right'],
+                        ['label' => 'Aksi', 'no-export' => true, 'width' => 10, 'class' => 'text-center']
                     ];
-
-                    // Konfigurasi DataTable
                     $config = [
-                        'processing' => true, // Tampilkan loading indicator bawaan DataTable
-                        'serverSide' => false, // Kita masih pakai client-side dari contoh sebelumnya
-                        'responsive' => true, // Aktifkan responsivitas
-                        'autoWidth' => false, // Nonaktifkan auto width agar 'width' di $heads berfungsi
-                        'order' => [[1, 'asc']], // Urutkan default berdasarkan Nama Job
-                        'columns' => [ // Definisikan properti kolom
-                            ['orderable' => false, 'searchable' => false, 'className' => 'text-center'], // Kolom #
-                            null, // Nama Job
-                            null, // Part Code Hasil
-                            null, // Nama Part Hasil
-                            ['className' => 'text-right'], // Qty
-                            ['className' => 'text-right'], // Harga Jual
-                            ['orderable' => false, 'searchable' => false, 'className' => 'text-center'] // Actions
+                        'order' => [[1, 'asc']],
+                        'columns' => [
+                            ['orderable' => false, 'searchable' => false, 'className' => 'text-center'],
+                            null, null, null,
+                            ['className' => 'text-right'],
+                            ['className' => 'text-right'],
+                            ['orderable' => false, 'searchable' => false, 'className' => 'text-center']
                         ],
-                        // 'dom' => '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rt<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>B', // Tambahkan 'B' untuk Buttons
-                        // 'buttons' => ['copy', 'csv', 'excel', 'pdf', 'print', 'colvis'],
                     ];
                     @endphp
 
-                    {{-- Gunakan Komponen AdminLTE DataTable --}}
+                    {{-- Tampilkan DataTable --}}
                     <x-adminlte-datatable id="table_converts" :heads="$heads" :config="$config" theme="light" striped hoverable bordered compressed with-buttons>
-                        {{-- Data diisi oleh Blade loop --}}
                         @forelse($converts as $index => $convert)
                             <tr>
-                                <td>{{ $index + 1 }}</td> {{-- Nomor urut --}}
+                                <td>{{ $index + 1 }}</td>
                                 <td>{{ $convert->nama_job }}</td>
-                                <td>{{ $convert->part_code_input }}</td>
                                 <td>{{ $convert->part_name }}</td>
-                                <td>{{ $convert->quantity }}</td> {{-- Qty sudah rata kanan via $config['columns'] --}}
-                                <td>{{ 'Rp ' . number_format($convert->harga_jual, 0, ',', '.') }}</td> {{-- Format Harga Jual, sudah rata kanan via $config['columns'] --}}
-                                <td> {{-- Aksi sudah rata tengah via $config['columns'] --}}
+                                <td>{{ $convert->part_code }}</td>
+                                <td>{{ $convert->quantity }}</td>
+                                <td>@rupiah($convert->harga_jual)</td>
+                                <td>
                                     <nobr>
                                         @php
-                                            $editUrl = route('admin.converts.editData', $convert);
-                                            $deleteUrl = route('admin.converts.destroy', $convert);
+                                            $showUrl = route('admin.converts.editData', $convert->id);
+                                            $deleteUrl = route('admin.converts.destroy', $convert->id);
                                         @endphp
-                                        <button class="btn btn-xs btn-default text-primary mx-1 shadow btn-edit" title="Edit" data-id="{{$convert->id}}" data-url="{{ $editUrl }}">
-                                            <i class="fa fa-lg fa-fw fa-pen"></i>
+
+                                        {{-- Tombol Edit TIDAK menggunakan data-toggle="modal" --}}
+                                        <button class="btn btn-xs btn-warning btn-edit" title="Edit"
+                                                data-id="{{$convert->id}}"
+                                                data-url="{{ $showUrl }}">
+                                            <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-xs btn-default text-danger mx-1 shadow btn-delete" title="Delete" data-id="{{$convert->id}}" data-url="{{ $deleteUrl }}">
-                                            <i class="fa fa-lg fa-fw fa-trash"></i>
+
+                                        <button class="btn btn-xs btn-danger btn-delete" title="Delete"
+                                                data-id="{{$convert->id}}"
+                                                data-url="{{ $deleteUrl }}">
+                                            <i class="fas fa-trash"></i>
                                         </button>
+
                                         <form id="delete-form-{{$convert->id}}" action="{{ $deleteUrl }}" method="POST" style="display: none;">
                                             @csrf @method('DELETE')
                                         </form>
@@ -120,106 +110,157 @@
         </div>
     </div>
 
-    {{-- MODAL FORM (Styling sedikit & title statis) --}}
-    <x-adminlte-modal id="convertModal" title="Form Convert" size="lg" theme="primary"
-        icon="fas fa-exchange-alt" v-centered static-backdrop scrollable> {{-- Hapus :title --}}
-
-        {{-- Pesan Error Validasi di Atas Form --}}
-        <div id="validation-errors" class="alert alert-danger" style="display: none;">
-            <p><strong><i class="icon fas fa-ban"></i> Perhatian!</strong> Ada kesalahan input:</p>
-            <ul class="mb-0"></ul>
+    {{-- MODAL FORM --}}
+    <div class="modal fade" id="convertModal" tabindex="-1" role="dialog" aria-labelledby="convertModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <form id="convertForm" name="convertForm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="convertModalLabel">Form Convert</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="validation-errors" class="alert alert-danger" style="display: none;">
+                            <p><strong><i class="icon fas fa-ban"></i> Perhatian!</strong> Ada kesalahan input:</p>
+                            <ul class="mb-0"></ul>
+                        </div>
+                        @include('admin.converts._form', [
+                            'convert' => null,
+                            'barangs' => $barangs,
+                            'idPrefix' => 'modal'
+                        ])
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-primary" id="btn-save">Simpan</button>
+                    </div>
+                </div>
+            </form>
         </div>
-
-        <form id="convertForm" name="convertForm">
-            {{-- Konten form --}}
-            @include('admin.converts._form', ['convert' => null])
-        </form>
-
-        {{-- Footer Modal --}}
-        <x-slot name="footerSlot">
-            {{-- Tombol Simpan dengan loading state --}}
-            <x-adminlte-button class="btn-flat" theme="primary" label="Simpan" id="btn-save" icon="fas fa-save"/>
-            {{-- Tombol Batal --}}
-            <x-adminlte-button class="btn-flat" theme="default" label="Batal" data-dismiss="modal" icon="fas fa-times"/>
-        </x-slot>
-    </x-adminlte-modal>
+    </div>
 @stop
 
+@push('css')
+<style>
+    .select2-container--bootstrap4 .select2-dropdown {
+        z-index: 1060;
+    }
+    .invalid-feedback.d-block {
+        display: block !important;
+    }
+</style>
+@endpush
+
 @push('js')
-{{-- SweetAlert2 --}}
 <script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-{{-- Loading Overlay --}}
 <script src="https://cdn.jsdelivr.net/npm/gasparesganga-jquery-loading-overlay@2.1.7/dist/loadingoverlay.min.js"></script>
 
-{{-- Script AJAX (sama seperti sebelumnya) --}}
 <script>
 $(document).ready(function() {
     // Setup CSRF Token
     $.ajaxSetup({
-        headers: {
-            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-        }
+        headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') }
     });
+
+    // Inisialisasi Select2 di dalam modal
+    $('.select2-modal').select2({
+        theme: 'bootstrap4',
+        dropdownParent: $('#convertModal .modal-body')
+    });
+
+    // Fungsi untuk membersihkan form modal
+    function resetModalForm(formElement = '#convertForm') {
+        let form = $(formElement);
+
+        form.trigger("reset");
+
+        // Kosongkan nilai input secara manual
+        $('#modal_nama_job').val('');
+        $('#modal_keterangan').val('');
+        $('#modal_quantity').val(1); // Set Qty kembali ke 1
+
+        // Reset Select2
+        $('#modal_part_code').val(null).trigger('change');
+
+        // Hapus error validasi
+        $('#validation-errors').hide().find('ul').empty();
+        form.find('.is-invalid').removeClass('is-invalid');
+        form.find('.invalid-feedback').remove();
+    }
 
     // --- TOMBOL TAMBAH DATA ---
     $('#btn-add').click(function () {
-        $('#btn-save').html('<i class="fas fa-save mr-1"></i> Simpan').prop('disabled', false);
-        $('#convertForm').trigger("reset");
-        $('#convertModal .modal-title').html("Tambah Data Convert");
-        $('#formMethod').val('POST');
+        // ++ PERBAIKAN: Selalu panggil resetModalForm saat tombol Tambah diklik ++
+        resetModalForm('#convertForm');
+
+        // Atur state modal ke 'Create'
         $('#convertForm').attr('action', "{{ route('admin.converts.store') }}");
-        $('#validation-errors').hide().find('ul').empty();
-        $('#convertForm [name="quantity"]').val(1);
-        $('#convertForm [name="harga_modal"]').val(0);
-        $('#convertForm [name="harga_jual"]').val(0);
-        $('#convertForm .is-invalid').removeClass('is-invalid');
-        $('#convertForm .invalid-feedback').remove();
+        $('#formMethod').val('POST');
+        $('#convertModal .modal-title').html("Tambah Data Convert");
+        // data-toggle="modal" di tombol sudah menangani 'show'
     });
 
     // --- TOMBOL EDIT DATA ---
-    $('body').on('click', '.btn-edit', function () {
+    // Gunakan event delegation pada parent yang statis (tabel)
+    $('#table_converts').on('click', '.btn-edit', function () {
         var convertId = $(this).data('id');
         var editUrl = $(this).data('url');
 
-        $('#btn-save').html('<i class="fas fa-save mr-1"></i> Simpan').prop('disabled', false);
-        $('#convertForm').trigger("reset");
-        $('#validation-errors').hide().find('ul').empty();
-        $('#convertForm .is-invalid').removeClass('is-invalid');
-        $('#convertForm .invalid-feedback').remove();
+        // Atur state modal ke 'Edit' SEBELUM mengambil data
+        $('#convertForm').attr('action', "{{ route('admin.converts.update', ':id') }}".replace(':id', convertId));
+        $('#formMethod').val('PUT');
+        $('#convertModal .modal-title').html("Edit Data Convert");
+
         $('#convertModal .modal-body').LoadingOverlay("show");
 
         $.get(editUrl, function (data) {
-            $('#convertModal .modal-title').html("Edit Data Convert");
-            $('#btn-save').val("edit-convert");
-            $('#formMethod').val('PUT');
-
             // Isi form
-            $('#convertForm [name="original_part_code"]').val(data.original_part_code);
-            $('#convertForm [name="nama_job"]').val(data.nama_job);
-            $('#convertForm [name="part_name"]').val(data.part_name);
-            $('#convertForm [name="merk"]').val(data.merk);
-            $('#convertForm [name="part_code_input"]').val(data.part_code_input);
-            $('#convertForm [name="quantity"]').val(data.quantity);
-            $('#convertForm [name="harga_modal"]').val(parseFloat(data.harga_modal));
-            $('#convertForm [name="harga_jual"]').val(parseFloat(data.harga_jual));
-            $('#convertForm [name="keterangan"]').val(data.keterangan);
-
-            // Set action URL
-            var updateUrl = "{{ route('admin.converts.update', ':id') }}".replace(':id', convertId);
-            $('#convertForm').attr('action', updateUrl);
+            $('#modal_nama_job').val(data.nama_job);
+            $('#modal_quantity').val(data.quantity);
+            $('#modal_keterangan').val(data.keterangan);
+            $('#modal_part_code').val(data.part_code).trigger('change');
 
             $('#convertModal .modal-body').LoadingOverlay("hide");
-            $('#convertModal').modal('show');
+            $('#convertModal').modal('show'); // Buka modal secara manual
         }).fail(function() {
              $('#convertModal .modal-body').LoadingOverlay("hide");
              Swal.fire('Error', 'Gagal mengambil data untuk diedit.', 'error');
         });
     });
 
+    // --- Event saat Modal DITUTUP ('hidden.bs.modal') ---
+    $('#convertModal').on('hidden.bs.modal', function (e) {
+        // Selalu reset form saat modal ditutup (baik sukses, batal, atau error)
+        resetModalForm('#convertForm');
+        // Kembalikan tombol save ke state semula
+        $('#btn-save').html('Simpan').prop('disabled', false);
+    });
+
+     // --- Logika Validasi Error (dari server, saat reload) ---
+     @if($errors->any())
+        @if(session('edit_form_id'))
+            // Error validasi dari UPDATE
+            let failedId = {{ session('edit_form_id') }};
+            let updateUrl = "{{ route('admin.converts.update', ':id') }}".replace(':id', failedId);
+            $('#convertForm').attr('action', updateUrl);
+            $('#formMethod').val('PUT');
+            $('#convertModal .modal-title').html("Edit Data Convert (Error)");
+            $('#convertModal').modal('show');
+        @else
+            // Error validasi dari CREATE
+            $('#convertModal .modal-title').html("Tambah Data Convert (Error)");
+            $('#convertModal').modal('show');
+        @endif
+    @endif
+
     // --- TOMBOL SIMPAN (Action Create/Update) ---
     $('#btn-save').click(function (e) {
         e.preventDefault();
-        $(this).html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...').prop('disabled', true);
+        var $this = $(this);
+        $this.html('<i class="fas fa-spinner fa-spin"></i> Menyimpan...').prop('disabled', true);
+
         $('#validation-errors').hide().find('ul').empty();
         $('#convertForm .is-invalid').removeClass('is-invalid');
         $('#convertForm .invalid-feedback').remove();
@@ -234,11 +275,8 @@ $(document).ready(function() {
             type: method,
             dataType: 'json',
             success: function (data) {
-                $('#convertForm').trigger("reset");
                 $('#convertModal').modal('hide');
-                $('#btn-save').html('<i class="fas fa-save mr-1"></i> Simpan').prop('disabled', false);
-
-                 Swal.fire({
+                Swal.fire({
                     icon: 'success', title: 'Berhasil!', text: data.success, timer: 1500, showConfirmButton: false
                 }).then(() => {
                     location.reload();
@@ -246,21 +284,19 @@ $(document).ready(function() {
             },
             error: function (data) {
                 console.log('Error:', data);
-                $('#btn-save').html('<i class="fas fa-save mr-1"></i> Simpan').prop('disabled', false);
+                $this.html('Simpan').prop('disabled', false);
 
-                 if (data.status === 422) {
+                if (data.status === 422) {
                     var errors = data.responseJSON.errors;
                     var errorList = $('#validation-errors ul');
                     $.each(errors, function (key, value) {
                         errorList.append('<li>' + value[0] + '</li>');
                         var inputField = $('#convertForm [name="' + key + '"]');
                         inputField.addClass('is-invalid');
-                         var inputGroup = inputField.closest('.input-group, .form-group');
-                         // Hapus pesan error lama sebelum menambahkan yang baru
-                         inputGroup.find('.invalid-feedback').remove();
-                         if (inputGroup.length) {
-                             inputGroup.append('<span class="invalid-feedback d-block" role="alert"><strong>' + value[0] + '</strong></span>');
-                         }
+
+                        var inputGroup = inputField.closest('.form-group');
+                        inputGroup.find('.invalid-feedback').remove();
+                        inputGroup.append('<span class="invalid-feedback d-block" role="alert"><strong>' + value[0] + '</strong></span>');
                     });
                     $('#validation-errors').show();
                     $('#convertModal .modal-body').animate({ scrollTop: 0 }, 'slow');
@@ -273,10 +309,10 @@ $(document).ready(function() {
     });
 
     // --- TOMBOL DELETE ---
-    $('body').on('click', '.btn-delete', function(e) {
+    $('#table_converts').on('click', '.btn-delete', function(e) {
         e.preventDefault();
         var id = $(this).data('id');
-        var deleteForm = $('#delete-form-' + id);
+        var deleteForm = $('#delete-form-' + id); // <-- Form di dalam <td>
 
         Swal.fire({
             title: 'Apakah Anda yakin?',
@@ -294,17 +330,7 @@ $(document).ready(function() {
         });
     });
 
-    // --- Event Listener Modal Close ---
-    $('#convertModal').on('hidden.bs.modal', function (e) {
-        $('#convertForm').trigger("reset");
-        $('#validation-errors').hide().find('ul').empty();
-        $('#formMethod').val('POST');
-        $('#convertForm').attr('action', "{{ route('admin.converts.store') }}");
-        $('#convertForm .is-invalid').removeClass('is-invalid');
-        $('#convertForm .invalid-feedback').remove();
-    });
-
-    // --- Tampilkan Pesan Session ---
+    // --- Tampilkan Pesan Session (dari redirect Delete) ---
     @if(session('success'))
         Swal.fire({
             icon: 'success', title: 'Berhasil!', text: '{{ session('success') }}', timer: 3000, showConfirmButton: false

@@ -3,58 +3,50 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Convert;
+use App\Models\Convert; // Model ini sekarang menunjuk ke VIEW 'converts'
+use App\Models\Barang;  // Model baru 'Barang'
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB; // <-- Penting
 
 class ConvertController extends Controller
 {
     /**
-     * Tambahkan constructor untuk menerapkan middleware Gate.
+     * Nama tabel fisik untuk operasi tulis
      */
+    private $convertsMainTable = 'converts_main';
+
     public function __construct()
     {
-        // Hanya user dengan gate 'manage-converts' yang bisa mengakses method controller ini
         $this->middleware('can:manage-converts');
     }
 
     /**
-     * Display a listing of the resource.
+     * Tampilkan daftar data dari VIEW 'converts'.
      */
     public function index()
     {
-        // $this->authorize('manage-converts'); // Tidak perlu jika sudah di middleware
+        // Ambil data dari VIEW (via Model)
         $converts = Convert::orderBy('nama_job')->get();
-        return view('admin.converts.index', compact('converts'));
-    }
 
-    // ... (method create, store, edit, getEditData, update, destroy tetap sama) ...
-    // Tidak perlu menambahkan $this->authorize() di setiap method karena sudah dilindungi oleh middleware di constructor.
+        // Ambil data barang untuk modal dropdown
+        $barangs = Barang::orderBy('part_name')->get();
 
-     /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        abort(404);
+        return view('admin.converts.index', compact('converts', 'barangs'));
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Simpan data baru ke tabel 'converts_main'.
      */
     public function store(Request $request)
     {
+        // Validasi berdasarkan input form BARU
         $validator = Validator::make($request->all(), [
-            'original_part_code' => 'nullable|string|max:255',
-            'nama_job' => 'required|string|max:255|unique:converts,nama_job',
-            'part_name' => 'required|string|max:255',
-            'merk' => 'nullable|string|max:255',
-            'part_code_input' => 'required|string|max:255',
-            'keterangan' => 'nullable|string',
+            'nama_job' => ['required', 'string', 'max:255', Rule::unique($this->convertsMainTable)], // Validasi ke tabel fisik
             'quantity' => 'required|integer|min:1',
-            'harga_modal' => 'required|numeric|min:0',
-            'harga_jual' => 'required|numeric|min:0',
+            'keterangan' => 'nullable|string',
+            'part_code' => 'required|string|exists:barangs,part_code', // Validasi ke tabel barangs
         ]);
 
         if ($validator->fails()) {
@@ -62,7 +54,17 @@ class ConvertController extends Controller
         }
 
         try {
-            Convert::create($validator->validated());
+            // Tulis data ke tabel fisik 'converts_main'
+            DB::table($this->convertsMainTable)->insert([
+                'nama_job' => $request->nama_job,
+                'quantity' => $request->quantity,
+                'keterangan' => $request->keterangan,
+                'part_code' => $request->part_code,
+                'created_at' => now(),
+                'updated_at' => now()
+                // 'is_active' => true // Jika Anda menambahkan kolom ini
+            ]);
+
             return response()->json(['success' => 'Data convert berhasil ditambahkan.']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Gagal menambahkan data convert. Silakan coba lagi.'], 500);
@@ -70,37 +72,24 @@ class ConvertController extends Controller
     }
 
     /**
-     * Show the form for editing the specified resource.
+     * Ambil data dari VIEW 'converts' untuk modal edit.
      */
-     public function edit(Convert $convert)
-     {
-         abort(404);
-     }
+    public function getEditData(Convert $convert)
+    {
+        // $convert diambil dari VIEW, sudah berisi data join
+        return response()->json($convert);
+    }
 
     /**
-     * Get data for editing via AJAX.
+     * Update data di tabel 'converts_main'.
      */
-     public function getEditData(Convert $convert)
-     {
-         return response()->json($convert);
-     }
-
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Convert $convert)
+    public function update(Request $request, $id) // Terima $id, bukan model
     {
          $validator = Validator::make($request->all(), [
-            'original_part_code' => 'nullable|string|max:255',
-            'nama_job' => ['required', 'string', 'max:255', Rule::unique('converts')->ignore($convert->id)],
-            'part_name' => 'required|string|max:255',
-            'merk' => 'nullable|string|max:255',
-            'part_code_input' => 'required|string|max:255',
-            'keterangan' => 'nullable|string',
+            'nama_job' => ['required', 'string', 'max:255', Rule::unique($this->convertsMainTable)->ignore($id)], // Validasi ke tabel fisik
             'quantity' => 'required|integer|min:1',
-            'harga_modal' => 'required|numeric|min:0',
-            'harga_jual' => 'required|numeric|min:0',
+            'keterangan' => 'nullable|string',
+            'part_code' => 'required|string|exists:barangs,part_code', // Validasi ke tabel barangs
         ]);
 
         if ($validator->fails()) {
@@ -108,7 +97,15 @@ class ConvertController extends Controller
         }
 
         try {
-            $convert->update($validator->validated());
+            // Update data di tabel fisik 'converts_main'
+            DB::table($this->convertsMainTable)->where('id', $id)->update([
+                'nama_job' => $request->nama_job,
+                'quantity' => $request->quantity,
+                'keterangan' => $request->keterangan,
+                'part_code' => $request->part_code,
+                'updated_at' => now()
+            ]);
+
             return response()->json(['success' => 'Data convert berhasil diperbarui.']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Gagal memperbarui data convert. Silakan coba lagi.'], 500);
@@ -116,15 +113,20 @@ class ConvertController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Hapus data dari tabel 'converts_main'.
      */
-    public function destroy(Convert $convert)
+    public function destroy($id) // Terima $id
     {
         try {
-            $convert->delete();
+            // Hapus dari tabel fisik 'converts_main'
+            DB::table($this->convertsMainTable)->where('id', $id)->delete();
             return redirect()->route('admin.converts.index')->with('success', 'Data convert berhasil dihapus.');
         } catch (\Exception $e) {
             return redirect()->route('admin.converts.index')->with('error', 'Gagal menghapus data convert.');
         }
     }
+
+    // Method create() dan edit() tidak dipakai
+    public function create() { abort(404); }
+    public function edit(Convert $convert) { abort(404); }
 }

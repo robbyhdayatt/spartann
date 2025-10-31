@@ -31,6 +31,7 @@ use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\DealerController;
 use App\Http\Controllers\Admin\PdfController;
 use App\Http\Controllers\Admin\ConvertController;
+use App\Http\Controllers\Admin\BarangController;
 
 Route::get('/', fn() => redirect()->route('login'));
 
@@ -53,6 +54,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('parts/search', [PartController::class, 'search'])->name('parts.search');
     Route::resource('parts', PartController::class);
     Route::post('parts/import', [PartController::class, 'import'])->name('parts.import');
+    Route::resource('barangs', BarangController::class)->except(['create', 'edit']);
 
     // === TRANSAKSI GUDANG & DEALER ===
     Route::resource('purchase-orders', PurchaseOrderController::class)->except(['edit', 'update', 'destroy']);
@@ -125,15 +127,22 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('reports/stock-by-warehouse/export', [ReportController::class, 'exportStockByWarehouse'])->name('reports.stock-by-warehouse.export');
 
     // === CONVERT ===
-    // Rute Resource standar untuk Convert
-    Route::resource('converts', ConvertController::class)->except(['show']); // Hapus 'show' jika tidak dipakai
-    // Rute tambahan untuk mengambil data edit via AJAX
-    Route::get('converts/{convert}/data', [ConvertController::class, 'getEditData'])->name('converts.editData'); // <-- Rute Baru
+    // Hapus: Route::resource('converts', ConvertController::class)->except(['show']);
+
+    // ++ TAMBAHKAN ROUTE MANUAL UNTUK CONVERTS ++
+    Route::get('converts', [ConvertController::class, 'index'])->name('converts.index');
+    Route::post('converts', [ConvertController::class, 'store'])->name('converts.store');
+    // Rute 'editData' (Show) menggunakan route model binding ke model Convert (VIEW)
+    Route::get('converts/{convert}/data', [ConvertController::class, 'getEditData'])->name('converts.editData');
+    // Rute Update dan Destroy menggunakan {id} (bukan {convert}) agar tidak binding ke VIEW
+    Route::put('converts/{id}', [ConvertController::class, 'update'])->name('converts.update');
+    Route::delete('converts/{id}', [ConvertController::class, 'destroy'])->name('converts.destroy');
+    // ++ AKHIR ROUTE CONVERTS ++
 
         // === API (untuk AJAX) ===
         Route::get('/api/purchase-orders/{purchaseOrder}/details', [ReceivingController::class, 'getPurchaseOrderDetails'])->name('api.po.details');
         Route::get('api/lokasi/{lokasi}/parts-with-stock', [StockMutationController::class, 'getPartsWithStock'])->name('api.lokasi.parts-with-stock');
-        Route::get('/api/lokasi/{lokasi}/parts', [PenjualanController::class, 'getPartsByLokasi'])->name('api.lokasi.parts');
+        // Route::get('/api/lokasi/{lokasi}/parts', [PenjualanController::class, 'getPartsByLokasi'])->name('api.lokasi.parts');
         Route::get('api/parts/{part}/stock', [PenjualanController::class, 'getPartStockDetails'])->name('api.part.stock');
         Route::get('/api/lokasi/{lokasi}/raks', [StockAdjustmentController::class, 'getRaksByLokasi'])->name('api.lokasi.raks');
         Route::get('api/lokasi/{lokasi}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
@@ -142,7 +151,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
         Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
         Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
-        Route::get('api/get-fifo-batches', [PenjualanController::class, 'getFifoBatches'])->name('api.get-fifo-batches');
+        // Route::get('api/get-fifo-batches', [PenjualanController::class, 'getFifoBatches'])->name('api.get-fifo-batches');
         Route::get('/parts/search', [PartController::class, 'search'])->name('parts.search');
+        Route::get('api/get-convert-items', [PenjualanController::class, 'getConvertItems'])->name('api.get-convert-items');
     });
 
