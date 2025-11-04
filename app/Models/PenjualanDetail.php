@@ -18,21 +18,21 @@ class PenjualanDetail extends Model
         return $this->belongsTo(Penjualan::class);
     }
 
-    /**
-     * Relasi opsional ke Part (jika penjualan lama masih pakai)
-     */
-    public function part()
-    {
-        return $this->belongsTo(Part::class);
-    }
+    // /**
+    //  * Relasi opsional ke Part (jika penjualan lama masih pakai)
+    //  */
+    // public function part()
+    // {
+    //     return $this->belongsTo(Part::class);
+    // }
 
-    /**
-     * Relasi opsional ke Rak (jika penjualan lama masih pakai)
-     */
-    public function rak()
-    {
-        return $this->belongsTo(Rak::class);
-    }
+    // /**
+    //  * Relasi opsional ke Rak (jika penjualan lama masih pakai)
+    //  */
+    // public function rak()
+    // {
+    //     return $this->belongsTo(Rak::class);
+    // }
 
     /**
      * ++ BARU: Relasi ke item Barang ++

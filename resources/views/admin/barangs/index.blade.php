@@ -1,19 +1,19 @@
 @extends('adminlte::page')
-@section('title', 'Master Barang (Jasa/Paket)')
+@section('title', 'Master Item')
 @section('plugins.Datatables', true)
 
 @section('content_header')
-    <h1>Master Barang (Jasa/Paket)</h1>
+    <h1>Master Item</h1>
 @stop
 
 @section('content')
 <div class="card">
     <div class="card-header">
-        <h3 class="card-title">Daftar Barang</h3>
+        <h3 class="card-title">Daftar Item</h3>
         <div class="card-tools">
             {{-- Tombol ini memicu Modal 'Create' --}}
             <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#createBarangModal">
-                <i class="fas fa-plus"></i> Tambah Barang Baru
+                <i class="fas fa-plus"></i> Tambah Item Baru
             </button>
         </div>
     </div>
@@ -65,7 +65,7 @@
                             <i class="fas fa-edit"></i>
                         </button>
                         <form action="{{ route('admin.barangs.destroy', $barang->id) }}" method="POST" class="d-inline"
-                              onsubmit="return confirm('Apakah Anda yakin ingin menghapus barang ini?');">
+                              onsubmit="return confirm('Apakah Anda yakin ingin menghapus item ini?');">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="btn btn-xs btn-danger" title="Hapus">
@@ -76,7 +76,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="6" class="text-center">Belum ada data barang.</td>
+                    <td colspan="6" class="text-center">Belum ada data item.</td>
                 </tr>
                 @endforelse
             </tbody>
@@ -92,7 +92,7 @@
             @csrf
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="createModalLabel">Tambah Barang Baru</h5>
+                    <h5 class="modal-title" id="createModalLabel">Tambah Item Baru</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -121,7 +121,7 @@
             @method('PUT')
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="editModalLabel">Edit Barang</h5>
+                    <h5 class="modal-title" id="editModalLabel">Edit Item</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -175,7 +175,7 @@ $(document).ready(function() {
 
             // data-toggle="modal" sudah menangani 'show'
         }).fail(function() {
-            alert('Gagal mengambil data barang.');
+            alert('Gagal mengambil data item.');
         });
     });
 

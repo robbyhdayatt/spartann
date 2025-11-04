@@ -247,7 +247,7 @@ return [
                     'can'  => 'manage-converts', // Gate ini sudah benar
                 ],
                 [
-                    'text' => 'Barang (Jasa/Paket)',
+                    'text' => 'Item',
                     'icon' => 'fas fa-fw fa-box-open',
                     'route' => 'admin.barangs.index',
                     'can'  => 'manage-barangs'
@@ -338,6 +338,7 @@ return [
                 ['text' => 'Stok Per Lokasi', 'icon' => 'fas fa-fw fa-boxes', 'route' => 'admin.reports.stock-by-warehouse'],
                 ['text' => 'Laporan Stok Total', 'icon' => 'fas fa-fw fa-archive', 'route' => 'admin.reports.stock-report', 'can'  => 'view-global-reports'],
                 ['text' => 'Jurnal Penjualan', 'icon' => 'fas fa-fw fa-book-open', 'route' => 'admin.reports.sales-journal'],
+                ['text' => 'Laporan Penjualan', 'icon' => 'fas fa-fw fa-chart-line', 'route' => 'admin.reports.sales-summary'],
                 ['text' => 'Jurnal Pembelian', 'icon' => 'fas fa-fw fa-book', 'route' => 'admin.reports.purchase-journal','can'  => 'view-purchase-journal'],
                 ['text' => 'Nilai Persediaan', 'icon' => 'fas fa-fw fa-dollar-sign', 'route' => 'admin.reports.inventory-value'],
             ],

@@ -15,7 +15,7 @@ class PdfController extends Controller
         $purchaseOrder->load(['supplier', 'lokasi', 'details.part', 'createdBy']);
         $data = ['purchaseOrder' => $purchaseOrder];
         $pdf = PDF::loadView('admin.purchase_orders.print', $data)
-                   ->setPaper([0, 0, 396, 684], 'landscape');
+                    ->setPaper([0, 0, 396, 684], 'landscape');
         return $pdf->download('PO-' . $purchaseOrder->nomor_po . '.pdf');
     }
 
@@ -24,30 +24,46 @@ class PdfController extends Controller
      */
     public function penjualan(Penjualan $penjualan)
     {
-        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.part']);
+        // Memuat relasi yang benar (sesuai langkah sebelumnya)
+        $penjualan->load(['konsumen', 'lokasi', 'sales', 'details.barang']);
         $data = ['penjualan' => $penjualan];
 
-        // 1. Tentukan ukuran kustom 24cm x 12cm (lebar x tinggi)
-        // [0, 0, tinggi_pts, lebar_pts]
-        $customPaper = [0, 0, 339.84, 680.30]; // 12cm x 24cm
+        // === PENGATURAN KERTAS DISAMAKAN DENGAN SERVICE CONTROLLER ===
 
-        // 2. Load view 'admin.penjualans.print' (ini adalah template HTML)
+        // 1. Tentukan ukuran 24cm x 14cm
+        $width_cm = 24;
+        $height_cm = 14;
+        $points_per_cm = 28.3465; // Konversi cm ke points (1pt = 1/72 inch, 1 inch = 2.54cm)
+
+        // dompdf menggunakan [0, 0, width_pts, height_pts]
+        // Jika width > height, otomatis menjadi landscape
+        $widthInPoints = $width_cm * $points_per_cm; // 680.3
+        $heightInPoints = $height_cm * $points_per_cm; // 396.8
+
+        $customPaper = [0, 0, $widthInPoints, $heightInPoints];
+
+        // 2. Load view 'admin.penjualans.print'
         $pdf = PDF::loadView('admin.penjualans.print', $data);
 
-        // 3. Atur kertas ke ukuran kustom & orientasi landscape
-        // (Orientasi landscape akan otomatis jika lebar > tinggi)
-        $pdf->setPaper($customPaper, 'landscape');
+        // 3. Atur kertas ke ukuran kustom
+        $pdf->setPaper($customPaper);
 
-        // 4. Atur opsi untuk menghilangkan margin (mentok sisi)
+        // 4. Atur opsi (margin 0, font Arial, dll) agar sama persis dengan ServiceController
         $pdf->setOptions([
-            'defaultFont' => 'sans-serif', // Gunakan font standar
             'isHtml5ParserEnabled' => true,
             'isRemoteEnabled' => true,
-            'margin_top' => 0,
-            'margin_bottom' => 0,
-            'margin_left' => 0,
-            'margin_right' => 0,
+            'dpi' => 150,
+            'defaultFont' => 'Arial', // Samakan font
+            'margin-top'    => 0, // Hapus margin
+            'margin-right'  => 0,
+            'margin-bottom' => 0,
+            'margin-left'   => 0,
+            'enable-smart-shrinking' => true,
+            'disable-smart-shrinking' => false,
+            'lowquality' => false
         ]);
+
+        // === SELESAI PENGATURAN KERTAS ===
 
         return $pdf->download('Faktur-' . $penjualan->nomor_faktur . '.pdf');
     }

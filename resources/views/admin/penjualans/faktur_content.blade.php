@@ -1,157 +1,244 @@
 @php
 use App\Helpers\NumberHelper;
+
+// === Data Lokasi/Dealer ===
+$namaDealer = $penjualan->lokasi->nama_lokasi ?? 'Data Lokasi Tidak Ditemukan';
+$alamatDealer = ($penjualan->lokasi->alamat && $penjualan->lokasi->alamat !== '\N') ? $penjualan->lokasi->alamat : '-';
+$npwpDealer = 'NPWP No.: '; // Ganti dengan data NPWP jika ada
+
+// === Pengaturan Dinamis agar Tetap 1 Lembar A4 ===
+$totalDetailsCount = $penjualan->details->count();
+$maxItemsPerPage = 28; // jumlah ideal item agar pas 1 halaman A4
+
+// Nilai default
+$baseFontSize = 18; // px
+$lineHeight = 1.45;
+$rowPadding = 5;
+$signaturePaddingTop = 70;
+
+// Jika terlalu banyak item, kecilkan font dan jarak baris otomatis
+if ($totalDetailsCount > $maxItemsPerPage) {
+    $scale = max(0.7, 1 - (($totalDetailsCount - $maxItemsPerPage) * 0.015));
+    $baseFontSize = floor(18 * $scale);
+    $lineHeight = max(1.1, 1.45 * $scale);
+    $rowPadding = max(2, floor(5 * $scale));
+    $signaturePaddingTop = max(25, floor(70 * $scale));
+}
+
+// CSS dinamis untuk menyesuaikan proporsional tampilan
+$conditionalStyles = "
+    .invoice-box {
+        font-size: {$baseFontSize}px;
+    }
+    .invoice-box table {
+        line-height: {$lineHeight};
+    }
+    .items-table td, .items-table th {
+        padding: {$rowPadding}px 4px;
+    }
+    .signature-box td[style*=\"padding-top\"] {
+        padding-top: {$signaturePaddingTop}px !important;
+    }
+";
 @endphp
 
-{{-- CSS Kustom untuk Faktur Penjualan PDF --}}
+{{-- ========================= CSS INVOICE (SAMA PERSIS DENGAN SERVIS) ========================= --}}
 <style>
-    .faktur-box {
-        font-family: 'Helvetica', 'Arial', sans-serif;
-        font-weight: bold;
-        font-size: 10px;
-        color: #000;
-        padding: 10px;
-    }
-    .faktur-box table {
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
         width: 100%;
-        line-height: 1.3;
+        height: 100%;
+        box-sizing: border-box;
+        font-family: 'Arial', 'Helvetica', sans-serif !important;
+    }
+    *, *:before, *:after { box-sizing: inherit; }
+
+    .invoice-box {
+        font-family: 'Arial', 'Helvetica', sans-serif !important;
+        color: #000;
+        padding: 0 !important;
+        width: 100%;
+        height: 100%;
+        font-weight: normal;
+        letter-spacing: 0.2px;
+    }
+
+    .invoice-box table {
+        width: 100%;
         text-align: left;
         border-collapse: collapse;
     }
-    .faktur-box table td, .faktur-box table th {
-        padding: 2px 4px;
-        vertical-align: top;
-    }
-    .header-main { font-size: 14px; font-weight: bold; }
-    .header-sub { font-size: 12px; font-weight: bold; }
 
-    /* Tabel Item */
-    .items-table {
-        margin-top: 10px;
-        border: none;
+    .invoice-box table:not(.info-table):not(.items-table) td,
+    .invoice-box table:not(.info-table):not(.items-table) th {
+        padding: 3px 5px;
+        vertical-align: top;
+        border: none !important;
     }
-    .items-table thead th {
-        border: none;
-        border-bottom: 1px solid #000;
-        padding: 4px;
+
+    .header-main {
+        font-size: 1.3em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .header-sub {
+        font-size: 1.1em;
+        font-weight: bold;
+    }
+
+    .invoice-box table.info-table {
+        line-height: 1.25 !important;
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    .invoice-box table.info-table td {
+        padding: 2px 5px !important;
+        vertical-align: top;
+        border: none !important;
+    }
+
+    .items-table th {
         text-align: center;
+        border: none !important;
+        border-bottom: 1px solid #000 !important;
+        font-weight: bold;
     }
-    .items-table tbody tr {
-        border-bottom: none;
-    }
+
     .items-table td {
-        border: none;
-        padding: 3px 4px;
+        vertical-align: top;
+        border: none !important;
+    }
+
+    .items-table tbody {
+        border-bottom: 1px solid #000 !important;
+    }
+
+    /* Kita tidak memakai grouping di penjualan, jadi ini bisa dihapus jika mau */
+    .items-table tr.separator-row td {
+        font-weight: bold;
+        text-align: left;
+        border-top: 1px solid #000 !important;
+        background-color: transparent;
+        font-size: 1.05em;
     }
 
     .text-right { text-align: right; }
     .text-center { text-align: center; }
     .font-bold { font-weight: bold; }
-    .signature-box { margin-top: 15px; }
 
-    /* Garis utuh (bukan putus-putus) */
-    hr {
-        border: none;
-        border-top: 1px solid #000;
-        margin: 5px 0;
+    .terbilang-box {
+        padding: 4px 5px;
+        font-style: italic;
+        font-weight: normal;
     }
+
+    .signature-box {
+        margin-top: 20px;
+    }
+
+    /* Hapus @page A4 karena sudah diatur di PdfController */
+    /* @media print { ... } */
+
+    {!! $conditionalStyles !!}
 </style>
 
-<div class="faktur-box">
+{{-- ========================= BODY INVOICE (SUDAH DIUBAH) ========================= --}}
+<div class="invoice-box">
     {{-- Header --}}
     <table>
         <tr>
-            <td style="width: 60%;"><div class="header-main">FAKTUR PENJUALAN</div></td>
-            <td style="width: 40%;" class="text-right">
-                <div class="header-sub">{{ $penjualan->lokasi->nama_lokasi ?? 'N/A' }}</div>
-                <div>{{ $penjualan->lokasi->alamat ?? 'Alamat tidak tersedia' }}</div>
+            <td style="width: 60%; vertical-align: bottom;">
+                {{-- ++ DIUBAH ++ --}}
+                <div class="header-main">FAKTUR PENJUALAN</div>
+            </td>
+            <td style="width: 40%; text-align: right;">
+                <div class="header-sub">{{ $namaDealer }}</div>
+                <div>{{ $alamatDealer }}</div>
+                <div>{{ $npwpDealer }}</div>
             </td>
         </tr>
     </table>
-    <hr>
 
-    {{-- Info Pelanggan & Transaksi --}}
-    <table style="width: 100%;">
+    {{-- Info Pelanggan & Transaksi (Layout diubah total) --}}
+    <table class="info-table">
         <tr>
             <td style="width: 15%;"><strong>Tanggal</strong></td>
-            <td style="width: 35%;">: {{ $penjualan->tanggal_jual->format('d/m/Y') }}</td>
-            <td style="width: 15%;"><strong>Konsumen</strong></td>
-            <td style="width: 35%;">: {{ $penjualan->konsumen->nama_konsumen }}</td>
+            <td style="width: 35%;">: {{ $penjualan->tanggal_jual ? $penjualan->tanggal_jual->format('d/m/Y') : '-' }}</td>
+            <td style="width: 15%;"><strong>Nama</strong></td>
+            <td style="width: 35%;">: {{ $penjualan->konsumen->nama_konsumen ?? '-' }}</td>
         </tr>
         <tr>
-            <td><strong>No. Faktur</strong></td>
-            <td>: {{ $penjualan->nomor_faktur }}</td>
-            <td><strong>Telepon</strong></td>
-            <td>: {{ $penjualan->konsumen->telepon ?? '-' }}</td>
+            <td><strong>No. Invoice</strong></td>
+            <td>: {{ $penjualan->nomor_faktur ?? '-' }}</td>
+            <td><strong>Alamat</strong></td>
+            <td>: {{ $penjualan->konsumen->alamat ?? '-' }}</td>
         </tr>
         <tr>
             <td><strong>Sales</strong></td>
-            <td>: {{ $penjualan->sales->nama ?? 'N/A' }}</td>
-            <td><strong>Lokasi</strong></td>
-            <td>: {{ $penjualan->lokasi->kode_lokasi }}</td>
+            <td>: {{ $penjualan->sales->nama ?? '-' }}</td>
+            <td><strong>Mobile</strong></td>
+            <td>: {{ $penjualan->konsumen->telepon ?? '-' }}</td>
         </tr>
     </table>
 
-    {{-- Tabel Item --}}
+    {{-- Hapus Info Kendaraan (tidak ada di penjualan) --}}
+    {{-- <table class="info-table"> ... </table> --}}
+
+    {{-- Tabel Item (Logika diubah total) --}}
     <table class="items-table">
         <thead>
             <tr>
-                <th style="width: 3%;">No.</th>
-                <th style="width: 15%;" class="text-left">Kode Item</th> {{-- ++ DIUBAH: Dari Kode Part --}}
-                <th style="width: 15%;" class="text-left">Nama Item / Jasa</th> {{-- ++ DIUBAH: Dari Nama Part --}}
-                <th style="width: 15%;" class="text-right">Harga Satuan</th>
-                <th style="width: 8%;" class="text-right">Qty</th>
-                <th style="width: 15%;" class="text-right">Total</th>
+                <th style="width: 5%;">No.</th>
+                <th style="width: 20%;">Nomor Item</th>
+                <th style="width: 40%;">Nama Item</th>
+                <th style="width: 15%;">Harga Satuan</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 15%;">Total</th>
             </tr>
         </thead>
         <tbody>
+            @php $itemNumber = 1; @endphp
             @forelse ($penjualan->details as $detail)
+                @php $totalItem = ($detail->qty_jual ?? 0) * ($detail->harga_jual ?? 0); @endphp
                 <tr>
-                    <td class="text-center">{{ $loop->iteration }}</td>
-
-                    {{-- ++ PERBAIKAN: Gunakan relasi 'barang' ++ --}}
-                    @if($detail->barang) {{-- Cek jika data dari 'barangs' --}}
-                        <td>{{ $detail->barang->part_code ?? 'N/A' }}</td>
-                        <td>{{ $detail->barang->part_name ?? 'N/A' }}</td>
-                    @elseif($detail->part) {{-- Fallback untuk data penjualan lama --}}
-                        <td>{{ $detail->part->kode_part ?? '' }}</td>
-                        <td>{{ $detail->part->nama_part ?? '' }}</td>
-                    @else
-                        <td colspan="2">Data Item Tidak Ditemukan</td>
-                    @endif
-
-                    <td class="text-right">{{ 'Rp ' . number_format($detail->harga_jual, 0, ',', '.') }}</td>
-                    <td class="text-right">{{ $detail->qty_jual }}</td>
-                    <td class="text-right">{{ 'Rp ' . number_format($detail->subtotal, 0, ',', '.') }}</td>
+                    <td class="text-center">{{ $itemNumber++ }}</td>
+                    <td>{{ $detail->barang->part_code ?? 'N/A' }}</td>
+                    <td>{{ $detail->barang->part_name ?? 'N/A' }}</td>
+                    <td class="text-right">{{ number_format($detail->harga_jual ?? 0, 0, ',', '.') }}</td>
+                    <td class="text-center">{{ $detail->qty_jual ?? 0 }}</td>
+                    <td class="text-right">{{ number_format($totalItem, 0, ',', '.') }}</td>
                 </tr>
             @empty
                 <tr><td colspan="6" class="text-center">Tidak ada item detail.</td></tr>
             @endforelse
-             {{-- Baris pembatas utuh HANYA di akhir tabel --}}
-             <tr>
-                 <td colspan="6" style="padding: 1px; border-bottom: 1px solid #000;"></td>
-             </tr>
         </tbody>
     </table>
 
-    {{-- Footer --}}
-    <table style="margin-top: 5px;">
+    {{-- Footer (Disederhanakan) --}}
+    <table style="margin-top: 10px;">
         <tr>
-            <td style="width: 60%; vertical-align: top;">
-                {{-- Hapus tulisan PPN jika tidak relevan lagi --}}
-                {{-- <div class="font-bold">Harga sudah termasuk PPN 11%</div> --}}
+            <td style="width: 60%; vertical-align: bottom;">
+                <div><strong>Harga sudah termasuk PPN 11%</strong></div>
+                <div><strong>Terbilang:</strong>
+                    <div class="terbilang-box">
+                        # {{ trim(NumberHelper::terbilang($penjualan->total_harga ?? 0)) }} Rupiah #
+                    </div>
+                </div>
             </td>
             <td style="width: 40%; vertical-align: top;">
                 <table style="width: 100%;">
-                    <tr>
-                        <td class="font-bold">Grand Total:</td>
-                        <td class="text-right font-bold">{{ 'Rp ' . number_format($penjualan->total_harga, 0, ',', '.') }}</td>
-                    </tr>
+                    {{-- Hapus total service & part --}}
+                    <tr><td><strong>Grand Total:</strong></td><td class="text-right"><strong>Rp {{ number_format($penjualan->total_harga ?? 0, 0, ',', '.') }}</strong></td></tr>
                 </table>
             </td>
         </tr>
     </table>
 
-    {{-- Tiga Tanda Tangan --}}
+    {{-- Tanda Tangan (Label diubah sedikit) --}}
     <table class="signature-box" style="width: 100%;">
         <tr>
             <td class="text-center" style="width: 33%;">Counter,</td>
@@ -159,9 +246,9 @@ use App\Helpers\NumberHelper;
             <td class="text-center" style="width: 34%;">Kasir,</td>
         </tr>
         <tr>
-            <td class="text-center" style="padding-top: 30px;">(__________________)</td>
-            <td class="text-center" style="padding-top: 30px;">(__________________)</td>
-            <td class="text-center" style="padding-top: 30px;">(__________________)</td>
+            <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
+            <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
+            <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
         </tr>
     </table>
 </div>

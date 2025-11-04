@@ -20,7 +20,7 @@ class SalesJournalExport implements FromCollection, WithHeadings, WithMapping
 
     public function collection()
     {
-        return PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'part'])
+        return PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'barang'])
             ->whereHas('penjualan', function ($query) {
                 $query->whereBetween('tanggal_jual', [$this->startDate, $this->endDate]);
             })
@@ -49,8 +49,8 @@ class SalesJournalExport implements FromCollection, WithHeadings, WithMapping
             $detail->penjualan->nomor_faktur,
             $detail->penjualan->konsumen->nama_konsumen,
             $detail->penjualan->sales->nama ?? 'N/A',
-            $detail->part->kode_part,
-            $detail->part->nama_part,
+            $detail->barang->part_code,
+            $detail->barang->part_name,
             $detail->qty_jual,
             $detail->harga_jual,
             $detail->subtotal,

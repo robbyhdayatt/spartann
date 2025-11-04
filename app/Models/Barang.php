@@ -36,4 +36,9 @@ class Barang extends Model
         // Relasi ke tabel 'converts_main' melalui kolom 'part_code'
         return $this->hasMany(Convert::class, 'part_code', 'part_code');
     }
+
+    public function penjualanDetails()
+    {
+        return $this->hasMany(PenjualanDetail::class);
+    }
 }

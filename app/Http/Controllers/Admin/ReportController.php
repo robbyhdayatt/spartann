@@ -147,7 +147,7 @@ public function stockByWarehouse(Request $request)
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
 
         // Mulai query dasar
-        $query = PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'part'])
+        $query = PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'barang'])
             ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $user) {
                 $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
 
@@ -329,5 +329,62 @@ public function stockByWarehouse(Request $request)
     public function rekomendasiPo()
     {
         return view('admin.reports.rekomendasi_po');
+    }
+
+    public function salesSummary(Request $request)
+    {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+
+        // Query utama untuk ringkasan penjualan
+        $query = DB::table('penjualan_details')
+            ->join('penjualans', 'penjualan_details.penjualan_id', '=', 'penjualans.id')
+            ->join('barangs', 'penjualan_details.barang_id', '=', 'barangs.id')
+            ->select(
+                'barangs.part_code',
+                'barangs.part_name',
+                DB::raw('SUM(penjualan_details.qty_jual) as total_qty'),
+                DB::raw('SUM(penjualan_details.subtotal) as total_penjualan'),
+                DB::raw('SUM(penjualan_details.qty_jual * barangs.harga_modal) as total_modal'),
+                DB::raw('SUM(penjualan_details.subtotal) - SUM(penjualan_details.qty_jual * barangs.harga_modal) as total_keuntungan')
+            )
+            ->whereBetween('penjualans.tanggal_jual', [$startDate, $endDate])
+            ->groupBy('penjualan_details.barang_id', 'barangs.part_code', 'barangs.part_name')
+            ->orderBy('total_qty', 'desc');
+
+        // Filter lokasi untuk user non-admin
+        if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
+            $query->where('penjualans.lokasi_id', $user->lokasi_id);
+        }
+
+        $reportData = $query->get();
+
+        // Hitung Grand Total
+        $grandTotalQty = $reportData->sum('total_qty');
+        $grandTotalPenjualan = $reportData->sum('total_penjualan');
+        $grandTotalModal = $reportData->sum('total_modal');
+        $grandTotalKeuntungan = $reportData->sum('total_keuntungan');
+
+        return view('admin.reports.sales_summary', compact(
+            'reportData',
+            'grandTotalQty',
+            'grandTotalPenjualan',
+            'grandTotalModal',
+            'grandTotalKeuntungan',
+            'startDate',
+            'endDate'
+        ));
+    }
+
+    public function exportSalesSummary(Request $request)
+    {
+        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        $fileName = 'Laporan Penjualan - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
+
+        // Kita akan buat file App\Exports\SalesSummaryExport di langkah berikutnya
+        return Excel::download(new \App\Exports\SalesSummaryExport($startDate, $endDate), $fileName);
     }
 }

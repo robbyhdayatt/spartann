@@ -70,7 +70,7 @@
                         <td>{{ $detail->penjualan->tanggal_jual->format('d-m-Y') }}</td>
                         <td>{{ $detail->penjualan->nomor_faktur }}</td>
                         <td>{{ $detail->penjualan->konsumen->nama_konsumen }}</td>
-                        <td>{{ $detail->part->nama_part }}</td>
+                        <td>{{ $detail->barang->part_name }}</td>
                         <td class="text-right">{{ $detail->qty_jual }}</td>
                         <td class="text-right">{{ number_format($detail->harga_jual, 0, ',', '.') }}</td>
                         <td class="text-right">{{ number_format($detail->subtotal, 0, ',', '.') }}</td>

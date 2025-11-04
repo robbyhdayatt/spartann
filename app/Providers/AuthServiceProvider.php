@@ -39,7 +39,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-users', fn(User $user) => $user->hasRole('SA'));
         Gate::define('manage-locations', fn(User $user) => $user->hasRole(['SA', 'PIC']));
         Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
-        Gate::define('manage-barangs', fn(User $user) => $user->hasRole(['SA', 'PIC']));
+        Gate::define('manage-barangs', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
 
         // --- PEMBELIAN (HANYA DI PUSAT) ---
         // ++ PERUBAHAN: Tambahkan 'is-pic' dan 'is-super-admin' untuk melihat menu ++

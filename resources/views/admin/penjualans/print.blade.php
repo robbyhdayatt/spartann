@@ -12,13 +12,14 @@
         }
 
         body {
-            margin: 0;
-            padding: 0;
-            /* Menggunakan font sans-serif umum yang tebal */
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            font-weight: bold;
-            color: #000;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            font-family: 'Arial', 'Helvetica', sans-serif !important;
         }
+        *, *:before, *:after { box-sizing: inherit; }
 
     </style>
 </head>
