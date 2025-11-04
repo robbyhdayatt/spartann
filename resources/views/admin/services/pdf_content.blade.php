@@ -2,109 +2,166 @@
 use App\Helpers\NumberHelper;
 $detailsGrouped = $service->details->groupBy('service_category_code');
 
-// ... (Variabel Dealer Dinamis tetap sama) ...
-$namaDealer = 'Data Lokasi Tidak Ditemukan';
-$alamatDealer = 'Alamat Tidak Tersedia';
-$npwpDealer = 'NPWP Tidak Tersedia';
-if ($service->lokasi) {
-    $namaDealer = $service->lokasi->nama_lokasi ?? $namaDealer;
-    $alamatDealer = $service->lokasi->alamat && $service->lokasi->alamat !== '\N' ? $service->lokasi->alamat : '-';
-    // $npwpDealer = $service->lokasi->npwp ?? $npwpDealer;
-}
+// === Data Dealer ===
+$namaDealer = $service->lokasi->nama_lokasi ?? 'Data Lokasi Tidak Ditemukan';
+$alamatDealer = ($service->lokasi->alamat && $service->lokasi->alamat !== '\N') ? $service->lokasi->alamat : '-';
 $npwpDealer = 'NPWP No.: ';
 
-// ... (Logika $conditionalStyles dan $baseFontSize Anda tetap sama) ...
+// === Pengaturan Dinamis agar Tetap 1 Lembar A4 ===
 $totalDetailsCount = $service->details->count();
-$itemThreshold = 16;
-$baseFontSize = '14px';
-$itemRowPadding = '2px 4px';
-$lineHeight = '1.25';
-$signaturePaddingTop = '40px';
+$maxItemsPerPage = 28; // jumlah ideal item agar pas 1 halaman A4
 
-if ($totalDetailsCount > $itemThreshold) {
-    $reductionFactor = max(0.75, 1 - (($totalDetailsCount - $itemThreshold) * 0.018));
-    $baseFontSize = floor(14 * $reductionFactor) . 'px';
-    $itemRowPadding = '1px 3px';
-    $lineHeight = '1.15';
-    $signaturePaddingTop = '25px';
+// Nilai default
+$baseFontSize = 18; // px
+$lineHeight = 1.45;
+$rowPadding = 5;
+$signaturePaddingTop = 70;
+
+// Jika terlalu banyak item, kecilkan font dan jarak baris otomatis
+if ($totalDetailsCount > $maxItemsPerPage) {
+    $scale = max(0.7, 1 - (($totalDetailsCount - $maxItemsPerPage) * 0.015));
+    $baseFontSize = floor(18 * $scale);
+    $lineHeight = max(1.1, 1.45 * $scale);
+    $rowPadding = max(2, floor(5 * $scale));
+    $signaturePaddingTop = max(25, floor(70 * $scale));
 }
-$conditionalStyles = '';
-if ($totalDetailsCount > $itemThreshold) {
-    $conditionalStyles = "
-        .signature-box { margin-top: 10px !important; }
-        .signature-box td { font-size: 0.95em !important; }
-        .signature-box td[style*=\"padding-top\"] { padding-top: {$signaturePaddingTop} !important; }
-    ";
-} else {
-   $conditionalStyles = "
-        .signature-box td[style*=\"padding-top\"] { padding-top: {$signaturePaddingTop}; }
-    ";
-}
+
+// CSS dinamis untuk menyesuaikan proporsional tampilan
+$conditionalStyles = "
+    .invoice-box {
+        font-size: {$baseFontSize}px;
+    }
+    .invoice-box table {
+        line-height: {$lineHeight};
+    }
+    .items-table td, .items-table th {
+        padding: {$rowPadding}px 4px;
+    }
+    .signature-box td[style*=\"padding-top\"] {
+        padding-top: {$signaturePaddingTop}px !important;
+    }
+";
 @endphp
 
-{{-- CSS Kustom untuk Faktur --}}
+{{-- ========================= CSS INVOICE ========================= --}}
 <style>
-    html, body { margin: 0 !important; padding: 0 !important; width: 100%; height: 100%; box-sizing: border-box; }
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        font-family: 'Arial', 'Helvetica', sans-serif !important;
+    }
     *, *:before, *:after { box-sizing: inherit; }
 
     .invoice-box {
-        font-family: 'DejaVu Sans Mono', monospace;
-        font-size: {{ $baseFontSize }};
+        font-family: 'Arial', 'Helvetica', sans-serif !important;
         color: #000;
         padding: 0 !important;
         width: 100%;
         height: 100%;
-        font-weight: bold;
+        font-weight: normal;
+        letter-spacing: 0.2px;
     }
+
     .invoice-box table {
         width: 100%;
-        line-height: {{ $lineHeight }};
         text-align: left;
         border-collapse: collapse;
     }
-    /* ... (CSS lainnya tetap sama) ... */
-     .invoice-box table:not(.info-table):not(.items-table) td,
+
+    .invoice-box table:not(.info-table):not(.items-table) td,
     .invoice-box table:not(.info-table):not(.items-table) th {
-        padding: 2px 4px;
+        padding: 3px 5px;
         vertical-align: top;
         border: none !important;
     }
-    .header-main { font-size: 1.3em; font-weight: bold; }
-    .header-sub { font-size: 1.1em; font-weight: bold; }
 
-    .invoice-box table.info-table { line-height: 1.1 !important; margin-top: 5px !important; margin-bottom: 5px !important; }
-    .invoice-box table.info-table td { padding-top: 1px !important; padding-bottom: 1px !important; padding-left: 5px; padding-right: 5px; vertical-align: top; border: none !important; }
+    .header-main {
+        font-size: 1.3em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .header-sub {
+        font-size: 1.1em;
+        font-weight: bold;
+    }
+
+    .invoice-box table.info-table {
+        line-height: 1.25 !important;
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    .invoice-box table.info-table td {
+        padding: 2px 5px !important;
+        vertical-align: top;
+        border: none !important;
+    }
 
     .items-table th {
-        padding: {{ $itemRowPadding }};
-        vertical-align: top; text-align: center; border: none !important; border-bottom: 1px solid #000 !important; padding-bottom: 4px; font-weight: bold;
-    }
-    .items-table td {
-         padding: {{ $itemRowPadding }};
-         vertical-align: top;
-         border: none !important;
-    }
-    .items-table tbody { border-bottom: 1px solid #000 !important; }
-    .items-table tr.separator-row td {
-         font-weight: bold; text-align: left; padding: 4px 4px 2px 4px;
-         border-top: 1px solid #000 !important; background-color: transparent; font-size: 1.05em;
+        text-align: center;
+        border: none !important;
+        border-bottom: 1px solid #000 !important;
+        font-weight: bold;
     }
 
-    hr, .dotted-hr { display: none; }
+    .items-table td {
+        vertical-align: top;
+        border: none !important;
+    }
+
+    .items-table tbody {
+        border-bottom: 1px solid #000 !important;
+    }
+
+    .items-table tr.separator-row td {
+        font-weight: bold;
+        text-align: left;
+        border-top: 1px solid #000 !important;
+        background-color: transparent;
+        font-size: 1.05em;
+    }
+
     .text-right { text-align: right; }
     .text-center { text-align: center; }
     .font-bold { font-weight: bold; }
-    .terbilang-box { padding: 3px 5px; font-style: italic; font-weight: normal; }
 
-    .signature-box { margin-top: 15px; }
+    .terbilang-box {
+        padding: 4px 5px;
+        font-style: italic;
+        font-weight: normal;
+    }
+
+    .signature-box {
+        margin-top: 20px;
+    }
+
+    @media print {
+        @page {
+            size: A4 portrait;
+            margin: 10mm;
+        }
+        html, body {
+            height: 297mm;
+            overflow: hidden; /* pastikan tidak lebih dari 1 halaman */
+        }
+    }
+
     {!! $conditionalStyles !!}
 </style>
 
+{{-- ========================= BODY INVOICE ========================= --}}
 <div class="invoice-box">
     {{-- Header --}}
     <table>
         <tr>
-            <td style="width: 60%; vertical-align: bottom;"><div class="header-main">FAKTUR SERVICE</div></td>
+            <td style="width: 60%; vertical-align: bottom;">
+                <div class="header-main">FAKTUR SERVICE</div>
+            </td>
             <td style="width: 40%; text-align: right;">
                 <div class="header-sub">{{ $namaDealer }}</div>
                 <div>{{ $alamatDealer }}</div>
@@ -114,48 +171,45 @@ if ($totalDetailsCount > $itemThreshold) {
     </table>
 
     {{-- Info Pelanggan & Kendaraan --}}
-    <table class="info-table" style="width: 100%; margin-top: 10px;">
-         <tr>
-             <td style="width: 15%;"><strong>Tanggal</strong></td>
-             <td style="width: 18%;">: {{ $service->reg_date ? \Carbon\Carbon::parse($service->reg_date)->format('d/m/Y') : '-' }}</td>
-             <td style="width: 15%;"><strong>Nama</strong></td>
-             <td style="width: 18%;">: {{ $service->customer_name ?? '-' }}</td>
-             <td style="width: 15%;"><strong>No. Rangka</strong></td>
-             <td style="width: 19%;">: {{ $service->mc_frame_no ?? '-' }}</td>
-         </tr>
-         <tr>
-             <td><strong>No. Invoice</strong></td>
-             <td>: {{ $service->invoice_no ?? '-' }}</td>
-             <td><strong>Alamat</strong></td>
-             <td>: -</td>
-             {{-- ++ PERMINTAAN 1: Hapus "No. Mesin" ++ --}}
-             <td colspan="2"></td> {{-- Dikosongkan --}}
-         </tr>
-         <tr>
-             <td><strong>Order No.</strong></td>
-             <td>: {{ $service->work_order_no ?? '-' }}</td>
-             <td><strong>Mobile</strong></td>
-             <td>: {{ $service->customer_phone ?? '-' }}</td>
-             <td><strong>Tipe Motor</strong></td>
-             <td>: {{ $service->mc_model_name ?? '-' }}</td>
-         </tr>
+    <table class="info-table">
+        <tr>
+            <td><strong>Tanggal</strong></td>
+            <td>: {{ $service->reg_date ? \Carbon\Carbon::parse($service->reg_date)->format('d/m/Y') : '-' }}</td>
+            <td><strong>Nama</strong></td>
+            <td>: {{ $service->customer_name ?? '-' }}</td>
+            <td><strong>No. Rangka</strong></td>
+            <td>: {{ $service->mc_frame_no ?? '-' }}</td>
+        </tr>
+        <tr>
+            <td><strong>No. Invoice</strong></td>
+            <td>: {{ $service->invoice_no ?? '-' }}</td>
+            <td><strong>Alamat</strong></td>
+            <td>: -</td>
+            <td colspan="2"></td>
+        </tr>
+        <tr>
+            <td><strong>Order No.</strong></td>
+            <td>: {{ $service->work_order_no ?? '-' }}</td>
+            <td><strong>Mobile</strong></td>
+            <td>: {{ $service->customer_phone ?? '-' }}</td>
+            <td><strong>Tipe Motor</strong></td>
+            <td>: {{ $service->mc_model_name ?? '-' }}</td>
+        </tr>
     </table>
-     <table class="info-table" style="width: 100%;">
-         <tr>
-             <td style="width: 15%;"><strong>No. Polisi</strong></td>
-             <td style="width: 18%;">: {{ $service->plate_no ?? '-' }}</td>
-             <td style="width: 15%;"><strong>Technician</strong></td>
-             <td style="width: 18%;">: {{ $service->technician_name ?? '-' }}</td>
-             <td style="width: 15%;"><strong>YSS Code</strong></td>
-             <td style="width: 19%;">: {{ $service->yss ?? '-' }}</td>
-         </tr>
-         {{-- ++ PERMINTAAN 2: Hapus Baris "Members" ++ --}}
-         {{-- Baris <tr>...Members...</tr> dihapus --}}
+
+    <table class="info-table">
+        <tr>
+            <td><strong>No. Polisi</strong></td>
+            <td>: {{ $service->plate_no ?? '-' }}</td>
+            <td><strong>Technician</strong></td>
+            <td>: {{ $service->technician_name ?? '-' }}</td>
+            <td><strong>YSS Code</strong></td>
+            <td>: {{ $service->yss ?? '-' }}</td>
+        </tr>
     </table>
 
     {{-- Tabel Item --}}
-    {{-- ... (Bagian Tabel Item tidak berubah, biarkan seperti aslinya) ... --}}
-    <table class="items-table" style="margin-top: 8px;">
+    <table class="items-table">
         <thead>
             <tr>
                 <th style="width: 3%;">No.</th>
@@ -190,9 +244,7 @@ if ($totalDetailsCount > $itemThreshold) {
                     </tr>
                 @endforeach
                 @if ($sparepartDetails->isNotEmpty())
-                    <tr class="separator-row">
-                        <td colspan="7">Sparepart</td>
-                    </tr>
+                    <tr class="separator-row"><td colspan="7">Sparepart</td></tr>
                     @foreach ($sparepartDetails as $detail)
                         @php $totalItem = ($detail->quantity ?? 0) * ($detail->price ?? 0); @endphp
                         <tr>
@@ -207,66 +259,44 @@ if ($totalDetailsCount > $itemThreshold) {
                     @endforeach
                 @endif
             @empty
+                <tr><td colspan="7" class="text-center">Tidak ada item detail.</td></tr>
             @endforelse
-            @if($service->details->isEmpty())
-                 <tr><td colspan="7" class="text-center">Tidak ada item detail.</td></tr>
-            @endif
         </tbody>
     </table>
-    {{-- ... (Akhir Tabel Item) ... --}}
-
 
     {{-- Footer --}}
-    <table style="margin-top: 8px;">
+    <table style="margin-top: 10px;">
         <tr>
             <td style="width: 60%; vertical-align: bottom;">
                 <div><strong>Harga sudah termasuk PPN 11%</strong></div>
-                <div>
-                    <strong>Terbilang:</strong>
-                    <div class="terbilang-box"># {{ trim(NumberHelper::terbilang($service->total_amount ?? 0)) }} Rupiah #</div>
+                <div><strong>Terbilang:</strong>
+                    <div class="terbilang-box">
+                        # {{ trim(NumberHelper::terbilang($service->total_amount ?? 0)) }} Rupiah #
+                    </div>
                 </div>
             </td>
             <td style="width: 40%; vertical-align: top;">
                 <table style="width: 100%;">
-                     @php
-                         $totalService = $service->details->where('item_category', 'JASA')->sum(function($d){ return ($d->quantity ?? 0) * ($d->price ?? 0); });
-                         $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->sum(function($d){ return ($d->quantity ?? 0) * ($d->price ?? 0); });
-                         $grandTotal = $service->total_amount ?? 0;
-                         // Ambil nilai DP dan Benefit
-                         $totalDP = $service->total_down_payment ?? 0;
-                         $benefitAmount = $service->benefit_amount ?? 0;
-                     @endphp
-                     <tr>
-                         <td><strong>Total Service:</strong></td>
-                         <td class="text-right">Rp {{ number_format($totalService, 0, ',', '.') }}</td>
-                     </tr>
-                     <tr>
-                         <td><strong>Total Sparepart:</strong></td>
-                         <td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td>
-                     </tr>
-
-                     {{-- ++ PERMINTAAN 3: Tambah Total Down Payment (DP) ++ --}}
-                     <tr>
-                         <td><strong>Total Down Payment (DP):</strong></td>
-                         <td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td>
-                     </tr>
-
-                     {{-- ++ PERMINTAAN 4: Tambah Benefit Amount ++ --}}
-                     <tr>
-                         <td><strong>Benefit Amount:</strong></td>
-                         <td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td>
-                     </tr>
-
-                     <tr>
-                         <td><strong>Grand Total:</strong></td>
-                         <td class="text-right"><strong>Rp {{ number_format($grandTotal, 0, ',', '.') }}</strong></td>
-                     </tr>
+                    @php
+                        $totalService = $service->details->where('item_category', 'JASA')
+                            ->sum(fn($d) => ($d->quantity ?? 0) * ($d->price ?? 0));
+                        $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])
+                            ->sum(fn($d) => ($d->quantity ?? 0) * ($d->price ?? 0));
+                        $grandTotal = $service->total_amount ?? 0;
+                        $totalDP = $service->total_down_payment ?? 0;
+                        $benefitAmount = $service->benefit_amount ?? 0;
+                    @endphp
+                    <tr><td><strong>Total Service:</strong></td><td class="text-right">Rp {{ number_format($totalService, 0, ',', '.') }}</td></tr>
+                    <tr><td><strong>Total Sparepart:</strong></td><td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td></tr>
+                    <tr><td><strong>Total Down Payment (DP):</strong></td><td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td></tr>
+                    <tr><td><strong>Benefit Amount:</strong></td><td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td></tr>
+                    <tr><td><strong>Grand Total:</strong></td><td class="text-right"><strong>Rp {{ number_format($grandTotal, 0, ',', '.') }}</strong></td></tr>
                 </table>
             </td>
         </tr>
     </table>
 
-    {{-- Tiga Tanda Tangan --}}
+    {{-- Tanda Tangan --}}
     <table class="signature-box" style="width: 100%;">
         <tr>
             <td class="text-center" style="width: 33%;">Counter Service,</td>

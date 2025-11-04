@@ -174,8 +174,8 @@ class ServiceController extends Controller
                     'isHtml5ParserEnabled' => true,
                     'isRemoteEnabled' => true,
                     'dpi' => 150,
-                    // ++ PERUBAHAN FONT ++
-                    'defaultFont' => 'DejaVu Sans Mono', // Ganti Courier ke DejaVu Sans Mono
+                    // Pastikan ini 'Arial' untuk printer dot-matrix
+                    'defaultFont' => 'Arial',
                     'margin-top'    => 0,
                     'margin-right'  => 0,
                     'margin-bottom' => 0,
