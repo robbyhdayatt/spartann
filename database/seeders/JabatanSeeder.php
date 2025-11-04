@@ -20,6 +20,7 @@ class JabatanSeeder extends Seeder
             ['nama_jabatan' => 'Super Admin', 'singkatan' => 'SA'],
             ['nama_jabatan' => 'PIC', 'singkatan' => 'PIC'],
             ['nama_jabatan' => 'Manajer Area', 'singkatan' => 'MA'],
+            ['nama_jabatan' => 'Area Service Development', 'singkatan' => 'ASD'], // ++ TAMBAHKAN INI ++
 
             // Level Gudang Pusat
             ['nama_jabatan' => 'Kepala Gudang', 'singkatan' => 'KG'],
@@ -30,7 +31,7 @@ class JabatanSeeder extends Seeder
             // Level Dealer
             ['nama_jabatan' => 'Kepala Cabang', 'singkatan' => 'KC'],
             ['nama_jabatan' => 'Admin Dealer', 'singkatan' => 'AD'],
-            ['nama_jabatan' => 'Counter Sales', 'singkatan' => 'CS'], // Menggunakan nama Counter Sales agar lebih deskriptif
+            ['nama_jabatan' => 'Counter Sales', 'singkatan' => 'CS'],
         ];
 
         foreach ($jabatans as $jabatan) {

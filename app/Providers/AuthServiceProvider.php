@@ -85,7 +85,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('receive-mutation', fn(User $user) => $user->hasRole(['AG', 'AD']));
         Gate::define('view-quarantine-stock', fn(User $user) => $user->hasRole(['AG', 'AD', 'KG', 'KC', 'PIC', 'SA']));
 
-        Gate::define('manage-converts', fn(User $user) => $user->hasRole(['SA', 'PIC']));
+        Gate::define('manage-converts', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
 
         // --- PENJUALAN ---
         Gate::define('access-sales-module', fn(User $user) => $user->hasRole(['SLS', 'KSR', 'CS']));

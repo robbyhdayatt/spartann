@@ -215,7 +215,7 @@ return [
         // ================== MASTER & PENGATURAN ==================
         [
             'header' => 'MASTER & PENGATURAN',
-            'can'    => ['manage-locations', 'view-master-data', 'manage-users'],
+            'can'    => ['manage-locations', 'view-master-data', 'manage-users','manage-converts', 'manage-barangs'],
         ],
         [
             'text' => 'Manajemen Lokasi',
@@ -230,24 +230,27 @@ return [
         [
             'text'    => 'Master Data',
             'icon'    => 'fas fa-fw fa-database',
-            'can'     => 'view-master-data', // SA, PIC, MA
+            // ++ UBAH BARIS INI MENJADI ARRAY ++
+            'can'     => ['view-master-data', 'manage-converts', 'manage-barangs'],
             'submenu' => [
-                ['text' => 'Brand', 'icon' => 'far fa-fw fa-copyright', 'route' => 'admin.brands.index'],
-                ['text' => 'Kategori', 'icon' => 'far fa-fw fa-folder-open', 'route' => 'admin.categories.index'],
-                ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index'],
-                ['text' => 'Part (Stok)', 'icon' => 'fas fa-fw fa-cogs', 'route' => 'admin.parts.index'],
-                ['text' => 'Konsumen', 'icon' => 'fas fa-fw fa-user-friends', 'route' => 'admin.konsumens.index'],
+                // ++ TAMBAHKAN 'can' PADA SETIAP ITEM DI BAWAH INI ++
+                ['text' => 'Brand', 'icon' => 'far fa-fw fa-copyright', 'route' => 'admin.brands.index', 'can' => 'view-master-data'],
+                ['text' => 'Kategori', 'icon' => 'far fa-fw fa-folder-open', 'route' => 'admin.categories.index', 'can' => 'view-master-data'],
+                ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index', 'can' => 'view-master-data'],
+                ['text' => 'Part (Stok)', 'icon' => 'fas fa-fw fa-cogs', 'route' => 'admin.parts.index', 'can' => 'view-master-data'],
+                ['text' => 'Konsumen', 'icon' => 'fas fa-fw fa-user-friends', 'route' => 'admin.konsumens.index', 'can' => 'view-master-data'],
                 [
                     'text' => 'Master Convert',
-                    'url'  => 'admin/converts', // Sesuaikan dengan URI rute
-                    'icon' => 'fas fa-fw fa-exchange-alt', // Contoh ikon
-                    'can'  => 'manage-converts',
+                    // 'url'  => 'admin/converts',
+                    'route'=> 'admin.converts.index',
+                    'icon' => 'fas fa-fw fa-exchange-alt',
+                    'can'  => 'manage-converts', // Gate ini sudah benar
                 ],
                 [
-                    'text' => 'Barang (Jasa/Paket)', // Nama menu baru
+                    'text' => 'Barang (Jasa/Paket)',
                     'icon' => 'fas fa-fw fa-box-open',
                     'route' => 'admin.barangs.index',
-                    'can'  => 'manage-barangs' // Gunakan Gate baru
+                    'can'  => 'manage-barangs'
                 ],
             ],
         ],

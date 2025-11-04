@@ -60,6 +60,16 @@ class UserSeeder extends Seeder
             'lokasi_id' => null,
         ]);
 
+        User::create([
+            'nik' => 'ASD-001',
+            'username' => 'asd',
+            'nama' => 'Area Service Development', // Menggunakan nama lengkap
+            'jabatan_id' => $jabatans['ASD'],   // Menggunakan jabatan ASD baru
+            'password' => Hash::make('password'),
+            'is_active' => true,
+            'lokasi_id' => null, // Tidak terikat lokasi
+        ]);
+
         // =================================================================
         // PENGGUNA LEVEL GUDANG PUSAT
         // =================================================================
