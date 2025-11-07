@@ -28,7 +28,7 @@ class ServiceController extends Controller
         $query = Service::query();
         $dealers = collect();
         $selectedDealer = null;
-        $filterDate = $request->input('filter_date', null);
+        $filterDate = $request->input('filter_date', now()->toDateString());
 
         // Ubah variabel ini
         $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
@@ -53,7 +53,8 @@ class ServiceController extends Controller
         if ($filterDate) {
             try {
                 $validDate = Carbon::createFromFormat('Y-m-d', $filterDate)->startOfDay();
-                $query->whereDate('created_at', $validDate);
+                // Pastikan menggunakan 'services.created_at'
+                $query->whereDate('services.created_at', $validDate);
             } catch (\Exception $e) {
                 $filterDate = null;
             }

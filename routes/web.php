@@ -127,6 +127,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('reports/stock-by-warehouse/export', [ReportController::class, 'exportStockByWarehouse'])->name('reports.stock-by-warehouse.export');
     Route::get('reports/sales-summary', [ReportController::class, 'salesSummary'])->name('reports.sales-summary');
     Route::get('reports/sales-summary/export', [ReportController::class, 'exportSalesSummary'])->name('reports.sales-summary.export');
+    Route::get('reports/service-summary', [ReportController::class, 'serviceSummary'])->name('reports.service-summary');
+    Route::get('reports/service-summary/export', [ReportController::class, 'exportServiceSummary'])->name('reports.service-summary.export');
 
     // === CONVERT ===
     // Hapus: Route::resource('converts', ConvertController::class)->except(['show']);

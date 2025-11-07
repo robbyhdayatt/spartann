@@ -387,4 +387,79 @@ public function stockByWarehouse(Request $request)
         // Kita akan buat file App\Exports\SalesSummaryExport di langkah berikutnya
         return Excel::download(new \App\Exports\SalesSummaryExport($startDate, $endDate), $fileName);
     }
+
+    public function serviceSummary(Request $request)
+    {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        $invoiceNo = $request->input('invoice_no'); // Filter baru
+
+        // Query utama untuk ringkasan service
+        $query = DB::table('service_details')
+            ->join('services', 'service_details.service_id', '=', 'services.id')
+            ->leftJoin('parts', 'service_details.item_code', '=', 'parts.kode_part')
+            ->select(
+                'service_details.item_code',
+                'service_details.item_name',
+                'service_details.item_category',
+                DB::raw('SUM(service_details.quantity) as total_qty'),
+                DB::raw('SUM(service_details.price + service_details.labor_cost_service) as total_penjualan'),
+                DB::raw("SUM(CASE
+                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * parts.harga_satuan
+                                ELSE 0
+                            END) as total_modal"),
+                DB::raw("SUM(service_details.price + service_details.labor_cost_service) -
+                         SUM(CASE
+                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * parts.harga_satuan
+                                ELSE 0
+                            END) as total_keuntungan")
+            )
+            ->whereBetween('services.reg_date', [$startDate, $endDate])
+            ->groupBy('service_details.item_code', 'service_details.item_name', 'service_details.item_category')
+            ->orderBy('total_qty', 'desc');
+
+        // Filter lokasi untuk user non-admin
+        if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
+            // Asumsi 'services.lokasi_id' ada berdasarkan model Service Anda
+            $query->where('services.lokasi_id', $user->lokasi_id);
+        }
+
+        // Filter berdasarkan Nomor Invoice
+        if ($invoiceNo) {
+            $query->where('services.invoice_no', 'like', '%' . $invoiceNo . '%');
+        }
+
+        $reportData = $query->get();
+
+        // Hitung Grand Total
+        $grandTotalQty = $reportData->sum('total_qty');
+        $grandTotalPenjualan = $reportData->sum('total_penjualan');
+        $grandTotalModal = $reportData->sum('total_modal');
+        $grandTotalKeuntungan = $reportData->sum('total_keuntungan');
+
+        return view('admin.reports.service_summary', compact(
+            'reportData',
+            'grandTotalQty',
+            'grandTotalPenjualan',
+            'grandTotalModal',
+            'grandTotalKeuntungan',
+            'startDate',
+            'endDate',
+            'invoiceNo'
+        ));
+    }
+
+    public function exportServiceSummary(Request $request)
+    {
+        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        $invoiceNo = $request->input('invoice_no');
+
+        $fileName = 'Laporan Service - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
+
+        // Kita akan buat file App\Exports\ServiceSummaryExport di langkah berikutnya
+        return Excel::download(new \App\Exports\ServiceSummaryExport($startDate, $endDate, $invoiceNo), $fileName);
+    }
 }
