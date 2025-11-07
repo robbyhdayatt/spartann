@@ -2,7 +2,6 @@
 
 @section('title', 'Manajemen Service')
 
-{{-- Aktifkan plugin DataTables dan plugin tambahannya (untuk Buttons) --}}
 @section('plugins.Datatables', true)
 @section('plugins.DatatablesPlugin', true)
 @section('plugins.Select2', true)
@@ -28,7 +27,6 @@
             </div>
         @endif
 
-        {{-- Box Impor (Sudah tidak collapsib/le) --}}
         @can('manage-service')
         <div class="card card-outline card-secondary">
             <div class="card-header">
@@ -57,16 +55,14 @@
         </div>
         @endcan
 
-        {{-- Box Filter (Sudah tidak collapsib/le) --}}
+        {{-- FILTER --}}
         <div class="card card-outline card-primary">
             <div class="card-header">
                 <h3 class="card-title">Filter Data</h3>
             </div>
             <div class="card-body">
-                {{-- Form untuk Filter Tampilan --}}
                 <form action="{{ route('admin.services.index') }}" method="GET" id="filter-form">
                     <div class="row">
-                        {{-- Filter Dealer (Hanya untuk Superadmin/PIC) --}}
                         @if($canFilterByDealer && $listDealer->isNotEmpty())
                             <div class="col-md-4">
                                 <div class="form-group">
@@ -82,21 +78,18 @@
                                 </div>
                             </div>
                         @endif
-                        {{-- Filter Tanggal Import (created_at) --}}
+
                         <div class="col-md-{{ $canFilterByDealer ? '3' : '4' }}">
                             <div class="form-group">
                                 <label for="filter_date">Tanggal Import:</label>
-                                {{-- ++ MODIFIKASI: Input value sekarang akan otomatis terisi tanggal hari ini dari controller ++ --}}
                                 <input type="date" name="filter_date" id="filter_date" class="form-control" value="{{ $filterDate ?? '' }}">
                             </div>
                         </div>
 
-                        {{-- Tombol Filter dan Reset --}}
                         <div class="col-md-5 d-flex align-items-end mb-3">
                             <button type="submit" class="btn btn-primary mr-2">
                                 <i class="fas fa-filter"></i> Terapkan Filter
                             </button>
-                            {{-- ++ MODIFIKASI: Logika ini sekarang akan menampilkan tombol Reset saat pertama kali load ++ --}}
                             @if(($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all') || $filterDate)
                                 <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
                                     <i class="fas fa-sync-alt"></i> Reset Filter
@@ -105,7 +98,7 @@
                         </div>
                     </div>
                 </form>
-                {{-- Tombol Export Excel Harian --}}
+
                 @can('export-service-report')
                 <div class="mt-2">
                     <button type="button" class="btn btn-success" id="export-excel-btn">
@@ -116,224 +109,147 @@
                 @endcan
             </div>
         </div>
-        {{-- Box Tabel Daftar Service --}}
+
+        {{-- TABEL --}}
         <div class="card card-outline card-info">
             <div class="card-header">
-                <h3 class="card-title">
-                    Daftar Transaksi Service
-                    @if($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all')
-                        (Dealer: {{ $selectedDealer }} - {{ $listDealer->firstWhere('kode_gudang', $selectedDealer)->nama_lokasi?? '' }})
-                    @elseif ($canFilterByDealer && (!$selectedDealer || $selectedDealer == 'all'))
-                        (Semua Dealer)
-                    @elseif (!$canFilterByDealer && $selectedDealer)
-                        (Dealer: {{ Auth::user()->lokasi->nama_lokasi?? $selectedDealer }})
-                    @endif
-                </h3>
+                <h3 class="card-title">Daftar Transaksi Service</h3>
             </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table id="services-table" class="table table-bordered table-striped table-hover" style="width:100%">
-                            <thead>
-                                <tr>
-                                    <th style="width: 5%;">No.</th>
-                                    <th>No. Invoice</th>
-                                    <th>Dealer</th>
-                                    <th>Tanggal</th>
-                                    <th>Pelanggan</th>
-                                    <th>Plat No.</th>
-                                    {{-- ++ TAMBAHAN KOLOM BARU ++ --}}
-                                    <th>Tgl. Import</th>
-                                    <th class="text-right">Total</th>
-                                    <th class="text-center" style="width: 10%;">Status Cetak</th>
-                                    <th class="text-center" style="width: 10%;">Aksi</th>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="services-table" class="table table-bordered table-striped table-hover" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th style="width: 5%;">No.</th>
+                                <th>No. Invoice</th>
+                                <th>Dealer</th>
+                                <th>Tanggal</th>
+                                <th>Pelanggan</th>
+                                <th>Service Order</th> {{-- ✅ Kolom baru --}}
+                                <th>Tgl. Import</th>
+                                <th class="text-right">Total</th>
+                                <th class="text-center" style="width: 10%;">Status Cetak</th>
+                                <th class="text-center" style="width: 10%;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($services as $service)
+                                <tr class="{{ $service->printed_at ? 'row-printed' : '' }}">
+                                    <td>{{ $loop->iteration }}</td>
+                                    <td><strong>{{ $service->invoice_no }}</strong></td>
+                                    <td><span class="badge badge-secondary">{{ $service->dealer_code }}</span></td>
+                                    <td>{{ \Carbon\Carbon::parse($service->reg_date)->isoFormat('DD MMM YYYY') }}</td>
+                                    <td>{{ $service->customer_name }}</td>
+                                    <td><span class="badge badge-info">{{ $service->service_order }}</span></td> {{-- ✅ Kolom baru --}}
+                                    <td>{{ $service->created_at->isoFormat('DD MMM YYYY, HH:mm') }}</td>
+                                    <td class="text-right"><strong>@rupiah($service->total_amount)</strong></td>
+                                    <td class="text-center" data-order="{{ $service->printed_at ? 1 : 0 }}">
+                                        @if($service->printed_at)
+                                            <span class="badge badge-success" title="Pada: {{ $service->printed_at->format('d/m/Y H:i') }}">
+                                                <i class="fas fa-check"></i> Sudah Cetak
+                                            </span>
+                                        @else
+                                            <span class="badge badge-warning">
+                                                <i class="fas fa-times"></i> Belum
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-xs btn-info" title="Lihat Detail">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                @forelse ($services as $service)
-                                    <tr class="{{ $service->printed_at ? 'row-printed' : '' }}">
-                                        <td>{{ $loop->iteration }}</td>
-                                        <td>
-                                            <strong>{{ $service->invoice_no }}</strong>
-                                        </td>
-                                        <td><span class="badge badge-secondary">{{ $service->dealer_code }}</span></td>
-                                        <td>{{ \Carbon\Carbon::parse($service->reg_date)->isoFormat('DD MMM YYYY') }}</td>
-                                        <td>{{ $service->customer_name }}</td>
-                                        <td><span class="badge badge-dark">{{ $service->plate_no }}</span></td>
-
-                                        {{-- ++ TAMBAHAN DATA KOLOM BARU ++ --}}
-                                        <td>{{ $service->created_at->isoFormat('DD MMM YYYY, HH:mm') }}</td>
-
-                                        <td class="text-right"><strong>@rupiah($service->total_amount)</strong></td>
-                                        <td class="text-center" data-order="{{ $service->printed_at ? 1 : 0 }}">
-                                            @if($service->printed_at)
-                                                <span class="badge badge-success" title="Pada: {{ $service->printed_at->format('d/m/Y H:i') }}">
-                                                    <i class="fas fa-check"></i> Sudah Cetak
-                                                </span>
-                                            @else
-                                                <span class="badge badge-warning">
-                                                    <i class="fas fa-times"></i> Belum
-                                                </span>
-                                            @endif
-                                        </td>
-                                        <td class="text-center">
-                                            <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-xs btn-info" title="Lihat Detail">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr>
-                                        {{-- ++ DIUBAH: Colspan dari 9 menjadi 10 ++ --}}
-                                        <td colspan="10" class="text-center">Tidak ada data service ditemukan.</td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                            @empty
+                                <tr>
+                                    <td colspan="10" class="text-center">Tidak ada data service ditemukan.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
+</div>
 @stop
 
 @push('js')
 <script>
     $(function () {
         bsCustomFileInput.init();
-
-        $('.select2').select2({
-            theme: 'bootstrap4'
-        });
+        $('.select2').select2({ theme: 'bootstrap4' });
 
         var table = $('#services-table').DataTable({
-            // ... (Opsi DataTables Anda) ...
-            "responsive": true,
-            "autoWidth": false,
-            "paging": true,
-            "lengthChange": true,
-            "info": true,
-            "searching": true,
-            "ordering": true,
-            "language": {
-                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json",
-                "search": "",
-                "searchPlaceholder": "Cari di halaman ini..."
+            responsive: true,
+            autoWidth: false,
+            paging: true,
+            searching: true,
+            ordering: true,
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json",
+                search: "",
+                searchPlaceholder: "Cari di halaman ini..."
             },
-            "dom": "<'row'<'col-sm-12 col-md-6'lB><'col-sm-12 col-md-6'f>>" +
-                    "<'row'<'col-sm-12'tr>>" +
-                    "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
-            "buttons": [
+            dom: "<'row'<'col-sm-12 col-md-6'lB><'col-sm-12 col-md-6'f>>" +
+                 "<'row'<'col-sm-12'tr>>" +
+                 "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+            buttons: [
                 { extend: 'copy', text: '<i class="fas fa-copy"></i> Salin', className: 'btn btn-sm btn-default' },
                 { extend: 'csv', text: '<i class="fas fa-file-csv"></i> CSV', className: 'btn btn-sm btn-default' },
-                { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel (Halaman)', className: 'btn btn-sm btn-default' }, // Tombol excel bawaan datatables
+                { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel', className: 'btn btn-sm btn-default' },
                 { extend: 'pdf', text: '<i class="fas fa-file-pdf"></i> PDF', className: 'btn btn-sm btn-default' },
                 { extend: 'print', text: '<i class="fas fa-print"></i> Cetak', className: 'btn btn-sm btn-default' },
                 { extend: 'colvis', text: '<i class="fas fa-eye"></i> Kolom', className: 'btn btn-sm btn-default' }
             ],
-            "columnDefs": [
-                // ++ DIUBAH: Target Aksi dari 8 menjadi 9 ++
-                { "orderable": false, "targets": [0, 9] },
-                // ++ DIUBAH: Target non-searchable (Total: 7, Status: 8, Aksi: 9) ++
-                { "searchable": false, "targets": [0, 7, 8, 9] }
+            columnDefs: [
+                { orderable: false, targets: [0, 9] },
+                { searchable: false, targets: [0, 7, 8, 9] }
             ],
-             // ++ DIUBAH: Urutkan berdasarkan status cetak (sekarang kolom 8) ++
-            "order": [[ 8, "asc" ]]
+            order: [[ 8, "asc" ]]
         });
 
-        // ++ LOGIKA UNTUK TOMBOL EXPORT EXCEL HARIAN ++
+        // Tombol Export Excel
         function checkExportButtonState() {
             var filterDateValue = $('#filter_date').val();
-            if (filterDateValue) {
-                $('#export-excel-btn').prop('disabled', false);
-            } else {
-                $('#export-excel-btn').prop('disabled', true);
-            }
+            $('#export-excel-btn').prop('disabled', !filterDateValue);
         }
 
-        // Cek saat halaman dimuat
         checkExportButtonState();
+        $('#filter_date').on('change', checkExportButtonState);
 
-        // Cek saat tanggal diubah
-        $('#filter_date').on('change', function() {
-            checkExportButtonState();
-        });
-
-        // Handle klik tombol export
         $('#export-excel-btn').on('click', function() {
             var filterDateValue = $('#filter_date').val();
-            var dealerCodeValue = $('#dealer_code').val() || 'all'; // Ambil dealer code, default 'all'
-
+            var dealerCodeValue = $('#dealer_code').val() || 'all';
             if (!filterDateValue) {
                 alert('Silakan pilih Tanggal Import terlebih dahulu.');
                 return;
             }
-
-            // Buat URL export dengan parameter filter
-            var exportUrl = "{{ route('admin.services.export.excel') }}";
-            exportUrl += "?filter_date=" + filterDateValue;
-            exportUrl += "&dealer_code=" + dealerCodeValue;
-
-            // Redirect ke URL export
+            var exportUrl = "{{ route('admin.services.export.excel') }}" +
+                            "?filter_date=" + filterDateValue +
+                            "&dealer_code=" + dealerCodeValue;
             window.location.href = exportUrl;
         });
-        // ++ END LOGIKA EXPORT ++
-
     });
 </script>
 @endpush
 
 @push('css')
 <style>
-/* ... (CSS Anda sebelumnya tetap sama) ... */
-    /* Style untuk baris yang sudah dicetak */
-    .row-printed td {
-        background-color: #f8f9fa !important;
-        color: #6c757d;
-    }
-    .row-printed .badge {
-        opacity: 0.7;
-    }
-    .row-printed a.btn {
-        opacity: 0.7;
-    }
-
-    /* Samakan tinggi select2 */
-    .select2-container .select2-selection--single {
-        height: calc(2.25rem + 2px);
-        padding-top: 0.375rem;
-    }
-
-    /* Atur layout DataTables DOM (Buttons dan Search) */
+    .row-printed td { background-color: #f8f9fa !important; color: #6c757d; }
+    .row-printed .badge, .row-printed a.btn { opacity: 0.7; }
+    .select2-container .select2-selection--single { height: calc(2.25rem + 2px); padding-top: 0.375rem; }
     .dataTables_wrapper .row:first-child {
-        margin-bottom: 0.5rem;
-        padding-top: 0.5rem;
-        background-color: #f4f6f9; /* Beri sedikit latar */
-        border-bottom: 1px solid #dee2e6;
-        padding-bottom: 0.5rem;
+        margin-bottom: 0.5rem; padding-top: 0.5rem; background-color: #f4f6f9;
+        border-bottom: 1px solid #dee2e6; padding-bottom: 0.5rem;
     }
-    .dataTables_wrapper .dt-buttons {
-        text-align: left;
-        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
-    }
-    .dataTables_wrapper .dataTables_filter {
-        text-align: right;
-        margin-bottom: 0.5rem; /* Beri jarak jika di mobile */
-    }
+    .dataTables_wrapper .dt-buttons { text-align: left; margin-bottom: 0.5rem; }
+    .dataTables_wrapper .dataTables_filter { text-align: right; margin-bottom: 0.5rem; }
     .dataTables_wrapper .dataTables_filter input {
-        width: 250px;
-        display: inline-block;
-        margin-left: 0.5rem;
+        width: 250px; display: inline-block; margin-left: 0.5rem;
     }
-    /* Atur layout Paginasi dan Info di bawah */
-    .dataTables_wrapper .row:last-child {
-        padding-top: 1rem;
-        border-top: 1px solid #dee2e6;
-    }
-    .dataTables_wrapper .dataTables_info {
-        padding-top: 0.375rem; /* Agar sejajar tombol paginasi */
-    }
-    .dataTables_wrapper .dataTables_paginate {
-        text-align: right;
-    }
+    .dataTables_wrapper .row:last-child { padding-top: 1rem; border-top: 1px solid #dee2e6; }
+    .dataTables_wrapper .dataTables_info { padding-top: 0.375rem; }
+    .dataTables_wrapper .dataTables_paginate { text-align: right; }
 </style>
 @endpush

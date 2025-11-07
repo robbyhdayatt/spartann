@@ -183,7 +183,8 @@ class ServiceController extends Controller
                     'margin-left'   => 0,
                     'enable-smart-shrinking' => true,
                     'disable-smart-shrinking' => false,
-                    'lowquality' => false
+                    'lowquality' => false,
+                    'enable_php' => true,
                 ]);
 
             return $pdf->stream($fileName);
