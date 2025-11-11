@@ -7,11 +7,12 @@ use Illuminate\Http\Request;
 use App\Models\Part;
 use App\Models\StockMovement;
 use App\Models\Lokasi;
-use App\Models\InventoryBatch; // <--- UBAH DARI Inventory
+use App\Models\InventoryBatch;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\StockByWarehouseExport;
 use App\Exports\SalesJournalExport;
 use App\Models\PenjualanDetail;
+use App\Models\Penjualan;
 use App\Exports\PurchaseJournalExport;
 use App\Models\ReceivingDetail;
 use App\Exports\InventoryValueExport;
@@ -337,36 +338,80 @@ public function stockByWarehouse(Request $request)
         $user = Auth::user();
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        $selectedLokasiId = $request->input('dealer_id'); // Ambil filter dealer/lokasi dari request
 
-        // Query utama untuk ringkasan penjualan
-        $query = DB::table('penjualan_details')
-            ->join('penjualans', 'penjualan_details.penjualan_id', '=', 'penjualans.id')
-            ->join('barangs', 'penjualan_details.barang_id', '=', 'barangs.id')
-            ->select(
-                'barangs.part_code',
-                'barangs.part_name',
-                DB::raw('SUM(penjualan_details.qty_jual) as total_qty'),
-                DB::raw('SUM(penjualan_details.subtotal) as total_penjualan'),
-                DB::raw('SUM(penjualan_details.qty_jual * barangs.harga_modal) as total_modal'),
-                DB::raw('SUM(penjualan_details.subtotal) - SUM(penjualan_details.qty_jual * barangs.harga_modal) as total_keuntungan')
-            )
-            ->whereBetween('penjualans.tanggal_jual', [$startDate, $endDate])
-            ->groupBy('penjualan_details.barang_id', 'barangs.part_code', 'barangs.part_name')
-            ->orderBy('total_qty', 'desc');
+        // 1. Ambil daftar Dealer (Lokasi) untuk dropdown filter
+        $dealerList = collect();
+        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id;
 
-        // Filter lokasi untuk user non-admin
-        if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
-            $query->where('penjualans.lokasi_id', $user->lokasi_id);
+        if ($isRestrictedUser) {
+            // Jika user dibatasi, hanya tampilkan lokasinya sendiri
+            $dealerList = Lokasi::where('id', $user->lokasi_id)->get();
+            // Paksa filter ke lokasi user tersebut
+            $selectedLokasiId = $user->lokasi_id;
+        } else {
+            // Jika admin/manajer, tampilkan semua lokasi aktif
+            $dealerList = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
+
+        // 2. Query Eloquent untuk data rinci (bukan summary lagi)
+        $query = PenjualanDetail::with([
+            'penjualan' => function ($query) {
+                // Eager load relasi dari penjualan
+                $query->with(['lokasi', 'konsumen', 'sales']);
+            },
+            'barang' // Eager load relasi ke barang
+        ])
+        ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $selectedLokasiId, $isRestrictedUser, $user) {
+            // Filter tanggal di tabel penjualans
+            $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
+
+            // 3. Terapkan filter dealer/lokasi
+            if ($selectedLokasiId) {
+                // Jika dealer dipilih (atau dipaksa karena role), filter berdasarkan itu
+                $q->where('lokasi_id', $selectedLokasiId);
+            }
+            // Fallback jika user dibatasi (sebenarnya sudah ditangani oleh $selectedLokasiId di atas)
+            elseif ($isRestrictedUser) {
+                $q->where('lokasi_id', $user->lokasi_id);
+            }
+        })
+        // Urutkan berdasarkan tanggal jual (dari tabel induk)
+        ->orderBy(
+            \App\Models\Penjualan::select('tanggal_jual')
+                ->whereColumn('id', 'penjualan_details.penjualan_id')
+                ->limit(1),
+            'desc'
+        )
+        // Urutkan juga berdasarkan nomor faktur
+        ->orderBy(
+            \App\Models\Penjualan::select('nomor_faktur')
+                ->whereColumn('id', 'penjualan_details.penjualan_id')
+                ->limit(1),
+            'desc'
+        );
 
         $reportData = $query->get();
 
-        // Hitung Grand Total
-        $grandTotalQty = $reportData->sum('total_qty');
-        $grandTotalPenjualan = $reportData->sum('total_penjualan');
-        $grandTotalModal = $reportData->sum('total_modal');
-        $grandTotalKeuntungan = $reportData->sum('total_keuntungan');
+        // 4. Hitung Grand Total secara manual dari koleksi data rinci
+        $grandTotalQty = 0;
+        $grandTotalPenjualan = 0;
+        $grandTotalModal = 0;
+        $grandTotalKeuntungan = 0;
 
+        foreach ($reportData as $data) {
+            // Pastikan relasi 'barang' ada sebelum menghitung modal
+            $modal_satuan = $data->barang->harga_modal ?? 0;
+            $total_modal_item = $data->qty_jual * $modal_satuan;
+            $total_keuntungan_item = $data->subtotal - $total_modal_item;
+
+            $grandTotalQty += $data->qty_jual;
+            $grandTotalPenjualan += $data->subtotal;
+            $grandTotalModal += $total_modal_item;
+            $grandTotalKeuntungan += $total_keuntungan_item;
+        }
+
+        // 5. Kirim semua data baru ke view
         return view('admin.reports.sales_summary', compact(
             'reportData',
             'grandTotalQty',
@@ -374,18 +419,21 @@ public function stockByWarehouse(Request $request)
             'grandTotalModal',
             'grandTotalKeuntungan',
             'startDate',
-            'endDate'
+            'endDate',
+            'dealerList',       // Daftar dealer untuk dropdown
+            'selectedLokasiId'  // ID dealer yang sedang dipilih
         ));
     }
 
-    public function exportSalesSummary(Request $request)
+public function exportSalesSummary(Request $request)
     {
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        $dealerId = $request->input('dealer_id');
+
         $fileName = 'Laporan Penjualan - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
 
-        // Kita akan buat file App\Exports\SalesSummaryExport di langkah berikutnya
-        return Excel::download(new \App\Exports\SalesSummaryExport($startDate, $endDate), $fileName);
+        return Excel::download(new \App\Exports\SalesSummaryExport($startDate, $endDate, $dealerId), $fileName);
     }
 
     public function serviceSummary(Request $request)

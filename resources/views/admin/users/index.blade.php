@@ -37,7 +37,7 @@
                         <td>{{ $user->username }}</td>
                         <td>{{ $user->jabatan->nama_jabatan ?? 'N/A' }}</td>
                         {{-- PERUBAHAN: Memanggil relasi 'lokasi' --}}
-                        <td>{{ $user->lokasi->nama_gudang ?? 'Global' }}</td>
+                        <td>{{ $user->lokasi->nama_lokasi ?? 'Global' }}</td>
                         <td>
                             @if($user->is_active)
                                 <span class="badge badge-success">Aktif</span>
@@ -92,10 +92,10 @@
                             </div>
                             <div class="col-md-6 form-group">
                                 <label>Lokasi</label>
-                                <select class="form-control select2" name="gudang_id" style="width: 100%;">
+                                <select class="form-control select2" name="lokasi_id" style="width: 100%;">
                                     <option value="">Tidak Terikat Lokasi (Global)</option>
                                     @foreach($lokasi as $item)
-                                        <option value="{{ $item->id }}">{{ $item->nama_gudang }} ({{ $item->kode_gudang }})</option>
+                                        <option value="{{ $item->id }}">{{ $item->nama_lokasi }} ({{ $item->kode_lokasi }})</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -139,10 +139,10 @@
                             </div>
                             <div class="col-md-6 form-group">
                                 <label>Lokasi</label>
-                                <select class="form-control" id="edit_gudang_id" name="gudang_id">
+                                <select class="form-control" id="edit_lokasi_id" name="lokasi_id">
                                     <option value="">Tidak Terikat Lokasi (Global)</option>
                                     @foreach($lokasi as $item)
-                                        <option value="{{ $item->id }}">{{ $item->nama_gudang }} ({{ $item->kode_gudang }})</option>
+                                        <option value="{{ $item->id }}">{{ $item->nama_lokasi }} ({{ $item->kode_lokasi }})</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -185,7 +185,7 @@ $(document).ready(function() {
         $('#edit_nik').val(user.nik);
         $('#edit_username').val(user.username);
         $('#edit_jabatan_id').val(user.jabatan_id);
-        $('#edit_gudang_id').val(user.gudang_id);
+        $('#edit_lokasi_id').val(user.lokasi_id);
         $('#edit_is_active').val(user.is_active);
     });
 });
