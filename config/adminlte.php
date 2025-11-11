@@ -222,7 +222,7 @@ return [
             'icon' => 'fas fa-fw fa-map-marked-alt',
             'can'  => 'manage-locations', // SA & PIC
             'submenu' => [
-                ['text' => 'Gudang & Dealer', 'icon' => 'fas fa-fw fa-warehouse', 'route' => 'admin.lokasi.index'],
+                ['text' => 'Lokasi', 'icon' => 'fas fa-fw fa-warehouse', 'route' => 'admin.lokasi.index'],
                 ['text' => 'Master Dealer', 'icon' => 'fas fa-fw fa-store', 'route' => 'admin.dealers.index'],
                 ['text' => 'Rak', 'icon' => 'fas fa-fw fa-pallet', 'route' => 'admin.raks.index'],
             ],
@@ -370,7 +370,7 @@ return [
 
     'plugins' => [
         'Datatables' => [
-            'active' => false,
+            'active' => true,
             'files' => [
                 ['type' => 'js', 'asset' => true, 'location' => 'vendor/datatables/js/jquery.dataTables.min.js'],
                 ['type' => 'js', 'asset' => true, 'location' => 'vendor/datatables/js/dataTables.bootstrap4.min.js'],

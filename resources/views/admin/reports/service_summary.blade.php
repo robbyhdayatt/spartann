@@ -39,7 +39,7 @@
 
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped" id="reportTable">
-                            <thead class="thead-dark">
+                            <thead class="thead-light">
                                 <tr>
                                     <th>Kode Item</th>
                                     <th>Nama Item</th>

@@ -10,7 +10,15 @@ class Lokasi extends Model
     use HasFactory;
 
     protected $table = 'lokasi';
-    protected $guarded = ['id'];
+
+    protected $fillable = [
+        'kode_lokasi',
+        'nama_lokasi',
+        'npwp',
+        'alamat',
+        'tipe',
+        'is_active',
+    ];
 
     public function raks()
     {
@@ -22,11 +30,8 @@ class Lokasi extends Model
         return $this->hasMany(User::class, 'lokasi_id');
     }
 
-    // Di dalam App\Models\Lokasi.php
     public function dealer()
     {
-        // Sesuaikan 'kode_dealer' jika nama kolom di tabel dealers berbeda
-        // Sesuaikan 'kode_lokasi' jika nama kolom di tabel lokasi berbeda
         return $this->belongsTo(Dealer::class, 'kode_lokasi', 'kode_dealer');
     }
 }

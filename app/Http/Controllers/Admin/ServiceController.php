@@ -9,17 +9,15 @@ use App\Imports\ServiceImport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Auth;
 use PDF;
-// ++ Tambahkan Model Dealer & Lokasi (jika Dealer = Lokasi, cukup satu) ++
 use App\Models\Dealer;
-use App\Models\Lokasi; // Pastikan model Lokasi ada
+use App\Models\Lokasi;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon; // Pastikan ini ada di atas
-use App\Exports\ServiceDailyReportExport; // Pastikan ini ada di atas
+use Carbon\Carbon;
+use App\Exports\ServiceDailyReportExport;
 
 
 class ServiceController extends Controller
 {
-    // ... (method index() dan import() tetap sama) ...
     public function index(Request $request)
     {
         $this->authorize('view-service');
@@ -28,12 +26,11 @@ class ServiceController extends Controller
         $query = Service::query();
         $dealers = collect();
         $selectedDealer = null;
-        $filterDate = $request->input('filter_date', now()->toDateString());
-
-        // Ubah variabel ini
+        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
 
-        if ($canFilterByDealer) { // Gunakan variabel baru
+        if ($canFilterByDealer) {
             $dealers = Lokasi::where('tipe', 'DEALER')->orderBy('kode_lokasi')->get(['kode_lokasi', 'nama_lokasi']);
             $selectedDealer = $request->input('dealer_code');
 
@@ -49,14 +46,16 @@ class ServiceController extends Controller
             }
         }
 
-        // ... (Logika filter tanggal tetap sama) ...
-        if ($filterDate) {
+        if ($startDate && $endDate) {
             try {
-                $validDate = Carbon::createFromFormat('Y-m-d', $filterDate)->startOfDay();
-                // Pastikan menggunakan 'services.created_at'
-                $query->whereDate('services.created_at', $validDate);
+                $validStartDate = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
+                $validEndDate = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
+                $query->whereBetween('services.created_at', [$validStartDate, $validEndDate]);
+
             } catch (\Exception $e) {
-                $filterDate = null;
+                $startDate = now()->startOfMonth()->toDateString();
+                $endDate = now()->endOfMonth()->toDateString();
+                $query->whereBetween('services.created_at', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()]);
             }
         }
 
@@ -66,9 +65,9 @@ class ServiceController extends Controller
             'services' => $services,
             'listDealer' => $dealers,
             'selectedDealer' => $selectedDealer,
-            // 'isSuperAdminOrPic' => $isSuperAdminOrPic, // Ganti ini
-            'canFilterByDealer' => $canFilterByDealer, // Kirim variabel baru
-            'filterDate' => $filterDate
+            'canFilterByDealer' => $canFilterByDealer,
+            'startDate' => $startDate,
+            'endDate' => $endDate
         ]);
     }
 
@@ -134,7 +133,6 @@ class ServiceController extends Controller
         }
 
         $this->authorize('view-service');
-        // Pastikan 'lokasi' dimuat di sini juga untuk tampilan 'show'
         $service->load('details', 'lokasi');
         return view('admin.services.show', compact('service'));
     }
@@ -142,8 +140,6 @@ class ServiceController extends Controller
     public function downloadPDF($id)
     {
         $this->authorize('view-service');
-
-        // ++ PERUBAHAN: Tambahkan 'lokasi' ke with() ++
         $service = Service::with('details', 'lokasi')->findOrFail($id);
 
         $user = Auth::user();
@@ -175,7 +171,6 @@ class ServiceController extends Controller
                     'isHtml5ParserEnabled' => true,
                     'isRemoteEnabled' => true,
                     'dpi' => 150,
-                    // Pastikan ini 'Arial' untuk printer dot-matrix
                     'defaultFont' => 'Arial',
                     'margin-top'    => 0,
                     'margin-right'  => 0,
@@ -196,17 +191,18 @@ class ServiceController extends Controller
 
         $user = Auth::user();
         $selectedDealer = $request->query('dealer_code');
-        $filterDate = $request->query('filter_date');
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
 
         $isSuperAdminOrPic = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
 
-        // Validasi tanggal
-        if (!$filterDate) {
-            return redirect()->back()->with('error', 'Silakan pilih tanggal untuk export laporan harian.');
+        if (!$startDate || !$endDate) {
+            return redirect()->back()->with('error', 'Silakan pilih Tanggal Mulai dan Tanggal Selesai untuk export.');
         }
 
         try {
-            $validDate = Carbon::createFromFormat('Y-m-d', $filterDate)->format('Y-m-d');
+            $validStartDate = Carbon::createFromFormat('Y-m-d', $startDate)->format('Y-m-d');
+            $validEndDate = Carbon::createFromFormat('Y-m-d', $endDate)->format('Y-m-d');
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Format tanggal export tidak valid.');
         }
@@ -217,26 +213,20 @@ class ServiceController extends Controller
         if ($isSuperAdminOrPic) {
             if ($selectedDealer && $selectedDealer !== 'all') {
                 $dealerCodeForExport = $selectedDealer;
-                // Cari nama dealer untuk nama file
                 $dealerInfo = Lokasi::where('kode_lokasi', $dealerCodeForExport)->first();
                 $dealerName = $dealerInfo ? str_replace(' ', '_', $dealerInfo->nama_lokasi) : $dealerCodeForExport;
             }
         } else {
-            // Jika bukan SA/PIC, otomatis filter berdasarkan dealernya
             if ($user->lokasi && $user->lokasi->kode_lokasi) {
                 $dealerCodeForExport = $user->lokasi->kode_lokasi;
                 $dealerName = str_replace(' ', '_', $user->lokasi->nama_lokasi);
             } else {
-                // Seharusnya tidak terjadi jika logic di index benar
                 return redirect()->back()->with('error', 'Akun Anda tidak terasosiasi dengan dealer.');
             }
         }
 
+        $fileName = "Laporan_Service_{$dealerName}_{$validStartDate}_sd_{$validEndDate}.xlsx";
 
-        $fileName = "Laporan_Service_Harian_{$dealerName}_{$validDate}.xlsx";
-
-        // Kirim parameter filter ke class Export
-        return Excel::download(new ServiceDailyReportExport($dealerCodeForExport, $validDate), $fileName);
+        return Excel::download(new ServiceDailyReportExport($dealerCodeForExport, $validStartDate, $validEndDate), $fileName);
     }
 }
-

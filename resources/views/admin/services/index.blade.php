@@ -64,7 +64,7 @@
                 <form action="{{ route('admin.services.index') }}" method="GET" id="filter-form">
                     <div class="row">
                         @if($canFilterByDealer && $listDealer->isNotEmpty())
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <div class="form-group">
                                     <label for="dealer_code">Pilih Dealer:</label>
                                     <select name="dealer_code" id="dealer_code" class="form-control select2">
@@ -79,20 +79,27 @@
                             </div>
                         @endif
 
-                        <div class="col-md-{{ $canFilterByDealer ? '3' : '4' }}">
+                        <div class="col-md-3">
                             <div class="form-group">
-                                <label for="filter_date">Tanggal Import:</label>
-                                <input type="date" name="filter_date" id="filter_date" class="form-control" value="{{ $filterDate ?? '' }}">
+                                <label for="start_date">Tanggal Mulai (Import):</label>
+                                <input type="date" name="start_date" id="start_date" class="form-control" value="{{ $startDate ?? '' }}">
                             </div>
                         </div>
 
-                        <div class="col-md-5 d-flex align-items-end mb-3">
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label for="end_date">Tanggal Selesai (Import):</label>
+                                <input type="date" name="end_date" id="end_date" class="form-control" value="{{ $endDate ?? '' }}">
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 d-flex align-items-end mb-3">
                             <button type="submit" class="btn btn-primary mr-2">
                                 <i class="fas fa-filter"></i> Terapkan Filter
                             </button>
-                            @if(($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all') || $filterDate)
+                            @if(request()->has('start_date') || request()->has('end_date') || ($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all'))
                                 <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
-                                    <i class="fas fa-sync-alt"></i> Reset Filter
+                                    <i class="fas fa-sync-alt"></i> Reset
                                 </a>
                             @endif
                         </div>
@@ -102,9 +109,9 @@
                 @can('export-service-report')
                 <div class="mt-2">
                     <button type="button" class="btn btn-success" id="export-excel-btn">
-                        <i class="fas fa-file-excel"></i> Export Excel Laporan Harian (sesuai filter)
+                        <i class="fas fa-file-excel"></i> Export Excel (sesuai filter)
                     </button>
-                    <small class="text-muted ml-2">Pilih Tanggal Import terlebih dahulu untuk mengaktifkan tombol ini.</small>
+                    <small class="text-muted ml-2">Pilih Tanggal Mulai dan Selesai terlebih dahulu untuk mengaktifkan tombol ini.</small>
                 </div>
                 @endcan
             </div>
@@ -125,7 +132,7 @@
                                 <th>Dealer</th>
                                 <th>Tanggal</th>
                                 <th>Pelanggan</th>
-                                <th>Service Order</th> {{-- ✅ Kolom baru --}}
+                                <th>Service Order</th>
                                 <th>Tgl. Import</th>
                                 <th class="text-right">Total</th>
                                 <th class="text-center" style="width: 10%;">Status Cetak</th>
@@ -140,7 +147,7 @@
                                     <td><span class="badge badge-secondary">{{ $service->dealer_code }}</span></td>
                                     <td>{{ \Carbon\Carbon::parse($service->reg_date)->isoFormat('DD MMM YYYY') }}</td>
                                     <td>{{ $service->customer_name }}</td>
-                                    <td><span class="badge badge-info">{{ $service->service_order }}</span></td> {{-- ✅ Kolom baru --}}
+                                    <td><span class="badge badge-info">{{ $service->service_order }}</span></td>
                                     <td>{{ $service->created_at->isoFormat('DD MMM YYYY, HH:mm') }}</td>
                                     <td class="text-right"><strong>@rupiah($service->total_amount)</strong></td>
                                     <td class="text-center" data-order="{{ $service->printed_at ? 1 : 0 }}">
@@ -209,25 +216,31 @@
             order: [[ 8, "asc" ]]
         });
 
-        // Tombol Export Excel
         function checkExportButtonState() {
-            var filterDateValue = $('#filter_date').val();
-            $('#export-excel-btn').prop('disabled', !filterDateValue);
+            var startDateValue = $('#start_date').val();
+            var endDateValue = $('#end_date').val();
+            $('#export-excel-btn').prop('disabled', !startDateValue || !endDateValue);
         }
 
         checkExportButtonState();
-        $('#filter_date').on('change', checkExportButtonState);
+
+        $('#start_date, #end_date').on('change', checkExportButtonState);
 
         $('#export-excel-btn').on('click', function() {
-            var filterDateValue = $('#filter_date').val();
+            var startDateValue = $('#start_date').val();
+            var endDateValue = $('#end_date').val();
             var dealerCodeValue = $('#dealer_code').val() || 'all';
-            if (!filterDateValue) {
-                alert('Silakan pilih Tanggal Import terlebih dahulu.');
+
+            if (!startDateValue || !endDateValue) {
+                alert('Silakan pilih Tanggal Mulai dan Tanggal Selesai terlebih dahulu.');
                 return;
             }
+
             var exportUrl = "{{ route('admin.services.export.excel') }}" +
-                            "?filter_date=" + filterDateValue +
+                            "?start_date=" + startDateValue +
+                            "&end_date=" + endDateValue +
                             "&dealer_code=" + dealerCodeValue;
+
             window.location.href = exportUrl;
         });
     });

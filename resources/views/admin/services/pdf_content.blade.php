@@ -10,7 +10,7 @@ $alamatDealer = $service->lokasi->alamat;
 if (empty($alamatDealer) || $alamatDealer === '\N') {
     $alamatDealer = 'Alamat Tidak Tersedia';
 }
-$npwpDealer = 'NPWP No.: ' . ($service->customer_npwp_no ?? '-');
+$npwpDealer = 'NPWP No.: ' . ($service->lokasi->npwp ?? $service->customer_npwp_no ?? '-');
 
 // === Jenis Service Order ===
 $serviceOrder = $service->service_order ?? 'Walk In Service';

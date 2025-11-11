@@ -7,7 +7,7 @@ $namaDealer = str_replace('LTI', 'Lautan Teduh', $namaDealer);
 $alamatDealer = ($penjualan->lokasi->alamat && $penjualan->lokasi->alamat !== '\N')
     ? $penjualan->lokasi->alamat
     : 'Alamat Tidak Tersedia';
-$npwpDealer = 'NPWP No.: ' . ($penjualan->customer_npwp_no ?? '-');
+$npwpDealer = 'NPWP No.: ' . ($penjualan->lokasi->npwp ?? $penjualan->customer_npwp_no ?? '-');
 
 // === Dynamic Font Scaling ===
 $totalDetailsCount = $penjualan->details->count();

@@ -2,6 +2,13 @@
 
 @section('title', 'Laporan Penjualan')
 
+{{-- Tambahkan CSS untuk DataTables (jika plugin tidak memuatnya) --}}
+@section('adminlte_css')
+    <link rel="stylesheet" href="{{ asset('vendor/datatables/css/dataTables.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('vendor/select2-bootstrap4-theme/select2-bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('vendor/select2/css/select2.min.css') }}">
+@stop
+
 @section('content_header')
     <h1 class="m-0 text-dark">Laporan Penjualan</h1>
 @stop
@@ -12,6 +19,7 @@
             <div class="card">
                 <div class="card-body">
 
+                    {{-- FORM FILTER (Sudah Benar) --}}
                     <form action="{{ route('admin.reports.sales-summary') }}" method="GET">
                         <div class="row">
                             <div class="col-md-3">
@@ -22,30 +30,21 @@
                                 <label for="end_date">Tanggal Selesai</label>
                                 <input type="date" name="end_date" class="form-control" value="{{ $endDate }}">
                             </div>
-
-                            {{-- TAMBAHAN: Filter Dealer (Lokasi) --}}
                             <div class="col-md-3">
                                 <label for="dealer_id">Pilih Dealer (Lokasi)</label>
-                                <select name="dealer_id" class="form-control" @if(count($dealerList) == 1) readonly @endif>
-                                    {{-- Jika user BUKAN admin, $dealerList hanya berisi 1 lokasi,
-                                         tapi jika admin, dia bisa memilih "Semua Dealer" --}}
+                                <select name="dealer_id" class="form-control select2" @if(count($dealerList) == 1) readonly @endif>
                                     @if(count($dealerList) > 1)
                                         <option value="">-- Semua Dealer --</option>
                                     @endif
-
                                     @foreach($dealerList as $dealer)
-                                        {{-- Gunakan $selectedLokasiId dari controller --}}
                                         <option value="{{ $dealer->id }}" {{ $selectedLokasiId == $dealer->id ? 'selected' : '' }}>
                                             {{ $dealer->nama_lokasi }}
                                         </option>
                                     @endforeach
                                 </select>
                             </div>
-
-                            {{-- MODIFIKASI: Menggabungkan tombol filter & export --}}
                             <div class="col-md-3 d-flex align-items-end">
                                 <button type="submit" class="btn btn-primary mr-2">Filter</button>
-                                {{-- Pastikan export mengambil semua parameter filter --}}
                                 <a href="{{ route('admin.reports.sales-summary.export', request()->query()) }}" class="btn btn-success">
                                     <i class="fa fa-download"></i> Export Excel
                                 </a>
@@ -56,9 +55,8 @@
                     <hr>
 
                     <div class="table-responsive">
-                        {{-- MODIFIKASI: Header, Body, dan Footer Tabel --}}
                         <table class="table table-bordered table-striped" id="reportTable">
-                            <thead class="thead-dark">
+                            <thead class="thead-light">
                                 <tr>
                                     <th>Tanggal Jual</th>
                                     <th>No. Faktur</th>
@@ -74,6 +72,10 @@
                                 </tr>
                             </thead>
                             <tbody>
+                                {{--
+                                  MODIFIKASI PENTING #1:
+                                  Kita hapus <tr>..</tr> dari dalam @empty
+                                --}}
                                 @forelse($reportData as $data)
                                     @php
                                         // Hitung modal & keuntungan per baris
@@ -95,20 +97,17 @@
                                         <td>Rp {{ number_format($total_keuntungan, 0, ',', '.') }}</td>
                                     </tr>
                                 @empty
-                                    <tr>
-                                        {{-- Sesuaikan colspan dengan jumlah kolom baru (11) --}}
-                                        <td colspan="11" class="text-center">Tidak ada data untuk filter yang dipilih.</td>
-                                    </tr>
+                                    {{-- BIARKAN KOSONG. DataTables akan mengisi ini. --}}
                                 @endforelse
                             </tbody>
                             <tfoot class="bg-light font-weight-bold">
+                                {{-- TFOOT Anda sudah benar menggunakan <th> --}}
                                 <tr>
-                                    {{-- Sesuaikan colspan (7 kolom pertama adalah teks) --}}
-                                    <td colspan="7" class="text-right">GRAND TOTAL</td>
-                                    <td>{{ number_format($grandTotalQty, 0, ',', '.') }}</td>
-                                    <td>Rp {{ number_format($grandTotalPenjualan, 0, ',', '.') }}</td>
-                                    <td>Rp {{ number_format($grandTotalModal, 0, ',', '.') }}</td>
-                                    <td>Rp {{ number_format($grandTotalKeuntungan, 0, ',', '.') }}</td>
+                                    <th colspan="7" class="text-right">GRAND TOTAL</th>
+                                    <th>{{ number_format($grandTotalQty, 0, ',', '.') }}</th>
+                                    <th>Rp {{ number_format($grandTotalPenjualan, 0, ',', '.') }}</th>
+                                    <th>Rp {{ number_format($grandTotalModal, 0, ',', '.') }}</th>
+                                    <th>Rp {{ number_format($grandTotalKeuntungan, 0, ',', '.') }}</th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -121,21 +120,40 @@
 @stop
 
 @push('js')
+    {{-- Impor skrip DataTables & Select2 --}}
+    <script src="{{ asset('vendor/datatables/js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ asset('vendor/datatables/js/dataTables.bootstrap4.min.js') }}"></script>
+    <script src="{{ asset('vendor/select2/js/select2.full.min.js') }}"></script>
+
     <script>
-        // Inisialisasi DataTables untuk sort dan search
         $(document).ready(function() {
+            // Initialize Select2
+            $('.select2').select2({
+                theme: 'bootstrap4'
+            });
+
+            // Initialize DataTables
             $('#reportTable').DataTable({
                 "responsive": true,
-                "lengthChange": false,
+                "lengthChange": true,
                 "autoWidth": false,
                 "paging": true,
                 "info": true,
                 "searching": true,
                 "ordering": true,
-                // Urutkan berdasarkan kolom pertama (Tanggal Jual) secara descending (terbaru dulu)
                 "order": [[ 0, "desc" ]],
+
+                {{--
+                  MODIFIKASI PENTING #2:
+                  Tambahkan ini untuk menggantikan @empty row
+                --}}
+                "language": {
+                    "emptyTable": "Tidak ada data untuk filter yang dipilih.",
+                    "zeroRecords": "Tidak ada data yang cocok ditemukan"
+                },
+
                 "footerCallback": function ( row, data, start, end, display ) {
-                    // Biarkan footer statis
+                    // Footer ini statis dari PHP, jadi biarkan saja.
                 }
             });
         });
