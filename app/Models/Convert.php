@@ -14,7 +14,7 @@ class Convert extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
-        'harga_modal' => 'decimal:2',
-        'harga_jual' => 'decimal:2',
+        'selling_out' => 'decimal:2',
+        'retail' => 'decimal:2',
     ];
 }

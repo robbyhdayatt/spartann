@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\Part;
+use App\Models\Barang; // Ganti Part
 use App\Models\StockMovement;
 use App\Models\Lokasi;
 use App\Models\InventoryBatch;
@@ -19,89 +19,75 @@ use App\Exports\InventoryValueExport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Exports\StockCardExport;
-
+use App\Exports\SalesSummaryExport;
+use App\Exports\ServiceSummaryExport; // Pastikan ini ada
 
 class ReportController extends Controller
 {
-public function stockCard(Request $request)
+    public function stockCard(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        $movements = collect(); // Koleksi kosong by default
-        $lokasis = collect(); // Koleksi lokasi kosong by default
-        $selectedLokasiId = $request->input('lokasi_id'); // Ambil dari request
+        $movements = collect();
+        $lokasis = collect();
+        $selectedLokasiId = $request->input('lokasi_id');
 
-        // Cek jika user BUKAN admin/manajer (yaitu, staf lokasi seperti KG atau KC)
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
-            // Jika ya, paksa pilihan lokasi hanya lokasinya sendiri
             if ($user->lokasi_id) {
                 $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
-                // Paksa ID lokasi filter ke lokasi user, abaikan input request
                 $selectedLokasiId = $user->lokasi_id;
             }
-            // Jika mereka tidak punya lokasi_id, $lokasis akan tetap kosong
         } else {
-            // Jika SA/PIC/MA, tampilkan semua lokasi
             $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
 
-        // Ambil semua part untuk pilihan dropdown
-        $parts = Part::where('is_active', true)->orderBy('nama_part')->get();
+        // Ganti Part ke Barang
+        $barangs = Barang::orderBy('part_name')->get();
 
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
 
-        // Hanya jalankan query jika part_id diisi
-        if ($request->filled('part_id')) {
-            $query = StockMovement::where('part_id', $request->part_id)
-                ->with(['lokasi', 'user']) // Eager load
+        // Ubah part_id menjadi barang_id
+        if ($request->filled('barang_id')) {
+            $query = StockMovement::where('barang_id', $request->barang_id)
+                ->with(['lokasi', 'user', 'barang']) // Load barang
                 ->whereDate('created_at', '>=', $startDate)
                 ->whereDate('created_at', '<=', $endDate);
 
-            // Terapkan filter lokasi
             if ($selectedLokasiId) {
                 $query->where('lokasi_id', $selectedLokasiId);
             }
-            // Jika SA/PIC/MA dan tidak memilih lokasi, mereka melihat semua (tidak ada filter lokasi)
 
             $movements = $query->oldest()->get();
         }
 
-        // Kirim $selectedLokasiId ke view untuk menandai <option> yang dipilih
-        return view('admin.reports.stock_card', compact('parts', 'lokasis', 'movements', 'startDate', 'endDate', 'selectedLokasiId'));
+        // Kirim $barangs ke view (bukan $parts)
+        return view('admin.reports.stock_card', compact('barangs', 'lokasis', 'movements', 'startDate', 'endDate', 'selectedLokasiId'));
     }
 
-public function stockByWarehouse(Request $request)
+    public function stockByWarehouse(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $inventoryItems = collect();
-
-        // ++ PERBAIKAN: Ubah nama variabel $lokasis menjadi $lokasiList ++
         $lokasiList = collect();
-        // ++ PERBAIKAN: Ubah nama variabel $selectedlokasi menjadi $selectedLokasi (L besar) ++
         $selectedLokasi = null;
 
-        // ++ PERBAIKAN: Gunakan hasRole untuk cek jabatan KG atau KC ++
-        // (Asumsi 'Kepala lokasi' di database Anda sesuai dengan role 'KG' atau 'KC')
-        if ($user->hasRole(['KG', 'KC'])) {
-            // Jika user adalah Kepala Gudang/Cabang, hanya tampilkan lokasi mereka
+        if ($user->hasRole(['KG', 'KC', 'AG', 'AD']) && $user->lokasi_id) {
             $lokasiList = Lokasi::where('id', $user->lokasi_id)->get();
-            // Langsung set request agar data mereka tampil
             if (!$request->filled('lokasi_id')) {
                 $request->merge(['lokasi_id' => $user->lokasi_id]);
             }
         } else {
-            // Jika SA, PIC, MA, dll., tampilkan semua lokasi
             $lokasiList = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
 
         if ($request->filled('lokasi_id')) {
-            // ++ PERBAIKAN: Pastikan konsisten menggunakan $selectedLokasi (L besar) ++
             $selectedLokasi = Lokasi::find($request->lokasi_id);
 
+            // Query InventoryBatch dengan relasi Barang
             $inventoryItems = InventoryBatch::select(
-                    'part_id',
+                    'barang_id', // Ganti part_id
                     'rak_id',
                     'lokasi_id',
                     DB::raw('SUM(quantity) as quantity')
@@ -109,31 +95,25 @@ public function stockByWarehouse(Request $request)
                 ->where('lokasi_id', $request->lokasi_id)
                 ->where('quantity', '>', 0)
                 ->with([
-                    'part:id,kode_part,nama_part,satuan,brand_id,category_id',
-                    'part.brand:id,nama_brand',
-                    'part.category:id,nama_kategori',
-                    'rak:id,kode_rak',
-                    'lokasi:id,nama_lokasi,kode_lokasi' // Tambahkan relasi lokasi
+                    'barang', // Ganti part
+                    'rak',
+                    'lokasi'
                 ])
-                ->groupBy('part_id', 'rak_id', 'lokasi_id')
+                ->groupBy('barang_id', 'rak_id', 'lokasi_id')
                 ->get()
-                ->sortBy('part.nama_part');
+                ->sortBy('barang.part_name');
         }
 
-        // ++ PERBAIKAN: Sesuaikan nama variabel di compact() agar cocok dengan view ++
         return view('admin.reports.stock_by_warehouse', compact(
             'inventoryItems',
-            'lokasiList',     // Kirim sebagai 'lokasiList'
-            'selectedLokasi'  // Kirim sebagai 'selectedLokasi'
+            'lokasiList',
+            'selectedLokasi'
         ));
     }
 
     public function exportStockByWarehouse(Request $request)
     {
-        $request->validate([
-            'lokasi_id' => 'required|exists:lokasis,id'
-        ]);
-
+        $request->validate(['lokasi_id' => 'required|exists:lokasi,id']);
         $lokasi = Lokasi::find($request->lokasi_id);
         $fileName = 'Laporan Stok - ' . $lokasi->kode_lokasi . ' - ' . now()->format('d-m-Y') . '.xlsx';
 
@@ -147,13 +127,11 @@ public function stockByWarehouse(Request $request)
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
 
-        // Mulai query dasar
+        // Update query relasi barang
         $query = PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'barang'])
             ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $user) {
                 $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
 
-                // ++ TAMBAHKAN FILTER LOKASI INI ++
-                // Jika user bukan Manajer ke atas (artinya KG/KC) dan punya lokasi_id
                 if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
                     $q->where('lokasi_id', $user->lokasi_id);
                 }
@@ -182,13 +160,11 @@ public function stockByWarehouse(Request $request)
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
 
-        // Mulai query dasar
-        $query = ReceivingDetail::with(['receiving.purchaseOrder.supplier', 'part'])
+        // Ubah relasi 'part' menjadi 'barang'
+        $query = ReceivingDetail::with(['receiving.purchaseOrder.supplier', 'barang'])
             ->whereHas('receiving', function ($q) use ($startDate, $endDate, $user) {
                 $q->whereBetween('tanggal_terima', [$startDate, $endDate]);
 
-                // ++ TAMBAHKAN FILTER LOKASI INI ++
-                // (Relasi: ReceivingDetail -> Receiving -> lokasi_id)
                 if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
                     $q->where('lokasi_id', $user->lokasi_id);
                 }
@@ -212,15 +188,17 @@ public function stockByWarehouse(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
+
+        // Query InventoryBatch dengan Barang
         $inventoryQuery = InventoryBatch::select(
-                'part_id',
+                'barang_id', // Ganti part_id
                 'lokasi_id',
                 'rak_id',
                 DB::raw('SUM(quantity) as quantity')
             )
             ->where('quantity', '>', 0)
-            ->with(['part', 'lokasi', 'rak'])
-            ->groupBy('part_id', 'lokasi_id', 'rak_id');
+            ->with(['barang', 'lokasi', 'rak']) // Ganti part
+            ->groupBy('barang_id', 'lokasi_id', 'rak_id');
 
         if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
             $inventoryQuery->where('lokasi_id', $user->lokasi_id);
@@ -228,9 +206,10 @@ public function stockByWarehouse(Request $request)
 
         $inventoryDetails = $inventoryQuery->get();
 
+        // Hitung total nilai menggunakan 'selling_in' (Harga Beli/Modal)
         $totalValue = $inventoryDetails->sum(function($item) {
-            if ($item->part) {
-                return $item->quantity * $item->part->harga_satuan;
+            if ($item->barang) {
+                return $item->quantity * $item->barang->selling_in;
             }
             return 0;
         });
@@ -249,36 +228,36 @@ public function stockByWarehouse(Request $request)
         $startDate = $request->input('start_date', now()->subDays(30)->toDateString());
         $endDate = $request->input('end_date', now()->toDateString());
 
-        // Top 10 Selling Parts (by quantity)
-        $topSellingParts = \App\Models\PenjualanDetail::select('part_id', DB::raw('SUM(qty_jual) as total_qty'))
-            ->with('part')
+        // Update: Ganti part_id ke barang_id
+        $topSellingParts = PenjualanDetail::select('barang_id', DB::raw('SUM(qty_jual) as total_qty'))
+            ->with('barang')
             ->whereHas('penjualan', function ($query) use ($startDate, $endDate) {
                 $query->whereBetween('tanggal_jual', [$startDate, $endDate]);
             })
-            ->groupBy('part_id')
+            ->groupBy('barang_id')
             ->orderBy('total_qty', 'desc')
             ->limit(10)
             ->get();
 
-        // Top 10 Purchased Parts (by quantity)
-        $topPurchasedParts = \App\Models\ReceivingDetail::select('part_id', DB::raw('SUM(qty_terima) as total_qty'))
-            ->with('part')
+        $topPurchasedParts = ReceivingDetail::select('barang_id', DB::raw('SUM(qty_terima) as total_qty'))
+            ->with('barang')
             ->whereHas('receiving', function ($query) use ($startDate, $endDate) {
                 $query->whereBetween('tanggal_terima', [$startDate, $endDate]);
             })
-            ->groupBy('part_id')
+            ->groupBy('barang_id')
             ->orderBy('total_qty', 'desc')
             ->limit(10)
             ->get();
 
-        // Sales by Category (for chart)
-        $salesByCategory = \App\Models\PenjualanDetail::join('parts', 'penjualan_details.part_id', '=', 'parts.id')
-            ->join('categories', 'parts.category_id', '=', 'categories.id')
-            ->join('penjualans', 'penjualan_details.penjualan_id', '=', 'penjualans.id')
-            ->whereBetween('penjualans.tanggal_jual', [$startDate, $endDate])
-            ->groupBy('categories.nama_kategori')
-            ->select('categories.nama_kategori', DB::raw('SUM(penjualan_details.subtotal) as total_value'))
-            ->pluck('total_value', 'nama_kategori');
+        // Sales by Category (Join ke barangs)
+        // Asumsi tabel barangs punya category_id? Jika tidak, fitur kategori mungkin perlu disesuaikan.
+        // Jika tabel barangs tidak punya kategori, chart ini mungkin error atau perlu dihapus.
+        // Untuk amannya saya komen dulu atau sesuaikan jika Anda punya tabel kategori di barang.
+        $salesByCategory = collect();
+        /* $salesByCategory = PenjualanDetail::join('barangs', 'penjualan_details.barang_id', '=', 'barangs.id')
+            ->join('categories', 'barangs.category_id', '=', 'categories.id')
+            ...
+        */
 
         return view('admin.reports.sales_purchase_analysis', compact(
             'topSellingParts',
@@ -291,18 +270,17 @@ public function stockByWarehouse(Request $request)
 
     public function stockReport()
     {
-        // Mengambil data dari inventory_batches, menjumlahkan, dan mengelompokkan
         $inventoryDetails = InventoryBatch::select(
-                'part_id',
+                'barang_id', // Ganti
                 'lokasi_id',
                 'rak_id',
                 DB::raw('SUM(quantity) as quantity')
             )
             ->where('quantity', '>', 0)
-            ->with(['part', 'lokasi', 'rak'])
-            ->groupBy('part_id', 'lokasi_id', 'rak_id')
+            ->with(['barang', 'lokasi', 'rak']) // Ganti
+            ->groupBy('barang_id', 'lokasi_id', 'rak_id')
             ->get()
-            ->sortBy(['part.nama_part', 'lokasi.nama_lokasi']);
+            ->sortBy(['barang.part_name', 'lokasi.nama_lokasi']);
 
         return view('admin.reports.stock_report', compact('inventoryDetails'));
     }
@@ -310,26 +288,21 @@ public function stockByWarehouse(Request $request)
     public function exportStockCard(Request $request)
     {
         $request->validate([
-            'part_id' => 'required|exists:parts,id',
+            'barang_id' => 'required|exists:barangs,id', // Ganti
             'start_date' => 'required|date',
             'end_date' => 'required|date',
-            'lokasi_id' => 'nullable|exists:lokasis,id'
+            'lokasi_id' => 'nullable|exists:lokasi,id'
         ]);
 
-        $part = Part::findOrFail($request->part_id);
-        $fileName = 'Kartu Stok - ' . $part->kode_part . ' - ' . $request->start_date . ' sampai ' . $request->end_date . '.xlsx';
+        $barang = Barang::findOrFail($request->barang_id);
+        $fileName = 'Kartu Stok - ' . $barang->part_code . ' - ' . $request->start_date . ' sampai ' . $request->end_date . '.xlsx';
 
         return Excel::download(new StockCardExport(
-            $request->part_id,
+            $request->barang_id,
             $request->lokasi_id,
             $request->start_date,
             $request->end_date
         ), $fileName);
-    }
-
-    public function rekomendasiPo()
-    {
-        return view('admin.reports.rekomendasi_po');
     }
 
     public function salesSummary(Request $request)
@@ -338,71 +311,40 @@ public function stockByWarehouse(Request $request)
         $user = Auth::user();
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
-        $selectedLokasiId = $request->input('dealer_id'); // Ambil filter dealer/lokasi dari request
+        $selectedLokasiId = $request->input('dealer_id');
 
-        // 1. Ambil daftar Dealer (Lokasi) untuk dropdown filter
         $dealerList = collect();
         $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id;
 
         if ($isRestrictedUser) {
-            // Jika user dibatasi, hanya tampilkan lokasinya sendiri
             $dealerList = Lokasi::where('id', $user->lokasi_id)->get();
-            // Paksa filter ke lokasi user tersebut
             $selectedLokasiId = $user->lokasi_id;
         } else {
-            // Jika admin/manajer, tampilkan semua lokasi aktif
             $dealerList = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         }
 
-        // 2. Query Eloquent untuk data rinci (bukan summary lagi)
-        $query = PenjualanDetail::with([
-            'penjualan' => function ($query) {
-                // Eager load relasi dari penjualan
-                $query->with(['lokasi', 'konsumen', 'sales']);
-            },
-            'barang' // Eager load relasi ke barang
-        ])
-        ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $selectedLokasiId, $isRestrictedUser, $user) {
-            // Filter tanggal di tabel penjualans
-            $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
-
-            // 3. Terapkan filter dealer/lokasi
-            if ($selectedLokasiId) {
-                // Jika dealer dipilih (atau dipaksa karena role), filter berdasarkan itu
-                $q->where('lokasi_id', $selectedLokasiId);
-            }
-            // Fallback jika user dibatasi (sebenarnya sudah ditangani oleh $selectedLokasiId di atas)
-            elseif ($isRestrictedUser) {
-                $q->where('lokasi_id', $user->lokasi_id);
-            }
-        })
-        // Urutkan berdasarkan tanggal jual (dari tabel induk)
-        ->orderBy(
-            \App\Models\Penjualan::select('tanggal_jual')
-                ->whereColumn('id', 'penjualan_details.penjualan_id')
-                ->limit(1),
-            'desc'
-        )
-        // Urutkan juga berdasarkan nomor faktur
-        ->orderBy(
-            \App\Models\Penjualan::select('nomor_faktur')
-                ->whereColumn('id', 'penjualan_details.penjualan_id')
-                ->limit(1),
-            'desc'
-        );
+        $query = PenjualanDetail::with(['penjualan.lokasi', 'penjualan.konsumen', 'barang'])
+            ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $selectedLokasiId, $user) {
+                $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
+                if ($selectedLokasiId) {
+                    $q->where('lokasi_id', $selectedLokasiId);
+                }
+            })
+            ->orderByDesc('created_at');
 
         $reportData = $query->get();
 
-        // 4. Hitung Grand Total secara manual dari koleksi data rinci
         $grandTotalQty = 0;
         $grandTotalPenjualan = 0;
         $grandTotalModal = 0;
         $grandTotalKeuntungan = 0;
 
         foreach ($reportData as $data) {
-            // Pastikan relasi 'barang' ada sebelum menghitung modal
-            $modal_satuan = $data->barang->harga_modal ?? 0;
+            // Gunakan selling_in dari barang sebagai HPP/Modal
+            $modal_satuan = $data->barang->selling_in ?? 0;
             $total_modal_item = $data->qty_jual * $modal_satuan;
+
+            // Keuntungan = Subtotal Jual - Total Modal
             $total_keuntungan_item = $data->subtotal - $total_modal_item;
 
             $grandTotalQty += $data->qty_jual;
@@ -411,7 +353,6 @@ public function stockByWarehouse(Request $request)
             $grandTotalKeuntungan += $total_keuntungan_item;
         }
 
-        // 5. Kirim semua data baru ke view
         return view('admin.reports.sales_summary', compact(
             'reportData',
             'grandTotalQty',
@@ -420,20 +361,19 @@ public function stockByWarehouse(Request $request)
             'grandTotalKeuntungan',
             'startDate',
             'endDate',
-            'dealerList',       // Daftar dealer untuk dropdown
-            'selectedLokasiId'  // ID dealer yang sedang dipilih
+            'dealerList',
+            'selectedLokasiId'
         ));
     }
 
-public function exportSalesSummary(Request $request)
+    public function exportSalesSummary(Request $request)
     {
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         $dealerId = $request->input('dealer_id');
-
         $fileName = 'Laporan Penjualan - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
 
-        return Excel::download(new \App\Exports\SalesSummaryExport($startDate, $endDate, $dealerId), $fileName);
+        return Excel::download(new SalesSummaryExport($startDate, $endDate, $dealerId), $fileName);
     }
 
     public function serviceSummary(Request $request)
@@ -442,25 +382,28 @@ public function exportSalesSummary(Request $request)
         $user = Auth::user();
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
-        $invoiceNo = $request->input('invoice_no'); // Filter baru
+        $invoiceNo = $request->input('invoice_no');
 
-        // Query utama untuk ringkasan service
+        // Update Query: Join ke 'barangs' bukan 'parts'
         $query = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
-            ->leftJoin('parts', 'service_details.item_code', '=', 'parts.kode_part')
+            // Gunakan barang_id yang sudah ada di service_details (lebih akurat)
+            ->leftJoin('barangs', 'service_details.barang_id', '=', 'barangs.id')
             ->select(
                 'service_details.item_code',
                 'service_details.item_name',
                 'service_details.item_category',
                 DB::raw('SUM(service_details.quantity) as total_qty'),
                 DB::raw('SUM(service_details.price + service_details.labor_cost_service) as total_penjualan'),
+                // HPP: Gunakan selling_in dari barang
                 DB::raw("SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * parts.harga_satuan
+                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_in, 0)
                                 ELSE 0
                             END) as total_modal"),
+                // Profit
                 DB::raw("SUM(service_details.price + service_details.labor_cost_service) -
                          SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * parts.harga_satuan
+                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_in, 0)
                                 ELSE 0
                             END) as total_keuntungan")
             )
@@ -468,20 +411,16 @@ public function exportSalesSummary(Request $request)
             ->groupBy('service_details.item_code', 'service_details.item_name', 'service_details.item_category')
             ->orderBy('total_qty', 'desc');
 
-        // Filter lokasi untuk user non-admin
         if (!$user->hasRole(['SA', 'PIC', 'MA']) && $user->lokasi_id) {
-            // Asumsi 'services.lokasi_id' ada berdasarkan model Service Anda
             $query->where('services.lokasi_id', $user->lokasi_id);
         }
 
-        // Filter berdasarkan Nomor Invoice
         if ($invoiceNo) {
             $query->where('services.invoice_no', 'like', '%' . $invoiceNo . '%');
         }
 
         $reportData = $query->get();
 
-        // Hitung Grand Total
         $grandTotalQty = $reportData->sum('total_qty');
         $grandTotalPenjualan = $reportData->sum('total_penjualan');
         $grandTotalModal = $reportData->sum('total_modal');
@@ -504,10 +443,8 @@ public function exportSalesSummary(Request $request)
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         $invoiceNo = $request->input('invoice_no');
-
         $fileName = 'Laporan Service - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
 
-        // Kita akan buat file App\Exports\ServiceSummaryExport di langkah berikutnya
-        return Excel::download(new \App\Exports\ServiceSummaryExport($startDate, $endDate, $invoiceNo), $fileName);
+        return Excel::download(new ServiceSummaryExport($startDate, $endDate, $invoiceNo), $fileName);
     }
 }

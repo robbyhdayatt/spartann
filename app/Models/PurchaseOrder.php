@@ -4,8 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\PurchaseOrderDetail;
-use App\Models\Supplier;
+use App\Models\PurchaseOrderDetail; // (Opsional jika namespace sama)
+// use App\Models\Supplier;
 
 class PurchaseOrder extends Model
 {
@@ -28,6 +28,13 @@ class PurchaseOrder extends Model
         return $this->belongsTo(Supplier::class);
     }
 
+    // --- TAMBAHKAN RELASI INI ---
+    public function sumberLokasi()
+    {
+        return $this->belongsTo(Lokasi::class, 'sumber_lokasi_id');
+    }
+    // ----------------------------
+
     public function lokasi()
     {
         return $this->belongsTo(Lokasi::class, 'lokasi_id');
@@ -43,7 +50,8 @@ class PurchaseOrder extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
-    public function getStatusClassAttribute()
+    // ... (method getStatusClassAttribute dll tetap sama)
+     public function getStatusClassAttribute()
     {
         switch ($this->status) {
             case 'PENDING_APPROVAL': return 'badge-warning';

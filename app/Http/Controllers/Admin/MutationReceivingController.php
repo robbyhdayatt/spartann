@@ -23,7 +23,7 @@ class MutationReceivingController extends Controller
 
         $pendingMutations = StockMutation::where('lokasi_tujuan_id', $user->lokasi_id)
             ->where('status', 'IN_TRANSIT')
-            ->with(['part', 'lokasiAsal', 'createdBy'])
+            ->with(['barang', 'lokasiAsal', 'createdBy'])
             ->latest('approved_at')
             ->paginate(15);
 
@@ -41,7 +41,7 @@ class MutationReceivingController extends Controller
             abort(403, 'AKSI TIDAK DIIZINKAN.');
         }
 
-        $mutation->load(['part', 'lokasiAsal', 'createdBy', 'approvedBy']);
+        $mutation->load(['barang', 'lokasiAsal', 'createdBy', 'approvedBy']);
         $raks = Rak::where('lokasi_id', $mutation->lokasi_tujuan_id)
                     ->where('is_active', true)
                     ->where('tipe_rak', 'PENYIMPANAN')
@@ -72,16 +72,16 @@ class MutationReceivingController extends Controller
 
                 // Buat batch baru di rak tujuan
                 $newBatch = InventoryBatch::create([
-                    'part_id' => $mutation->part_id,
+                    'barang_id' => $mutation->barang_id,
                     'rak_id' => $validated['rak_tujuan_id'],
                     'lokasi_id' => $mutation->lokasi_tujuan_id,
                     'quantity' => $jumlahMutasi,
                     'receiving_detail_id' => null, // Tidak berasal dari PO
                 ]);
 
-                // Hitung total stok sebelumnya di lokasi tujuan untuk part ini (untuk laporan kartu stok)
+                // Hitung total stok sebelumnya di lokasi tujuan untuk barang ini (untuk laporan kartu stok)
                 $stokSebelumTotal = InventoryBatch::where('lokasi_id', $mutation->lokasi_tujuan_id)
-                    ->where('part_id', $mutation->part_id)
+                    ->where('barang_id', $mutation->barang_id)
                     ->where('id', '!=', $newBatch->id) // Abaikan batch yang baru dibuat
                     ->sum('quantity');
 
@@ -89,7 +89,7 @@ class MutationReceivingController extends Controller
 
                 // Catat pergerakan stok masuk dengan format yang benar
                 StockMovement::create([
-                    'part_id' => $mutation->part_id,
+                    'barang_id' => $mutation->barang_id,
                     'lokasi_id' => $mutation->lokasi_tujuan_id,
                     'rak_id' => $newBatch->rak_id,
                     'jumlah' => $jumlahMutasi,

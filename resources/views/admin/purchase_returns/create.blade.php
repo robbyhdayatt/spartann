@@ -193,7 +193,7 @@
                                     let row = `
                                 <tr class="item-row">
                                     <td>
-                                        ${item.part.nama_part} (${item.part.kode_part})
+                                        ${item.barang.part_name} (${item.barang.part_code})
                                         <input type="hidden" name="items[${item.id}][receiving_detail_id]" value="${item.id}">
                                     </td>
                                     <td class="text-center">

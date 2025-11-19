@@ -43,7 +43,7 @@ class QcController extends Controller
             return redirect()->route('admin.qc.index')->with('error', 'Anda tidak berwenang memproses QC untuk lokasi ini.');
         }
 
-        $receiving->load(['details.part']);
+        $receiving->load(['details.barang']);
         return view('admin.qc.form', compact('receiving'));
     }
 
@@ -61,11 +61,11 @@ public function storeQcResult(Request $request, Receiving $receiving)
 
         DB::beginTransaction();
         try {
-            $totalLolosOverall = 0; // Pindahkan inisialisasi ke sini
-            $errors = []; // Tampung error validasi jumlah
+            $totalLolosOverall = 0;
+            $errors = [];
 
             foreach ($validated['items'] as $detailId => $data) {
-                $detail = ReceivingDetail::with('part')->find($detailId); // Load relasi part
+                $detail = ReceivingDetail::with('barang')->find($detailId);
 
                 if (!$detail || $detail->receiving_id !== $receiving->id) {
                      // Keamanan: Pastikan detail milik receiving yang benar
@@ -76,21 +76,15 @@ public function storeQcResult(Request $request, Receiving $receiving)
                 $qtyGagal = (int) $data['qty_gagal'];
                 $totalInput = $qtyLolos + $qtyGagal;
 
-                // ++ PERBAIKAN: Validasi Jumlah Harus Sama Persis ++
                 if ($totalInput !== $detail->qty_terima) {
                     // Kumpulkan pesan error untuk ditampilkan kembali ke form
-                    $errors["items.{$detailId}.qty_lolos"] = 'Jumlah Lolos + Gagal (' . $totalInput . ') harus sama dengan Qty Diterima (' . $detail->qty_terima . ') untuk part ' . ($detail->part->nama_part ?? 'N/A');
-                     // Anda bisa menambahkan error ke qty_gagal juga jika diinginkan
-                    // $errors["items.{$detailId}.qty_gagal"] = '...';
+                    $errors["items.{$detailId}.qty_lolos"] = 'Jumlah Lolos + Gagal (' . $totalInput . ') harus sama dengan Qty Diterima (' . $detail->qty_terima . ') untuk part ' . ($detail->barang->part_name ?? 'N/A');
                 }
-                // --- Akhir Perbaikan Validasi ---
 
-                // Jika ada error pada iterasi ini, lanjut ke item berikutnya tanpa proses DB
                 if (!empty($errors)) {
-                    continue; // Skip processing this item if there's an error so far
+                    continue;
                 }
 
-                // Jika validasi jumlah lolos, lanjutkan proses update dan stok gagal
                 $detail->update([
                     'qty_lolos_qc' => $qtyLolos,
                     'qty_gagal_qc' => $qtyGagal,
@@ -112,7 +106,7 @@ public function storeQcResult(Request $request, Receiving $receiving)
                     // Cari batch yang ada atau buat baru
                     $batch = InventoryBatch::firstOrNew(
                         [
-                            'part_id' => $detail->part_id,
+                            'barang_id' => $detail->barang_id,
                             'rak_id' => $quarantineRak->id,
                             'lokasi_id' => $receiving->lokasi_id,
                             // Opsional: Jika ingin batch terpisah per receiving
@@ -131,7 +125,7 @@ public function storeQcResult(Request $request, Receiving $receiving)
 
 
                     StockMovement::create([
-                        'part_id' => $detail->part_id,
+                        'barang_id' => $detail->barang_id,
                         'lokasi_id' => $receiving->lokasi_id,
                         'rak_id' => $quarantineRak->id,
                         'jumlah' => $qtyGagal,

@@ -49,7 +49,7 @@
                 <tr>
                     <td>{{ $receiving->nomor_penerimaan }}</td>
                     <td>{{ $receiving->purchaseOrder->nomor_po ?? 'N/A' }}</td> {{-- Tambah null check --}}
-                    <td>{{ $receiving->purchaseOrder->supplier->nama_supplier ?? 'N/A' }}</td> {{-- Tambah null check --}}
+                    <td>{{ $receiving->purchaseOrder->sumberLokasi->nama_lokasi ?? 'N/A' }}</td> {{-- Tambah null check --}}
                     {{-- ++ PERBAIKAN: Gunakan nama_lokasi ++ --}}
                     <td>{{ $receiving->lokasi->nama_lokasi ?? 'N/A' }}</td> {{-- Tambah null check --}}
                     <td>{{ \Carbon\Carbon::parse($receiving->tanggal_terima)->format('d-m-Y') }}</td>

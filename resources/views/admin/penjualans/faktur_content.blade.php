@@ -193,13 +193,13 @@ html, body {
         </thead>
         <tbody>
             @php $itemNumber = 1; @endphp
-            @forelse ($penjualan->details->sortByDesc(function($d){ return $d->harga_jual; }) as $detail)
-                @php $totalItem = ($detail->qty_jual ?? 0) * ($detail->harga_jual ?? 0); @endphp
+            @forelse ($penjualan->details->sortByDesc(function($d){ return $d->retail; }) as $detail)
+                @php $totalItem = ($detail->qty_jual ?? 0) * ($detail->barang->retail ?? 0); @endphp
                 <tr>
                     <td class="text-center">{{ $itemNumber++ }}</td>
                     <td>{{ $detail->barang->part_code ?? '-' }}</td>
                     <td>{{ $detail->barang->part_name ?? '-' }}</td>
-                    <td class="text-right">{{ number_format($detail->harga_jual ?? 0, 0, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format($detail->barang->retail ?? 0, 0, ',', '.') }}</td>
                     <td class="text-center">{{ $detail->qty_jual ?? 0 }}</td>
                     <td class="text-right">{{ number_format($totalItem, 0, ',', '.') }}</td>
                 </tr>

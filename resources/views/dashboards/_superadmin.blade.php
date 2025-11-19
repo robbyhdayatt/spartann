@@ -34,7 +34,7 @@
 
 {{-- Baris untuk Konten Utama (Grafik dan List) --}}
 <div class="row">
-    {{-- Kolom Kiri - Grafik --}}
+    {{-- Kolom Kiri - Grafik (Tetap sama) --}}
     <div class="col-lg-8">
         <div class="card">
             <div class="card-header">
@@ -58,11 +58,14 @@
                         @forelse($data['criticalStockParts'] as $part)
                         <tr>
                             <td>
-                                {{ $part->nama_part }}
+                                {{-- PERUBAHAN NAMA KOLOM --}}
+                                {{ $part->part_name }}
                                 <br>
-                                <small class="text-muted">{{ $part->kode_part }}</small>
+                                <small class="text-muted">{{ $part->part_code }}</small>
                             </td>
-                            <td class="align-middle"><span class="badge badge-danger">{{ $part->total_stock }} / {{ $part->stok_minimum }}</span></td>
+                            <td class="align-middle">
+                                <span class="badge badge-danger">{{ $part->total_stock }} / {{ $part->stok_minimum }}</span>
+                            </td>
                         </tr>
                         @empty
                         <tr><td class="text-center p-2">Tidak ada stok kritis.</td></tr>

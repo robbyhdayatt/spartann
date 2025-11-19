@@ -14,6 +14,7 @@ $npwpDealer = 'NPWP No.: ' . ($service->lokasi->npwp ?? $service->customer_npwp_
 
 // === Jenis Service Order ===
 $serviceOrder = $service->service_order ?? 'Walk In Service';
+// Deteksi apakah ini penjualan part retail (bukan service motor biasa)
 $isPartRetail = stripos($serviceOrder, 'part') !== false;
 
 // === Pengaturan Font ===
@@ -77,8 +78,9 @@ $conditionalStyles = "
     <table style="width: 100%; margin-bottom: 8px;">
         <tr>
             <td style="text-align: center;">
+                {{-- PERUBAHAN DISINI: Judul Dinamis --}}
                 <div style="font-size: 1.6em; font-weight: bold; text-transform: uppercase;">
-                    FAKTUR SERVICE
+                    {{ $isPartRetail ? 'FAKTUR PENJUALAN' : 'FAKTUR SERVICE' }}
                 </div>
             </td>
         </tr>
@@ -103,6 +105,7 @@ $conditionalStyles = "
             <td style="width:18%;">: {{ $service->reg_date ? \Carbon\Carbon::parse($service->reg_date)->format('d/m/Y') : '-' }}</td>
             <td style="width:13%;"><strong>Nama</strong></td>
             <td style="width:20%;">: {{ $service->customer_name ?? '-' }}</td>
+            {{-- Sembunyikan No Rangka jika Part Retail --}}
             @unless($isPartRetail)
                 <td style="width:14%;"><strong>No. Rangka</strong></td>
                 <td style="width:22%;">: {{ $service->mc_frame_no ?? '-' }}</td>
@@ -112,6 +115,7 @@ $conditionalStyles = "
             <td><strong>No. Invoice</strong></td>
             <td>: {{ $service->invoice_no ?? '-' }}</td>
             <td><strong>Alamat</strong></td>
+            {{-- Colspan disesuaikan agar rapi jika kolom kanan hilang --}}
             <td colspan="{{ $isPartRetail ? 3 : 3 }}">: {{ $service->customer_address ?? '-' }}</td>
         </tr>
         <tr>
@@ -157,6 +161,7 @@ $conditionalStyles = "
                     $sparepartDetails = $details->whereIn('item_category', ['PART', 'OLI'])->sortByDesc('price');
                 @endphp
 
+                {{-- Sembunyikan Header Grup jika Part Retail (biasanya kosong atau default) --}}
                 @unless($isPartRetail)
                     <tr style="font-weight:bold; border-top:2px solid #000;">
                         <td colspan="7">{{ $groupCode ?: 'Lain-lain' }}</td>

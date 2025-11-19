@@ -33,7 +33,7 @@
                             <tr>
                                 <td>{{ $mutation->nomor_mutasi }}</td>
                                 <td>{{ $mutation->approved_at->format('d M Y H:i') }}</td>
-                                <td>{{ $mutation->part->nama_part }}</td>
+                                <td>{{ $mutation->barang->part_name }}</td>
                                 <td>{{ $mutation->jumlah }}</td>
                                 <td>{{ $mutation->lokasiAsal->nama_gudang }}</td>
                                 <td>{{ $mutation->createdBy->nama }}</td>

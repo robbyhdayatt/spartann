@@ -2,8 +2,7 @@
 
 namespace App\Exports;
 
-use App\Models\Inventory;
-use Illuminate\Support\Facades\DB;
+use App\Models\InventoryBatch; // Ganti Inventory
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -12,7 +11,7 @@ class InventoryValueExport implements FromCollection, WithHeadings, WithMapping
 {
     public function collection()
     {
-        return Inventory::with(['part', 'lokasi', 'rak'])
+        return InventoryBatch::with(['barang', 'lokasi', 'rak']) // Ganti part
             ->where('quantity', '>', 0)
             ->get();
     }
@@ -21,26 +20,28 @@ class InventoryValueExport implements FromCollection, WithHeadings, WithMapping
     {
         return [
             'Lokasi',
-            'Kode Part',
-            'Nama Part',
+            'Kode Barang',
+            'Nama Barang',
             'Rak',
             'Stok Saat Ini',
-            'Harga Beli Satuan (Rp)',
-            'Subtotal Nilai (Rp)',
+            'Harga Beli/Modal (Rp)', // selling_in
+            'Subtotal Nilai Aset (Rp)',
         ];
     }
 
-    public function map($inventory): array
+    public function map($batch): array
     {
-        $subtotal = $inventory->quantity * $inventory->part->harga_beli_default;
+        // Gunakan selling_in dari master barang
+        $hargaBeli = $batch->barang->selling_in ?? 0;
+        $subtotal = $batch->quantity * $hargaBeli;
 
         return [
-            $inventory->lokasi->nama_lokasi,
-            $inventory->part->kode_part,
-            $inventory->part->nama_part,
-            $inventory->rak->kode_rak,
-            $inventory->quantity,
-            $inventory->part->harga_beli_default,
+            $batch->lokasi->nama_lokasi ?? '-',
+            $batch->barang->part_code ?? '-',
+            $batch->barang->part_name ?? '-',
+            $batch->rak->kode_rak ?? '-',
+            $batch->quantity,
+            $hargaBeli,
             $subtotal,
         ];
     }

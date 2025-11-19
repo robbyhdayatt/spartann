@@ -29,11 +29,11 @@
                     <div class="col-md-4">
                         <div class="form-group">
                             <label>Spare Part <span class="text-danger">*</span></label>
-                            <select name="part_id" id="part_id" class="form-control" required>
+                            <select name="barang_id" id="barang_id" class="form-control" required>
                                 <option></option> {{-- Placeholder untuk Select2 --}}
-                                @foreach($parts as $part)
-                                    <option value="{{ $part->id }}" {{ request('part_id') == $part->id ? 'selected' : '' }}>
-                                        {{ $part->nama_part }} ({{ $part->kode_part }})
+                                @foreach($barangs as $barang)
+                                    <option value="{{ $barang->id }}" {{ request('barang_id') == $barang->id ? 'selected' : '' }}>
+                                        {{ $barang->part_name }} ({{ $barang->part_code }})
                                     </option>
                                 @endforeach
                             </select>
@@ -91,7 +91,7 @@
     </div>
 
     {{-- Tabel Hasil --}}
-    @if(request()->filled('part_id'))
+    @if(request()->filled('barang_id'))
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Riwayat Pergerakan Stok</h3>
@@ -160,7 +160,7 @@
 <script>
     $(document).ready(function() {
         // Inisialisasi Select2
-        $('#part_id').select2({
+        $('#barang_id').select2({
             placeholder: "--- Pilih Spare Part ---"
         });
 

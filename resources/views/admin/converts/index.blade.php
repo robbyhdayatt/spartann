@@ -48,7 +48,7 @@
                         'Nama Part',
                         'Kode Part',
                         ['label' => 'Qty', 'width' => 5, 'class' => 'text-right'],
-                        ['label' => 'Harga Jual', 'width' => 15, 'class' => 'text-right'],
+                        ['label' => 'Harga', 'width' => 15, 'class' => 'text-right'],
                         ['label' => 'Aksi', 'no-export' => true, 'width' => 10, 'class' => 'text-center']
                     ];
                     $config = [
@@ -72,7 +72,7 @@
                                 <td>{{ $convert->part_name }}</td>
                                 <td>{{ $convert->part_code }}</td>
                                 <td>{{ $convert->quantity }}</td>
-                                <td>@rupiah($convert->harga_jual)</td>
+                                <td>@rupiah($convert->retail)</td>
                                 <td>
                                     <nobr>
                                         @php

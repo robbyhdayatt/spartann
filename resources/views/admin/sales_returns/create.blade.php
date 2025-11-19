@@ -129,7 +129,7 @@ $(document).ready(function() {
                         let row = `
                             <tr>
                                 <td>
-                                    ${item.part.nama_part}
+                                    ${item.barang.part_name}
                                     <input type="hidden" name="items[${item.id}][penjualan_detail_id]" value="${item.id}">
                                 </td>
                                 <td>

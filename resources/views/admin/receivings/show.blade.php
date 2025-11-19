@@ -20,16 +20,22 @@
                     <div class="row">
                         <div class="col-md-4">
                             <strong>Nomor PO:</strong><br>
-                            <a href="{{ route('admin.purchase-orders.show', $receiving->purchase_order_id) }}">{{ $receiving->purchaseOrder->nomor_po }}</a>
+                            <a href="{{ route('admin.purchase-orders.show', $receiving->purchase_order_id) }}">{{ $receiving->purchaseOrder->nomor_po ?? '-' }}</a>
                         </div>
                         <div class="col-md-4">
-                            <strong>Supplier:</strong><br>
-                            {{ $receiving->purchaseOrder->supplier->nama_supplier }}
+                            <strong>Sumber / Supplier:</strong><br>
+                            {{-- LOGIKA TAMPILAN --}}
+                            @if($receiving->purchaseOrder->supplier)
+                                {{ $receiving->purchaseOrder->supplier->nama_supplier }}
+                            @elseif($receiving->purchaseOrder->sumberLokasi)
+                                {{ $receiving->purchaseOrder->sumberLokasi->nama_lokasi }} (Internal)
+                            @else
+                                -
+                            @endif
                         </div>
                         <div class="col-md-4">
                             <strong>Lokasi Tujuan:</strong><br>
-                            {{-- PERBAIKAN: Menggunakan relasi 'lokasi' --}}
-                            {{ $receiving->lokasi->nama_gudang }}
+                            {{ $receiving->lokasi->nama_lokasi ?? '-' }}
                         </div>
                     </div>
                     <hr>
@@ -49,7 +55,7 @@
                     <table class="table table-striped">
                         <thead>
                             <tr>
-                                <th>Part</th>
+                                <th>Barang</th>
                                 <th>Kode Part</th>
                                 <th class="text-center">Jumlah Diterima</th>
                             </tr>
@@ -57,8 +63,9 @@
                         <tbody>
                             @forelse($receiving->details as $detail)
                                 <tr>
-                                    <td>{{ $detail->part->nama_part }}</td>
-                                    <td>{{ $detail->part->kode_part }}</td>
+                                    {{-- PERUBAHAN: Menggunakan relasi barang --}}
+                                    <td>{{ $detail->barang->part_name ?? 'Item dihapus' }}</td>
+                                    <td>{{ $detail->barang->part_code ?? '-' }}</td>
                                     <td class="text-center">{{ $detail->qty_terima }}</td>
                                 </tr>
                             @empty
@@ -77,7 +84,7 @@
                         <table class="table table-striped">
                             <thead>
                                 <tr>
-                                    <th>Part</th>
+                                    <th>Barang</th>
                                     <th>Jumlah Disimpan</th>
                                     <th>Rak Tujuan</th>
                                     <th>Oleh</th>
@@ -86,7 +93,7 @@
                             <tbody>
                                 @forelse($stockMovements as $movement)
                                     <tr>
-                                        <td>{{ $movement->part->nama_part }}</td>
+                                        <td>{{ $movement->barang->part_name ?? '-' }}</td>
                                         <td>{{ $movement->jumlah }}</td>
                                         <td>{{ $movement->rak->kode_rak ?? 'N/A' }}</td>
                                         <td>{{ $movement->user->nama ?? 'N/A' }}</td>

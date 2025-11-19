@@ -33,7 +33,7 @@
                 <tbody>
                     @forelse($itemsToPutaway as $detail)
                     <tr>
-                        <td>{{ $detail->part->nama_part }} ({{ $detail->part->kode_part }})</td>
+                        <td>{{ $detail->barang->part_name }} ({{ $detail->barang->part_code }})</td>
                         <td>
                             <input type="text" class="form-control" value="{{ $detail->qty_lolos_qc }}" readonly>
                         </td>

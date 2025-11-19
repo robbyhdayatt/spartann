@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryBatch;
 use App\Models\Rak;
-use App\Models\Part;
+use App\Models\Barang;
 use App\Models\Lokasi; // DIUBAH DARI lokasi
 use App\Models\StockAdjustment;
 use App\Models\StockMovement;
@@ -42,9 +42,9 @@ class QuarantineStockController extends Controller
 
         // Logika query disederhanakan dengan eager loading
         $quarantineItems = $quarantineQuery
-            ->select('part_id', 'rak_id', 'lokasi_id', DB::raw('SUM(quantity) as total_quantity'))
-            ->groupBy('part_id', 'rak_id', 'lokasi_id')
-            ->with(['part', 'rak', 'lokasi']) // Eager load relasi
+            ->select('barang_id', 'rak_id', 'lokasi_id', DB::raw('SUM(quantity) as total_quantity'))
+            ->groupBy('barang_id', 'rak_id', 'lokasi_id')
+            ->with(['barang', 'rak', 'lokasi']) // Eager load relasi
             ->get();
 
         // Ambil rak penyimpanan berdasarkan filter lokasi user
@@ -61,7 +61,7 @@ class QuarantineStockController extends Controller
     {
         $this->authorize('manage-quarantine-stock');
         $validated = $request->validate([
-            'part_id' => 'required|exists:parts,id',
+            'barang_id' => 'required|exists:barangs,id',
             'rak_id' => 'required|exists:raks,id',
             'lokasi_id' => 'required|exists:lokasi,id', // DIUBAH ke tabel lokasi
             'action' => 'required|in:return_to_stock,write_off',
@@ -70,16 +70,16 @@ class QuarantineStockController extends Controller
             'reason' => 'nullable|required_if:action,write_off|string|max:255',
         ]);
 
-        $partId = $validated['part_id'];
+        $barangId = $validated['barang_id'];
         $rakId = $validated['rak_id'];
         $lokasiId = $validated['lokasi_id'];
         $quantityToProcess = $validated['quantity'];
         $message = '';
 
         try {
-            DB::transaction(function () use ($validated, $partId, $rakId, $lokasiId, $quantityToProcess, &$message) {
+            DB::transaction(function () use ($validated, $barangId, $rakId, $lokasiId, $quantityToProcess, &$message) {
 
-                $currentStock = InventoryBatch::where('part_id', $partId)->where('rak_id', $rakId)->sum('quantity');
+                $currentStock = InventoryBatch::where('barang_id', $barangId)->where('rak_id', $rakId)->sum('quantity');
                 if ($quantityToProcess > $currentStock) {
                     throw new \Exception('Jumlah melebihi stok karantina. Stok tersedia: ' . $currentStock);
                 }
@@ -90,17 +90,17 @@ class QuarantineStockController extends Controller
                         throw new \Exception('Rak tujuan harus berada di lokasi yang sama.');
                     }
 
-                    $this->reduceStockFromBatches($partId, $rakId, $quantityToProcess, 'Keluar dari karantina ke rak ' . $destinationRak->kode_rak);
+                    $this->reduceStockFromBatches($barangId, $rakId, $quantityToProcess, 'Keluar dari karantina ke rak ' . $destinationRak->kode_rak);
 
                     // Logika penambahan stok diperbaiki
-                    $this->addStockToBatch($partId, $destinationRak->id, $lokasiId, $quantityToProcess, 'Masuk ke stok dari karantina');
+                    $this->addStockToBatch($barangId, $destinationRak->id, $lokasiId, $quantityToProcess, 'Masuk ke stok dari karantina');
 
                     $message = 'Barang berhasil dikembalikan ke stok penjualan.';
 
                 } elseif ($validated['action'] === 'write_off') {
                     // Proses ini sudah benar, membuat pengajuan adjustment
                     StockAdjustment::create([
-                        'part_id' => $partId,
+                        'barang_id' => $barangId,
                         'lokasi_id' => $lokasiId,
                         'rak_id' => $rakId,
                         'tipe' => 'KURANG',
@@ -120,22 +120,22 @@ class QuarantineStockController extends Controller
         }
     }
 
-    private function reduceStockFromBatches($partId, $rakId, $quantityToReduce, $keterangan)
+    private function reduceStockFromBatches($barangId, $rakId, $quantityToReduce, $keterangan)
     {
-        $batches = InventoryBatch::where('part_id', $partId)->where('rak_id', $rakId)
+        $batches = InventoryBatch::where('barang_id', $barangId)->where('rak_id', $rakId)
             ->where('quantity', '>', 0)->orderBy('created_at', 'asc')->get();
 
         $remainingQtyToReduce = $quantityToReduce;
         foreach ($batches as $batch) {
             if ($remainingQtyToReduce <= 0) break;
 
-            $stokTotalSebelum = InventoryBatch::where('part_id', $partId)->where('lokasi_id', $batch->lokasi_id)->sum('quantity');
+            $stokTotalSebelum = InventoryBatch::where('barang_id', $barangId)->where('lokasi_id', $batch->lokasi_id)->sum('quantity');
 
             $qtyToTake = min($batch->quantity, $remainingQtyToReduce);
             $batch->decrement('quantity', $qtyToTake);
 
             StockMovement::create([
-                'part_id' => $partId, 'lokasi_id' => $batch->lokasi_id, 'rak_id' => $rakId,
+                'barang_id' => $barangId, 'lokasi_id' => $batch->lokasi_id, 'rak_id' => $rakId,
                 'jumlah' => -$qtyToTake, 'stok_sebelum' => $stokTotalSebelum, 'stok_sesudah' => $stokTotalSebelum - $qtyToTake,
                 'referensi_type' => 'App\Models\User', 'referensi_id' => auth()->id(), 'user_id' => auth()->id(),
                 'keterangan' => $keterangan,
@@ -148,18 +148,18 @@ class QuarantineStockController extends Controller
     }
 
     // Helper function baru untuk menambah stok ke batch
-    private function addStockToBatch($partId, $rakId, $lokasiId, $quantityToAdd, $keterangan)
+    private function addStockToBatch($barangId, $rakId, $lokasiId, $quantityToAdd, $keterangan)
     {
-        $stokTotalSebelum = InventoryBatch::where('part_id', $partId)->where('lokasi_id', $lokasiId)->sum('quantity');
+        $stokTotalSebelum = InventoryBatch::where('barang_id', $barangId)->where('lokasi_id', $lokasiId)->sum('quantity');
 
         $batch = InventoryBatch::firstOrCreate(
-            ['part_id' => $partId, 'rak_id' => $rakId, 'lokasi_id' => $lokasiId],
+            ['barang_id' => $barangId, 'rak_id' => $rakId, 'lokasi_id' => $lokasiId],
             ['quantity' => 0, 'receiving_detail_id' => null]
         );
         $batch->increment('quantity', $quantityToAdd);
 
         StockMovement::create([
-            'part_id' => $partId, 'lokasi_id' => $lokasiId, 'rak_id' => $rakId,
+            'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $rakId,
             'jumlah' => $quantityToAdd, 'stok_sebelum' => $stokTotalSebelum, 'stok_sesudah' => $stokTotalSebelum + $quantityToAdd,
             'referensi_type' => 'App\Models\User', 'referensi_id' => auth()->id(), 'user_id' => auth()->id(),
             'keterangan' => $keterangan,

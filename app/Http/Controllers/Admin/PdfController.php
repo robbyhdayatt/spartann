@@ -12,7 +12,7 @@ class PdfController extends Controller
     public function purchaseOrder(PurchaseOrder $purchaseOrder)
     {
         // ... (kode PO Anda tetap sama) ...
-        $purchaseOrder->load(['supplier', 'lokasi', 'details.part', 'createdBy']);
+        $purchaseOrder->load(['supplier', 'lokasi', 'details.barang', 'createdBy']);
         $data = ['purchaseOrder' => $purchaseOrder];
         $pdf = PDF::loadView('admin.purchase_orders.print', $data)
                     ->setPaper([0, 0, 396, 684], 'landscape');

@@ -30,7 +30,7 @@
             <tbody>
                 @foreach($salesReturn->details as $detail)
                 <tr>
-                    <td>{{ $detail->part->kode_part }}</td><td>{{ $detail->part->nama_part }}</td><td class="text-right">{{ $detail->qty_retur }}</td><td class="text-right">{{ number_format($detail->harga_saat_jual, 0, ',', '.') }}</td><td class="text-right">{{ number_format($detail->subtotal, 0, ',', '.') }}</td>
+                    <td>{{ $detail->barang->part_code }}</td><td>{{ $detail->barang->part_name }}</td><td class="text-right">{{ $detail->qty_retur }}</td><td class="text-right">{{ number_format($detail->harga_saat_jual, 0, ',', '.') }}</td><td class="text-right">{{ number_format($detail->subtotal, 0, ',', '.') }}</td>
                 </tr>
                 @endforeach
             </tbody>

@@ -28,8 +28,8 @@
                 <tr>
                     <td>{{ $receiving->nomor_penerimaan }}</td>
                     <td>{{ $receiving->purchaseOrder->nomor_po }}</td>
-                    <td>{{ $receiving->purchaseOrder->supplier->nama_supplier }}</td>
-                    <td>{{ $receiving->lokasi->nama_gudang }}</td> {{-- Diubah --}}
+                    <td>{{ $receiving->purchaseOrder->sumberLokasi->nama_lokasi }}</td>
+                    <td>{{ $receiving->lokasi->nama_lokasi }}</td> {{-- Diubah --}}
                     <td>
                         <a href="{{ route('admin.putaway.form', $receiving->id) }}" class="btn btn-primary btn-xs">
                            <i class="fas fa-dolly-flatbed"></i> Proses Penyimpanan

@@ -44,18 +44,18 @@
             <tbody>
                 @forelse($quarantineItems as $item)
                 <tr>
-                    <td>{{ $item->part->nama_part }} <br><small class="text-muted">{{ $item->part->kode_part }}</small></td>
+                    <td>{{ $item->barang->part_name }} <br><small class="text-muted">{{ $item->barang->part_code }}</small></td>
                     <td>{{ $item->lokasi->nama_lokasi }}</td>
                     <td>{{ $item->rak->kode_rak }}</td>
                     <td class="text-right font-weight-bold">{{ $item->total_quantity }}</td>
                     <td>
                         @can('manage-quarantine-stock')
                         <button class="btn btn-primary btn-xs process-btn"
-                                data-part-id="{{ $item->part_id }}"
+                                data-barang-id="{{ $item->barang_id }}"
                                 data-rak-id="{{ $item->rak_id }}"
                                 data-lokasi-id="{{ $item->lokasi_id }}"
                                 data-max-qty="{{ $item->total_quantity }}"
-                                data-part-name="{{ $item->part->nama_part }}"
+                                data-barang-name="{{ $item->barang->part_name}}"
                                 data-toggle="modal" data-target="#processModal">
                             Proses
                         </button>
@@ -84,7 +84,7 @@
             </div>
             <form action="{{ route('admin.quarantine-stock.process') }}" method="POST">
                 @csrf
-                <input type="hidden" name="part_id" id="part_id">
+                <input type="hidden" name="barang_id" id="barang_id">
                 <input type="hidden" name="rak_id" id="rak_id">
                 <input type="hidden" name="lokasi_id" id="lokasi_id">
 
@@ -136,17 +136,17 @@ $(document).ready(function() {
     const storageRaksBylokasi = @json($storageRaks);
 
     $('.process-btn').on('click', function() {
-        const partId = $(this).data('part-id');
+        const barangId = $(this).data('barang-id');
         const rakId = $(this).data('rak-id');
         const lokasiId = $(this).data('lokasi-id');
         const maxQty = $(this).data('max-qty');
-        const partName = $(this).data('part-name');
+        const barangName = $(this).data('barang-name');
 
-        $('#part_id').val(partId);
+        $('#barang_id').val(barangId);
         $('#rak_id').val(rakId);
         $('#lokasi_id').val(lokasiId);
 
-        $('#part_name').text(partName);
+        $('#barang_name').text(barangName);
         $('#quantity').val(maxQty).attr('max', maxQty);
 
         const destinationRakSelect = $('#destination_rak_id');

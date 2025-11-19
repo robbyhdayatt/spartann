@@ -9,36 +9,54 @@ class Barang extends Model
 {
     use HasFactory;
 
-    /**
-     * Tentukan nama tabel karena nama model (Barang)
-     * tidak jamak (plural) menjadi (Barangs).
-     */
     protected $table = 'barangs';
-
-    /**
-     * Izinkan semua kolom diisi kecuali 'id'.
-     */
     protected $guarded = ['id'];
 
-    /**
-     * Tentukan tipe data untuk kolom desimal.
-     */
     protected $casts = [
-        'harga_modal' => 'decimal:2',
-        'harga_jual' => 'decimal:2',
+        'selling_in'  => 'decimal:2',
+        'selling_out' => 'decimal:2',
+        'retail'      => 'decimal:2',
     ];
 
-    /**
-     * Relasi ke converts_main (satu Barang bisa dipakai di banyak paket convert)
-     */
-    public function convertsMain()
+    // --- Relasi WMS & Transaksi ---
+
+    public function inventoryBatches()
     {
-        // Relasi ke tabel 'converts_main' melalui kolom 'part_code'
-        return $this->hasMany(Convert::class, 'part_code', 'part_code');
+        return $this->hasMany(InventoryBatch::class, 'barang_id');
+    }
+
+    public function stockMovements()
+    {
+        return $this->hasMany(StockMovement::class, 'barang_id');
     }
 
     public function penjualanDetails()
     {
-        return $this->hasMany(PenjualanDetail::class);
+        return $this->hasMany(PenjualanDetail::class, 'barang_id');
+    }
+
+    public function purchaseOrderDetails()
+    {
+        return $this->hasMany(PurchaseOrderDetail::class, 'barang_id');
+    }
+
+    // --- Helper Methods ---
+
+    /**
+     * Menghitung total stok aktif (quantity > 0)
+     */
+    public function getTotalStockAttribute()
+    {
+        return $this->inventoryBatches()->sum('quantity');
+    }
+
+    /**
+     * Menghitung stok spesifik per lokasi
+     */
+    public function getStockByLokasi($lokasiId)
+    {
+        return $this->inventoryBatches()
+                    ->where('lokasi_id', $lokasiId)
+                    ->sum('quantity');
     }
 }

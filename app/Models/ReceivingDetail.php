@@ -15,9 +15,9 @@ class ReceivingDetail extends Model
         return $this->belongsTo(Receiving::class);
     }
 
-    public function part()
+    public function barang()
     {
-        return $this->belongsTo(Part::class);
+        return $this->belongsTo(Barang::class, 'barang_id');
     }
 
     // --- TAMBAHKAN FUNGSI INI ---

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryBatch;
 use App\Models\Lokasi; // DIUBAH
-use App\Models\Part;
+use App\Models\Barang;
 use App\Models\PurchaseOrderDetail;
 use App\Models\Rak;
 use App\Models\Receiving;
@@ -46,7 +46,7 @@ class PutawayController extends Controller
             return redirect()->route('admin.putaway.index')->with('error', 'Anda tidak berwenang memproses putaway untuk lokasi ini.');
         }
 
-        $receiving->load('details.part');
+        $receiving->load('details.barang');
 
         // Mengambil rak berdasarkan lokasi_id dari dokumen penerimaan
         $raks = Rak::where('lokasi_id', $receiving->lokasi_id)
@@ -60,7 +60,7 @@ class PutawayController extends Controller
         return view('admin.putaway.form', compact('receiving', 'itemsToPutaway', 'raks'));
     }
 
-    public function storePutaway(Request $request, Receiving $receiving)
+public function storePutaway(Request $request, Receiving $receiving)
     {
         $this->authorize('perform-warehouse-ops');
         $request->validate([
@@ -71,49 +71,59 @@ class PutawayController extends Controller
         DB::beginTransaction();
         try {
             foreach ($request->items as $detailId => $data) {
-                $detail = ReceivingDetail::with('part')->findOrFail($detailId);
-                $part = $detail->part;
+                // Eager load 'barang'
+                $detail = ReceivingDetail::with('barang')->findOrFail($detailId);
+                $barang = $detail->barang;
                 $jumlahMasuk = $detail->qty_lolos_qc;
 
                 if ($jumlahMasuk <= 0) continue;
 
-                // Membuat Inventory Batch untuk FIFO
+                // 1. Buat Inventory Batch (FIFO)
                 InventoryBatch::create([
-                    'part_id'             => $detail->part_id,
+                    'barang_id'           => $detail->barang_id, // Ganti part_id
                     'rak_id'              => $data['rak_id'],
                     'lokasi_id'           => $receiving->lokasi_id,
                     'receiving_detail_id' => $detail->id,
                     'quantity'            => $jumlahMasuk,
                 ]);
 
-                // Kalkulasi harga rata-rata
+                // 2. Kalkulasi Harga Rata-rata (Weighted Average Cost) untuk 'selling_in'
+                // Ambil harga beli dari PO
                 $poDetail = PurchaseOrderDetail::where('purchase_order_id', $receiving->purchase_order_id)
-                                               ->where('part_id', $part->id)
+                                               ->where('barang_id', $barang->id)
                                                ->first();
-                $hargaBeliBaru = $poDetail ? $poDetail->harga_beli : $part->harga_beli_default;
 
-                // Stok total sebelum batch ini ditambahkan
-                $stokLamaTotal = $part->inventoryBatches()->sum('quantity') - $jumlahMasuk;
+                // Jika tidak ada di PO (misal receiving manual), pakai selling_in lama
+                $hargaBeliBaru = $poDetail ? $poDetail->harga_beli : $barang->selling_in;
 
-                $hargaRataRataLama = $part->harga_beli_rata_rata;
-                $totalNilaiLama = $stokLamaTotal * $hargaRataRataLama;
-                $totalNilaiBaru = $jumlahMasuk * $hargaBeliBaru;
-                $totalStokBaru = $stokLamaTotal + $jumlahMasuk;
+                // Hitung total stok dan nilai aset LAMA (sebelum barang ini masuk)
+                // Kita pakai query manual agar tidak ikut menghitung batch yang baru saja dibuat di atas (jika ada race condition)
+                // Tapi karena ini dalam transaksi, batch di atas sudah terhitung.
+                // Cara aman:
+                $allBatches = $barang->inventoryBatches;
+                $totalStokSekarang = $allBatches->sum('quantity'); // Termasuk yang baru masuk
+                $stokLama = $totalStokSekarang - $jumlahMasuk;
 
-                $hargaRataRataBaru = ($totalStokBaru > 0) ? (($totalNilaiLama + $totalNilaiBaru) / $totalStokBaru) : $hargaBeliBaru;
+                $nilaiAsetLama = $stokLama * $barang->selling_in;
+                $nilaiAsetBaru = $jumlahMasuk * $hargaBeliBaru;
 
-                $part->update(['harga_beli_rata_rata' => $hargaRataRataBaru]);
+                $sellingInBaru = ($totalStokSekarang > 0)
+                    ? (($nilaiAsetLama + $nilaiAsetBaru) / $totalStokSekarang)
+                    : $hargaBeliBaru;
 
-                // Catat di Stock Movement
+                // Update master Barang
+                $barang->update(['selling_in' => $sellingInBaru]);
+
+                // 3. Catat Stock Movement
                 $receiving->stockMovements()->create([
-                    'part_id'      => $detail->part_id,
+                    'barang_id'    => $detail->barang_id,
                     'lokasi_id'    => $receiving->lokasi_id,
                     'rak_id'       => $data['rak_id'],
                     'jumlah'       => $jumlahMasuk,
-                    'stok_sebelum' => $stokLamaTotal,
-                    'stok_sesudah' => $totalStokBaru,
+                    'stok_sebelum' => $stokLama,
+                    'stok_sesudah' => $totalStokSekarang,
                     'user_id'      => Auth::id(),
-                    'keterangan'   => 'Stok masuk dari PO ' . $receiving->purchaseOrder->nomor_po,
+                    'keterangan'   => 'Putaway dari PO ' . ($receiving->purchaseOrder->nomor_po ?? '-'),
                 ]);
 
                 $detail->update(['qty_disimpan' => $jumlahMasuk]);
@@ -125,11 +135,11 @@ class PutawayController extends Controller
             $receiving->save();
 
             DB::commit();
-            return redirect()->route('admin.putaway.index')->with('success', 'Barang berhasil disimpan, stok dan harga rata-rata telah diperbarui.');
+            return redirect()->route('admin.putaway.index')->with('success', 'Putaway berhasil. Stok dan Selling In diperbarui.');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Error: ' . $e->getMessage())->withInput();
         }
     }
 }

@@ -17,9 +17,9 @@ class StockMutation extends Model
         'received_at' => 'datetime',
     ];
 
-    public function part()
+    public function barang()
     {
-        return $this->belongsTo(Part::class);
+        return $this->belongsTo(Barang::class, 'barang_id');
     }
 
     public function lokasiAsal()

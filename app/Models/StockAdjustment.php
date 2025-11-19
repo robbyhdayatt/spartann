@@ -11,9 +11,9 @@ class StockAdjustment extends Model
 
     protected $guarded = ['id'];
 
-    public function part()
+    public function barang()
     {
-        return $this->belongsTo(Part::class);
+        return $this->belongsTo(Barang::class, 'barang_id');
     }
 
     public function lokasi()

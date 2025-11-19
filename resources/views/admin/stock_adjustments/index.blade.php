@@ -39,7 +39,7 @@
                 @forelse($adjustments as $adj)
                 <tr>
                     <td>
-                        <strong>{{ $adj->part->nama_part }}</strong><br>
+                        <strong>{{ $adj->barang->part_name }}</strong><br>
                         <small class="text-muted">{{ $adj->created_at->format('d M Y H:i') }}</small>
                     </td>
                     <td>{{ $adj->lokasi->nama_lokasi}} / {{ $adj->rak->nama_rak ?? 'N/A' }}</td>

@@ -39,7 +39,7 @@ class PurchaseReturnController extends Controller
     public function getFailedItems(Receiving $receiving)
     {
         $items = $receiving->details()
-            ->with('part')
+            ->with('barang')
             ->where('qty_gagal_qc', '>', DB::raw('qty_diretur'))
             ->get();
 
@@ -89,16 +89,16 @@ class PurchaseReturnController extends Controller
             foreach ($request->items as $itemData) {
                  // Ambil receiving_detail_id dari data item yang disubmit
                  $detailId = $itemData['receiving_detail_id'];
-                 // Eager load part untuk pesan error
-                $detail = ReceivingDetail::with('part')->findOrFail($detailId);
-                $partId = $detail->part_id;
+                 // Eager load barang untuk pesan error
+                $detail = ReceivingDetail::with('barang')->findOrFail($detailId);
+                $barangId = $detail->barang_id;
                 $qtyToReturn = (int)$itemData['qty_retur']; // Pastikan integer
                 $alasanRetur = $itemData['alasan'];
 
                 // Validasi jumlah retur vs gagal QC
                 $availableToReturn = $detail->qty_gagal_qc - $detail->qty_diretur;
                 if ($qtyToReturn > $availableToReturn) {
-                    throw new \Exception("Jumlah retur ({$qtyToReturn}) untuk part {$detail->part->nama_part} melebihi jumlah yang tersedia ({$availableToReturn}).");
+                    throw new \Exception("Jumlah retur ({$qtyToReturn}) untuk barang {$detail->barang->part_name} melebihi jumlah yang tersedia ({$availableToReturn}).");
                 }
 
                 // ============================================
@@ -106,7 +106,7 @@ class PurchaseReturnController extends Controller
                 // ============================================
 
                 // Cari batch di rak karantina berdasarkan part, rak, lokasi
-                 $batchKarantina = InventoryBatch::where('part_id', $partId)
+                 $batchKarantina = InventoryBatch::where('barang_id', $barangId)
                                                 ->where('rak_id', $quarantineRakId)
                                                 ->where('lokasi_id', $lokasiId)
                                                 // Opsional: Jika batch karantina dibuat per receiving detail
@@ -118,22 +118,22 @@ class PurchaseReturnController extends Controller
 
                 if (!$batchKarantina) {
                      // Stok di batch karantina tidak cukup atau tidak ditemukan
-                     $currentQuarantineStock = InventoryBatch::where('part_id', $partId)
+                     $currentQuarantineStock = InventoryBatch::where('barang_id', $barangId)
                                                 ->where('rak_id', $quarantineRakId)
                                                 ->where('lokasi_id', $lokasiId)
                                                 ->sum('quantity');
-                     throw new \Exception("Stok karantina tidak mencukupi/tidak ditemukan untuk part {$detail->part->nama_part}. Stok batch: " . ($currentQuarantineStock) . ", Retur: {$qtyToReturn}");
+                     throw new \Exception("Stok karantina tidak mencukupi/tidak ditemukan untuk barang {$detail->barang->part_name}. Stok batch: " . ($currentQuarantineStock) . ", Retur: {$qtyToReturn}");
                 }
 
                  // Ambil stok total sebelum dikurangi untuk StockMovement
-                 $stokTotalSebelum = InventoryBatch::where('part_id', $partId)->where('lokasi_id', $lokasiId)->sum('quantity');
+                 $stokTotalSebelum = InventoryBatch::where('barang_id', $barangId)->where('lokasi_id', $lokasiId)->sum('quantity');
 
                  // Kurangi stok batch karantina
                  $batchKarantina->decrement('quantity', $qtyToReturn);
 
                  // Buat Stock Movement
                  StockMovement::create([
-                     'part_id' => $partId,
+                     'barang_id' => $barangId,
                      'lokasi_id' => $lokasiId,
                      'rak_id' => $quarantineRakId, // Rak Sumber adalah Rak Karantina
                      'jumlah' => -$qtyToReturn, // Jumlah negatif karena keluar
@@ -151,7 +151,7 @@ class PurchaseReturnController extends Controller
 
                 // Buat detail return (sudah ada sebelumnya)
                 $return->details()->create([
-                    'part_id' => $partId,
+                    'barang_id' => $barangId,
                     'qty_retur' => $qtyToReturn,
                     'alasan' => $alasanRetur,
                     'receiving_detail_id' => $detailId, // Simpan ID detail penerimaan
@@ -176,7 +176,7 @@ class PurchaseReturnController extends Controller
     public function show(PurchaseReturn $purchaseReturn)
     {
         $this->authorize('manage-purchase-returns');
-        $purchaseReturn->load(['supplier', 'receiving.purchaseOrder', 'details.part']);
+        $purchaseReturn->load(['supplier', 'receiving.purchaseOrder', 'details.barang']);
         return view('admin.purchase_returns.show', compact('purchaseReturn'));
     }
 
@@ -188,9 +188,9 @@ class PurchaseReturnController extends Controller
         return "RTN/{$date}/{$sequence}";
     }
 
-private function reduceStockFromBatches($partId, $rakId, $lokasiId, $quantityToReduce, PurchaseReturn $return, $alasan = null)
+private function reduceStockFromBatches($barangId, $rakId, $lokasiId, $quantityToReduce, PurchaseReturn $return, $alasan = null)
      {
-         $batches = InventoryBatch::where('part_id', $partId)
+         $batches = InventoryBatch::where('barang_id', $barangId)
                                   ->where('rak_id', $rakId)
                                   ->where('lokasi_id', $lokasiId)
                                   ->where('quantity', '>', 0)
@@ -198,7 +198,7 @@ private function reduceStockFromBatches($partId, $rakId, $lokasiId, $quantityToR
                                   ->get();
 
          $remainingQtyToReduce = $quantityToReduce;
-         $stokTotalSebelum = InventoryBatch::where('part_id', $partId)->where('lokasi_id', $lokasiId)->sum('quantity');
+         $stokTotalSebelum = InventoryBatch::where('barang_id', $barangId)->where('lokasi_id', $lokasiId)->sum('quantity');
 
 
          if ($batches->sum('quantity') < $quantityToReduce) {
@@ -213,7 +213,7 @@ private function reduceStockFromBatches($partId, $rakId, $lokasiId, $quantityToR
              $batch->decrement('quantity', $qtyToTake);
 
              StockMovement::create([
-                 'part_id' => $partId,
+                 'barang_id' => $barangId,
                  'lokasi_id' => $lokasiId,
                  'rak_id' => $rakId,
                  'jumlah' => -$qtyToTake,

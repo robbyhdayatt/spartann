@@ -38,9 +38,9 @@
                         <small class="text-muted">{{ $mutation->created_at->format('d M Y') }}</small>
                     </td>
                     <td>
-                        {{ $mutation->part->nama_part }}
+                        {{ $mutation->barang->part_name }}
                         <br>
-                        <small class="text-muted">{{ $mutation->part->kode_part }}</small>
+                        <small class="text-muted">{{ $mutation->barang->part_code }}</small>
                     </td>
                     <td class="text-center">{{ $mutation->jumlah }}</td>
                     <td>

@@ -20,7 +20,7 @@ class StockMutationController extends Controller
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        $query = StockMutation::with(['part', 'lokasiAsal', 'lokasiTujuan', 'createdBy']);
+        $query = StockMutation::with(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy']);
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where(function($q) use ($user) {
@@ -57,7 +57,7 @@ class StockMutationController extends Controller
         $this->authorize('create-stock-transaction');
 
         $validated = $request->validate([
-            'part_id' => 'required|exists:parts,id',
+            'barang_id' => 'required|exists:parts,id',
             'lokasi_asal_id' => 'required|exists:lokasi,id',
             'lokasi_tujuan_id' => 'required|exists:lokasi,id|different:lokasi_asal_id',
             'jumlah' => 'required|integer|min:1',
@@ -71,7 +71,7 @@ class StockMutationController extends Controller
         }
 
         $totalStock = InventoryBatch::where('lokasi_id', $validated['lokasi_asal_id'])
-            ->where('part_id', $validated['part_id'])
+            ->where('barang_id', $validated['barang_id'])
             ->sum('quantity');
 
         if ($totalStock < $validated['jumlah']) {
@@ -102,7 +102,7 @@ class StockMutationController extends Controller
                DB::transaction(function () use ($stockMutation) {
                    $jumlahToMutate = $stockMutation->jumlah;
                    $totalStock = InventoryBatch::where('lokasi_id', $stockMutation->lokasi_asal_id)
-                         ->where('part_id', $stockMutation->part_id)
+                         ->where('barang_id', $stockMutation->barang_id)
                          ->sum('quantity');
 
                    if ($totalStock < $jumlahToMutate) {
@@ -110,7 +110,7 @@ class StockMutationController extends Controller
                    }
 
                    $batches = InventoryBatch::where('lokasi_id', $stockMutation->lokasi_asal_id)
-                         ->where('part_id', $stockMutation->part_id)
+                         ->where('barang_id', $stockMutation->barang_id)
                          ->where('quantity', '>', 0)
                          ->orderBy('created_at', 'asc')
                          ->get();
@@ -127,7 +127,7 @@ class StockMutationController extends Controller
                        $remainingToMutate -= $stokKeluar;
 
                        StockMovement::create([
-                           'part_id' => $stockMutation->part_id,
+                           'barang_id' => $stockMutation->barang_id,
                            'lokasi_id' => $stockMutation->lokasi_asal_id,
                            'rak_id' => $batch->rak_id,
                            'jumlah' => -$stokKeluar,
@@ -192,7 +192,7 @@ class StockMutationController extends Controller
     {
         $partIds = InventoryBatch::where('lokasi_id', $lokasi->id)
             ->where('quantity', '>', 0)
-            ->pluck('part_id')
+            ->pluck('barang_id')
             ->unique();
 
         $parts = Part::whereIn('id', $partIds)->orderBy('nama_part')->get();
@@ -203,11 +203,11 @@ class StockMutationController extends Controller
     {
         $request->validate([
             'lokasi_id' => 'required|exists:lokasi,id',
-            'part_id' => 'required|exists:parts,id',
+            'barang_id' => 'required|exists:parts,id',
         ]);
 
         $totalStock = InventoryBatch::where('lokasi_id', $request->lokasi_id)
-            ->where('part_id', $request->part_id)
+            ->where('barang_id', $request->barang_id)
             ->sum('quantity');
 
         return response()->json(['total_stock' => $totalStock]);

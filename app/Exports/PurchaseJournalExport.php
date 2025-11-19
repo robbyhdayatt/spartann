@@ -20,7 +20,8 @@ class PurchaseJournalExport implements FromCollection, WithHeadings, WithMapping
 
     public function collection()
     {
-        return ReceivingDetail::with(['receiving.purchaseOrder.supplier', 'part'])
+        // Gunakan relasi 'barang'
+        return ReceivingDetail::with(['receiving.purchaseOrder.supplier', 'barang'])
             ->whereHas('receiving', function ($query) {
                 $query->whereBetween('tanggal_terima', [$this->startDate, $this->endDate]);
             })
@@ -31,33 +32,25 @@ class PurchaseJournalExport implements FromCollection, WithHeadings, WithMapping
     {
         return [
             'Tanggal Terima',
-            'Nomor Penerimaan',
-            'Nomor PO',
-            'Nama Supplier',
-            'Kode Part',
-            'Nama Part',
+            'No Penerimaan',
+            'No PO',
+            'Supplier',
+            'Kode Barang',
+            'Nama Barang',
             'Qty Diterima',
-            'Harga Beli',
-            'Subtotal',
         ];
     }
 
     public function map($detail): array
     {
-        // Calculate subtotal for export
-        $harga_beli = $detail->receiving->purchaseOrder->details->firstWhere('part_id', $detail->part_id)->harga_beli ?? 0;
-        $subtotal = $detail->qty_terima * $harga_beli;
-
         return [
-            $detail->receiving->tanggal_terima->format('d-m-Y'),
+            $detail->receiving->tanggal_terima,
             $detail->receiving->nomor_penerimaan,
-            $detail->receiving->purchaseOrder->nomor_po,
-            $detail->receiving->purchaseOrder->supplier->nama_supplier,
-            $detail->part->kode_part,
-            $detail->part->nama_part,
+            $detail->receiving->purchaseOrder->nomor_po ?? '-',
+            $detail->receiving->purchaseOrder->supplier->nama_supplier ?? 'Internal',
+            $detail->barang->part_code ?? '-',
+            $detail->barang->part_name ?? '-',
             $detail->qty_terima,
-            $harga_beli,
-            $subtotal,
         ];
     }
 }

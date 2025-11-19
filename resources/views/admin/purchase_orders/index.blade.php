@@ -21,7 +21,7 @@
             <thead>
                 <tr>
                     <th>Nomor PO</th>
-                    <th>Supplier</th>
+                    <th>Sumber / Supplier</th> {{-- Judul Kolom Disesuaikan --}}
                     <th class="text-right">Total</th>
                     <th class="text-center">Status</th>
                     <th>Dibuat Oleh</th>
@@ -34,15 +34,31 @@
                     <td>
                         <strong>{{ $po->nomor_po }}</strong><br>
                         <small class="text-muted">{{ $po->tanggal_po->format('d M Y') }}</small>
+                        @if($po->request_group_id)
+                             <br><span class="badge badge-light text-xs">{{ $po->request_group_id }}</span>
+                        @endif
                     </td>
-                    <td>{{ $po->supplier->nama_supplier }}</td>
+
+                    {{-- PERBAIKAN DISINI: Cek Supplier vs Internal --}}
+                    <td>
+                        @if($po->supplier)
+                            <i class="fas fa-truck text-primary"></i> {{ $po->supplier->nama_supplier }}
+                        @elseif($po->sumberLokasi)
+                            <i class="fas fa-warehouse text-success"></i> {{ $po->sumberLokasi->nama_lokasi }} <br>
+                            <small class="text-muted">(Internal Transfer)</small>
+                        @else
+                            <span class="text-danger">Unknown Source</span>
+                        @endif
+                    </td>
+                    {{-- ------------------------------------------ --}}
+
                     <td class="text-right">{{ 'Rp ' . number_format($po->total_amount, 0, ',', '.') }}</td>
                     <td class="text-center">
                         <span class="badge {{ $po->status_class }}">{{ $po->status_badge }}</span>
                     </td>
                     <td>
                         {{ $po->createdBy->nama ?? 'N/A' }}<br>
-                        <small class="text-muted">{{ $po->lokasi->nama_lokasi ?? '' }}</small>
+                        <small class="text-muted">Tujuan: {{ $po->lokasi->nama_lokasi ?? '' }}</small>
                     </td>
                     <td class="text-center">
                         <a href="{{ route('admin.purchase-orders.show', $po) }}" class="btn btn-info btn-xs">
@@ -57,7 +73,6 @@
 </div>
 @stop
 
-{{-- Tambahkan inisialisasi DataTables di sini --}}
 @section('js')
     <script>
         $(function () {
@@ -65,9 +80,9 @@
                 "responsive": true,
                 "lengthChange": false,
                 "autoWidth": false,
-                "order": [[0, "desc"]], // Urutkan berdasarkan kolom pertama (Nomor PO) secara menurun
+                "order": [[0, "desc"]],
                 "buttons": ["copy", "csv", "excel", "pdf", "print"]
             }).buttons().container().appendTo('#po-table_wrapper .col-md-6:eq(0)');
         });
-    </script>
+    script>
 @stop

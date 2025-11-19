@@ -10,26 +10,24 @@ use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 
 class StockCardExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize
 {
-    protected $part_id;
+    protected $barang_id; // Ganti part_id
     protected $lokasi_id;
     protected $start_date;
     protected $end_date;
 
-    public function __construct($part_id, $lokasi_id, $start_date, $end_date)
+    public function __construct($barang_id, $lokasi_id, $start_date, $end_date)
     {
-        $this->part_id = $part_id;
+        $this->barang_id = $barang_id;
         $this->lokasi_id = $lokasi_id;
         $this->start_date = $start_date;
         $this->end_date = $end_date;
     }
 
-    /**
-    * @return \Illuminate\Support\Collection
-    */
     public function collection()
     {
-        $query = StockMovement::where('part_id', $this->part_id)
-            ->with(['part', 'lokasi', 'user'])
+        // Query Barang ID
+        $query = StockMovement::where('barang_id', $this->barang_id)
+            ->with(['barang', 'lokasi', 'user']) // Ganti part
             ->whereDate('created_at', '>=', $this->start_date)
             ->whereDate('created_at', '<=', $this->end_date);
 
@@ -43,9 +41,9 @@ class StockCardExport implements FromCollection, WithHeadings, WithMapping, Shou
     public function headings(): array
     {
         return [
-            'Part',
+            'Barang', // Ganti Part
             'Tanggal',
-            'lokasi',
+            'Lokasi',
             'Tipe Gerakan',
             'Jumlah',
             'Stok Sebelum',
@@ -58,7 +56,7 @@ class StockCardExport implements FromCollection, WithHeadings, WithMapping, Shou
     public function map($movement): array
     {
         return [
-            $movement->part->nama_part . ' (' . $movement->part->kode_part . ')',
+            $movement->barang->part_name . ' (' . $movement->barang->part_code . ')',
             $movement->created_at->format('d-m-Y H:i'),
             $movement->lokasi->nama_lokasi ?? 'N/A',
             str_replace('_', ' ', $movement->tipe_gerakan),

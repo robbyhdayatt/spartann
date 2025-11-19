@@ -22,8 +22,8 @@
                         @else <span class="badge badge-secondary">{{ $stockMutation->status }}</span>
                         @endif
                     </li>
-                    <li class="list-group-item"><b>Part:</b> {{ $stockMutation->part->nama_part }} ({{$stockMutation->part->kode_part}})</li>
-                    <li class="list-group-item"><b>Jumlah:</b> {{ $stockMutation->jumlah }} {{ $stockMutation->part->satuan }}</li>
+                    <li class="list-group-item"><b>Part:</b> {{ $stockMutation->barang->part_name }} ({{$stockMutation->barang->part_code}})</li>
+                    <li class="list-group-item"><b>Jumlah:</b> {{ $stockMutation->jumlah }} </li>
                     <li class="list-group-item"><b>Keterangan:</b> {{ $stockMutation->keterangan ?? '-' }}</li>
                 </ul>
             </div>

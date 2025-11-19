@@ -38,8 +38,8 @@
             <tbody>
                 @foreach($purchaseReturn->details as $detail)
                 <tr>
-                    <td>{{ $detail->part->kode_part }}</td>
-                    <td>{{ $detail->part->nama_part }}</td>
+                    <td>{{ $detail->barang->part_code }}</td>
+                    <td>{{ $detail->barang->part_name }}</td>
                     <td class="text-right">{{ $detail->qty_retur }}</td>
                     <td>{{ $detail->alasan }}</td>
                 </tr>

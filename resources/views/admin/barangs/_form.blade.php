@@ -1,13 +1,7 @@
-{{--
-    File ini digunakan oleh modal Create dan Edit.
-    Variabel $idPrefix (cth: 'create' atau 'edit') WAJIB ada
-    untuk membedakan ID field di kedua modal.
---}}
 @php
     $currentBarang = $barang ?? null;
 @endphp
 
-{{-- Tampilkan error validasi di dalam modal --}}
 @if ($errors->any())
     <div class="alert alert-danger">
         <ul class="mb-0">
@@ -36,14 +30,19 @@
         <input type="text" id="{{ $idPrefix }}_merk" name="merk" class="form-control"
                value="{{ old('merk', $currentBarang->merk ?? '') }}">
     </div>
-    <div class="col-md-4 form-group">
-        <label for="{{ $idPrefix }}_harga_modal">Harga Modal (Rp) <span class="text-danger">*</span></label>
-        <input type="number" id="{{ $idPrefix }}_harga_modal" name="harga_modal" class="form-control"
-               value="{{ old('harga_modal', $currentBarang->harga_modal ?? 0) }}" min="0" step="0.01" required>
+    <div class="col-md-3 form-group">
+        <label for="{{ $idPrefix }}_selling_in">Selling In (Rp) <span class="text-danger">*</span></label>
+        <input type="number" id="{{ $idPrefix }}_selling_in" name="selling_in" class="form-control"
+               value="{{ old('selling_in', $currentBarang->selling_in ?? 0) }}" min="0" step="0.01" required>
     </div>
     <div class="col-md-4 form-group">
-        <label for="{{ $idPrefix }}_harga_jual">Harga Jual (Rp) <span class="text-danger">*</span></label>
-        <input type="number" id="{{ $idPrefix }}_harga_jual" name="harga_jual" class="form-control"
-               value="{{ old('harga_jual', $currentBarang->harga_jual ?? 0) }}" min="0" step="0.01" required>
+        <label for="{{ $idPrefix }}_selling_out">Selling Out (Rp) <span class="text-danger">*</span></label>
+        <input type="number" id="{{ $idPrefix }}_selling_out" name="selling_out" class="form-control"
+               value="{{ old('selling_out', $currentBarang->selling_out ?? 0) }}" min="0" step="0.01" required>
+    </div>
+    <div class="col-md-4 form-group">
+        <label for="{{ $idPrefix }}_retail">Retail (Rp) <span class="text-danger">*</span></label>
+        <input type="number" id="{{ $idPrefix }}_retail" name="retail" class="form-control"
+               value="{{ old('retail', $currentBarang->retail ?? 0) }}" min="0" step="0.01" required>
     </div>
 </div>

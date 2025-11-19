@@ -50,16 +50,16 @@
 
 
             <div class="form-group">
-                <label for="part_id">Part</label>
-                <select name="part_id" id="part_id" class="form-control select2 @error('part_id') is-invalid @enderror" required>
+                <label for="barang_id">Part</label>
+                <select name="barang_id" id="barang_id" class="form-control select2 @error('barang_id') is-invalid @enderror" required>
                     <option value="">-- Pilih Part --</option>
-                    @foreach($parts as $part)
-                        <option value="{{ $part->id }}" {{ old('part_id') == $part->id ? 'selected' : '' }}>
-                            {{ $part->nama_part }} ({{ $part->kode_part }})
+                    @foreach($barangs as $barang)
+                        <option value="{{ $barang->id }}" {{ old('barang_id') == $barang->id ? 'selected' : '' }}>
+                            {{ $barang->part_name }} ({{ $barang->part_code }})
                         </option>
                     @endforeach
                 </select>
-                @error('part_id')
+                @error('barang_id')
                     <span class="invalid-feedback" role="alert">
                         <strong>{{ $message }}</strong>
                     </span>
@@ -139,12 +139,8 @@ $(document).ready(function() {
             return; // Keluar jika tidak ada lokasi dipilih
         }
 
-        rakSelect.append('<option value="">Memuat Rak...</option>'); // Placeholder loading
-
-        // URL ke endpoint API, pastikan route 'admin.api.lokasi.raks' ada
-        // Anda mungkin perlu membuat route ini di web.php
-        // Route::get('/api/lokasi/{lokasi}/raks', [StockAdjustmentController::class, 'getRaksByLokasi'])->name('admin.api.lokasi.raks');
-        const url = `/spartann/admin/api/lokasi/${lokasiId}/raks`; // Sesuaikan URL jika perlu
+        rakSelect.append('<option value="">Memuat Rak...</option>');
+        const url = `/spartann/admin/api/lokasi/${lokasiId}/raks`;
 
         $.getJSON(url, function(data) {
             rakSelect.empty(); // Kosongkan lagi sebelum mengisi

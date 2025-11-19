@@ -93,14 +93,14 @@ public function index()
                     $maxQty = $penjualanDetail->qty_jual - $penjualanDetail->qty_diretur;
 
                     if ($qtyRetur <= 0 || $qtyRetur > $maxQty) {
-                        throw new \Exception("Jumlah retur untuk part {$penjualanDetail->part->nama_part} tidak valid.");
+                        throw new \Exception("Jumlah retur untuk part {$penjualanDetail->barang->part_name} tidak valid.");
                     }
 
                     $itemSubtotal = $penjualanDetail->harga_jual * $qtyRetur;
                     $subtotalRetur += $itemSubtotal;
 
                     $salesReturn->details()->create([
-                        'part_id' => $penjualanDetail->part_id,
+                        'barang_id' => $penjualanDetail->barang_id,
                         'qty_retur' => $qtyRetur,
                         'harga_saat_jual' => $penjualanDetail->harga_jual,
                         'subtotal' => $itemSubtotal,
@@ -110,7 +110,7 @@ public function index()
 
                     // LOGIKA BARU: Buat InventoryBatch baru di rak karantina
                     $newBatch = InventoryBatch::create([
-                        'part_id' => $penjualanDetail->part_id,
+                        'barang_id' => $penjualanDetail->barang_id,
                         'rak_id' => $rakKarantina->id,
                         'lokasi_id' => $penjualan->lokasi_id,
                         'quantity' => $qtyRetur,
@@ -119,7 +119,7 @@ public function index()
 
                     // LOGIKA BARU: Catat pergerakan stok dengan format yang benar
                     StockMovement::create([
-                        'part_id' => $penjualanDetail->part_id,
+                        'barang_id' => $penjualanDetail->barang_id,
                         'lokasi_id' => $penjualan->lokasi_id,
                         'rak_id' => $rakKarantina->id,
                         'jumlah' => $qtyRetur,
@@ -154,13 +154,13 @@ public function index()
     public function show(SalesReturn $salesReturn)
     {
         $this->authorize('view-sales');
-        $salesReturn->load(['konsumen', 'penjualan', 'details.part']);
+        $salesReturn->load(['konsumen', 'penjualan', 'details.barang']);
         return view('admin.sales_returns.show', compact('salesReturn'));
     }
 
     public function getReturnableItems(Penjualan $penjualan)
     {
-        $penjualan->load('details.part');
+        $penjualan->load('details.barang');
         $returnableItems = $penjualan->details->filter(function ($detail) {
             return $detail->qty_jual > $detail->qty_diretur;
         })->map(function ($detail) {

@@ -28,8 +28,8 @@
                 {{-- Kita ganti variabelnya menjadi $inventoryDetails --}}
                 @foreach($inventoryDetails as $item)
                 <tr>
-                    <td>{{ $item->part->kode_part ?? 'N/A' }}</td>
-                    <td>{{ $item->part->nama_part ?? 'N/A' }}</td>
+                    <td>{{ $item->barang->part_code ?? 'N/A' }}</td>
+                    <td>{{ $item->barang->part_name ?? 'N/A' }}</td>
                     <td>{{ $item->lokasi->nama_lokasi ?? 'N/A' }}</td>
                     <td>{{ $item->rak->kode_rak ?? 'N/A' }}</td>
                     <td class="text-right font-weight-bold">{{ $item->quantity }}</td>

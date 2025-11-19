@@ -72,7 +72,7 @@
                         <td>{{ $detail->penjualan->konsumen->nama_konsumen }}</td>
                         <td>{{ $detail->barang->part_name }}</td>
                         <td class="text-right">{{ $detail->qty_jual }}</td>
-                        <td class="text-right">{{ number_format($detail->harga_jual, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($detail->retail, 0, ',', '.') }}</td>
                         <td class="text-right">{{ number_format($detail->subtotal, 0, ',', '.') }}</td>
                     </tr>
                     @empty

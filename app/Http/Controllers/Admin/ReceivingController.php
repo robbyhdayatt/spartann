@@ -31,21 +31,22 @@ class ReceivingController extends Controller
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
+        $this->authorize('perform-warehouse-ops');
+
+        // Query Dasar: PO yang sudah diapprove/partial
+        $query = PurchaseOrder::whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED']);
 
         if ($user->hasRole(['SA', 'PIC', 'MA'])) {
-            $query = PurchaseOrder::whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED']);
-        }
-        elseif ($user->hasRole('AG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT') {
-            $this->authorize('perform-warehouse-ops');
-            $query = PurchaseOrder::whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])
-                                  ->where('lokasi_id', $user->lokasi_id);
-        }
-        else {
-            $this->authorize('perform-warehouse-ops');
-            $purchaseOrders = collect();
+            // Super admin bisa lihat semua
+        } else {
+            // Dealer/Pusat hanya bisa melihat PO yang TUJUANNYA adalah lokasi mereka
+            // (lokasi_id di tabel PO adalah lokasi tujuan/pemesan)
+            $query->where('lokasi_id', $user->lokasi_id);
         }
 
-        $purchaseOrders = isset($query) ? $query->orderBy('tanggal_po', 'desc')->get() : collect();
+        $purchaseOrders = $query->with(['supplier', 'sumberLokasi'])
+                                ->orderBy('tanggal_po', 'desc')
+                                ->get();
 
         return view('admin.receivings.create', compact('purchaseOrders'));
     }
@@ -61,7 +62,8 @@ class ReceivingController extends Controller
             'tanggal_terima' => 'required|date',
             'catatan' => 'nullable|string',
             'items' => 'required|array|min:1',
-            'items.*.part_id' => 'required|exists:parts,id',
+            // PERUBAHAN: Validasi barang_id (bukan part_id)
+            'items.*.barang_id' => 'required|exists:barangs,id',
             'items.*.qty_terima' => 'required|integer|min:0',
         ]);
 
@@ -69,8 +71,9 @@ class ReceivingController extends Controller
         try {
             $po = PurchaseOrder::with('details')->findOrFail($request->purchase_order_id);
 
+            // Validasi Lokasi: Pastikan user menerima PO yang ditujukan ke lokasinya
             if ($user->lokasi_id != $po->lokasi_id && !$user->hasRole(['SA', 'PIC'])) {
-                return back()->with('error', 'Anda tidak berwenang menerima barang untuk lokasi ini.')->withInput();
+                return back()->with('error', 'Anda tidak berwenang menerima barang untuk lokasi PO ini.')->withInput();
             }
 
             $receiving = Receiving::create([
@@ -78,33 +81,39 @@ class ReceivingController extends Controller
                 'lokasi_id' => $po->lokasi_id,
                 'nomor_penerimaan' => Receiving::generateReceivingNumber(),
                 'tanggal_terima' => $request->tanggal_terima,
-                'status' => 'PENDING_QC',
+                'status' => 'PENDING_QC', // Masuk QC dulu
                 'catatan' => $request->catatan,
                 'received_by' => $user->id,
             ]);
 
-            foreach ($request->items as $partId => $itemData) {
+            foreach ($request->items as $barangId => $itemData) {
                 $qtyTerima = (int)$itemData['qty_terima'];
                 if ($qtyTerima > 0) {
-                    $poDetail = $po->details->firstWhere('part_id', $partId);
+                    // PERUBAHAN: Cari berdasarkan barang_id
+                    $poDetail = $po->details->firstWhere('barang_id', $barangId);
+
                     if ($poDetail) {
                         $poDetail->increment('qty_diterima', $qtyTerima);
                     }
+
+                    // Simpan Detail Receiving
                     $receiving->details()->create([
-                        'part_id' => $partId,
+                        'barang_id' => $barangId, // Ganti part_id
                         'qty_terima' => $qtyTerima,
+                        'qty_pesan_referensi' => $poDetail ? $poDetail->qty_pesan : 0
                     ]);
                 }
             }
 
             $po->refresh();
+            // Cek apakah semua item sudah diterima penuh
             $fullyReceived = $po->details->every(fn($detail) => $detail->qty_diterima >= $detail->qty_pesan);
 
             $po->status = $fullyReceived ? 'FULLY_RECEIVED' : 'PARTIALLY_RECEIVED';
             $po->save();
 
             DB::commit();
-            return redirect()->route('admin.receivings.index')->with('success', 'Data penerimaan barang berhasil disimpan.');
+            return redirect()->route('admin.receivings.index')->with('success', 'Data penerimaan barang berhasil disimpan. Silakan lanjut ke proses QC.');
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -114,20 +123,32 @@ class ReceivingController extends Controller
 
     public function show(Receiving $receiving)
     {
-        $receiving->load('purchaseOrder.supplier', 'details.part', 'createdBy', 'receivedBy', 'qcBy', 'putawayBy', 'lokasi');
-        $stockMovements = $receiving->stockMovements()->with(['rak', 'user'])->get();
+        // PERUBAHAN: Load relasi barang, bukan part
+        $receiving->load([
+            'purchaseOrder.supplier',
+            'purchaseOrder.sumberLokasi', // Load sumber internal
+            'details.barang',
+            'createdBy',
+            'receivedBy',
+            'qcBy',
+            'putawayBy',
+            'lokasi'
+        ]);
+
+        // Load history pergerakan stok
+        $stockMovements = $receiving->stockMovements()->with(['rak', 'user', 'barang'])->get();
+
         return view('admin.receivings.show', compact('receiving', 'stockMovements'));
     }
 
     public function getPurchaseOrderDetails(PurchaseOrder $purchaseOrder)
     {
-        // Pastikan hanya user yang berhak yang bisa mengakses API ini
         $this->authorize('perform-warehouse-ops');
 
-        // Load relasi 'details' beserta relasi 'part' di dalamnya
-        $purchaseOrder->load('details.part');
+        // PERUBAHAN: Load relasi barang
+        $purchaseOrder->load('details.barang');
 
-        // Filter detail untuk hanya menampilkan item yang belum diterima sepenuhnya
+        // Filter: Hanya item yang belum lunas qty-nya
         $itemsToReceive = $purchaseOrder->details->filter(function ($detail) {
             return $detail->qty_pesan > $detail->qty_diterima;
         });

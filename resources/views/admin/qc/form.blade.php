@@ -29,7 +29,7 @@
                 <tbody id="qc-items-table">
                     @foreach($receiving->details as $detail)
                     <tr class="qc-item-row">
-                        <td>{{ $detail->part->nama_part }} ({{ $detail->part->kode_part }})</td>
+                        <td>{{ $detail->barang->part_name }} ({{ $detail->barang->part_code }})</td>
                         <td>
                             <input type="number" class="form-control qty-diterima" value="{{ $detail->qty_terima }}" readonly>
                         </td>

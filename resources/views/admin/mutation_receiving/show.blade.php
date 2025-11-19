@@ -18,8 +18,8 @@
                 <div class="card-body">
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item"><b>Nomor Mutasi:</b> {{ $mutation->nomor_mutasi }}</li>
-                        <li class="list-group-item"><b>Part:</b> {{ $mutation->part->nama_part }} ({{$mutation->part->kode_part}})</li>
-                        <li class="list-group-item"><b>Jumlah Dikirim:</b> <span class="badge badge-primary">{{ $mutation->jumlah }} {{ $mutation->part->satuan }}</span></li>
+                        <li class="list-group-item"><b>Part:</b> {{ $mutation->barang->part_name }} ({{$mutation->barang->part_code}})</li>
+                        <li class="list-group-item"><b>Jumlah Dikirim:</b> <span class="badge badge-primary">{{ $mutation->jumlah }} </span></li>
                         {{-- ++ PERBAIKAN DI SINI ++ --}}
                         <li class="list-group-item"><b>Dari Lokasi:</b> {{ $mutation->lokasiAsal->nama_lokasi }} ({{ $mutation->lokasiAsal->kode_lokasi }})</li>
                         <li class="list-group-item"><b>Rak Asal:</b> <span class="text-muted">Diambil dari batch tertua (FIFO)</span></li>

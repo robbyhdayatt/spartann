@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\StockAdjustment;
 use App\Models\InventoryBatch;
-use App\Models\Part;
+use App\Models\Barang; // GANTI PART JADI BARANG
 use App\Models\StockMovement;
 use App\Models\Lokasi;
 use App\Models\Rak;
@@ -19,16 +19,13 @@ class StockAdjustmentController extends Controller
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        $query = StockAdjustment::with(['part', 'lokasi', 'rak', 'createdBy', 'approvedBy']);
+        // Ubah with('part') jadi with('barang')
+        $query = StockAdjustment::with(['barang', 'lokasi', 'rak', 'createdBy', 'approvedBy']);
 
-        // ++ PERBAIKAN: Batasi data berdasarkan lokasi user ++
-        // Asumsi: Peran 'SA', 'PIC', 'MA' dapat melihat semua data. Sesuaikan jika perlu.
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
-            // Pastikan user memiliki lokasi_id
             if ($user->lokasi_id) {
                 $query->where('lokasi_id', $user->lokasi_id);
             } else {
-                // Jika user tidak punya lokasi, jangan tampilkan data apa pun untuk keamanan.
                 $query->whereRaw('1 = 0');
             }
         }
@@ -43,7 +40,10 @@ class StockAdjustmentController extends Controller
 
         /** @var \App\Models\User $user */
         $user = auth()->user();
-        $parts = Part::where('is_active', true)->orderBy('nama_part')->get();
+
+        // PERBAIKAN DISINI: Hapus where('is_active', true) dan gunakan 'part_name'
+        $barangs = Barang::orderBy('part_name')->get();
+
         $userLokasi = null;
         $allLokasi = collect();
 
@@ -57,7 +57,8 @@ class StockAdjustmentController extends Controller
              return redirect()->route('admin.stock-adjustments.index')->with('error', 'Akun Anda tidak terhubung ke lokasi aktif manapun.');
         }
 
-        return view('admin.stock_adjustments.create', compact('userLokasi', 'allLokasi', 'parts'));
+        // Kirim variabel $barangs ke view
+        return view('admin.stock_adjustments.create', compact('userLokasi', 'allLokasi', 'barangs'));
     }
 
     public function getRaksByLokasi(Lokasi $lokasi)
@@ -73,16 +74,15 @@ class StockAdjustmentController extends Controller
      {
          $this->authorize('create-stock-adjustment');
          $validated = $request->validate([
-             'part_id' => 'required|exists:parts,id',
-             // lokasi_id sekarang wajib diisi dari form
+             'barang_id' => 'required|exists:barangs,id', // GANTI part_id
              'lokasi_id' => 'required|exists:lokasi,id',
-             'rak_id' => 'required|exists:raks,id',
-             'tipe' => 'required|in:TAMBAH,KURANG',
-             'jumlah' => 'required|integer|min:1',
-             'alasan' => 'required|string',
+             'rak_id'    => 'required|exists:raks,id',
+             'tipe'      => 'required|in:TAMBAH,KURANG',
+             'jumlah'    => 'required|integer|min:1',
+             'alasan'    => 'required|string',
          ]);
 
-          // Cek apakah rak_id yang dipilih memang milik lokasi_id yang dipilih
+          // Cek validitas rak
           $rakIsValid = Rak::where('id', $validated['rak_id'])
                            ->where('lokasi_id', $validated['lokasi_id'])
                            ->exists();
@@ -92,13 +92,13 @@ class StockAdjustmentController extends Controller
           }
 
          StockAdjustment::create([
-             'part_id' => $validated['part_id'],
+             'barang_id' => $validated['barang_id'], // GANTI part_id
              'lokasi_id' => $validated['lokasi_id'],
-             'rak_id' => $validated['rak_id'],
-             'tipe' => $validated['tipe'],
-             'jumlah' => $validated['jumlah'],
-             'alasan' => $validated['alasan'],
-             'status' => 'PENDING_APPROVAL',
+             'rak_id'    => $validated['rak_id'],
+             'tipe'      => $validated['tipe'],
+             'jumlah'    => $validated['jumlah'],
+             'alasan'    => $validated['alasan'],
+             'status'    => 'PENDING_APPROVAL',
              'created_by' => Auth::id(),
          ]);
 
@@ -115,13 +115,13 @@ class StockAdjustmentController extends Controller
 
         try {
             DB::transaction(function () use ($stockAdjustment) {
-                $part_id = $stockAdjustment->part_id;
+                $barang_id = $stockAdjustment->barang_id; // GANTI part_id
                 $rak_id = $stockAdjustment->rak_id;
                 $lokasi_id = $stockAdjustment->lokasi_id;
                 $jumlahToAdjust = $stockAdjustment->jumlah;
                 $tipe = $stockAdjustment->tipe;
 
-                $stokSebelum = InventoryBatch::where('part_id', $part_id)
+                $stokSebelum = InventoryBatch::where('barang_id', $barang_id) // GANTI part_id
                     ->where('rak_id', $rak_id)
                     ->sum('quantity');
 
@@ -132,7 +132,7 @@ class StockAdjustmentController extends Controller
                         throw new \Exception('Stok tidak mencukupi. Stok tersedia: ' . $stokSebelum . ', dibutuhkan: ' . $jumlahToAdjust);
                     }
 
-                    $batches = InventoryBatch::where('part_id', $part_id)
+                    $batches = InventoryBatch::where('barang_id', $barang_id) // GANTI part_id
                         ->where('rak_id', $rak_id)
                         ->where('quantity', '>', 0)
                         ->orderBy('created_at', 'asc')
@@ -162,7 +162,7 @@ class StockAdjustmentController extends Controller
 
                 } else { // Tipe 'TAMBAH'
                     InventoryBatch::create([
-                        'part_id' => $part_id,
+                        'barang_id' => $barang_id, // GANTI part_id
                         'rak_id' => $rak_id,
                         'lokasi_id' => $lokasi_id,
                         'quantity' => $jumlahToAdjust,
@@ -172,7 +172,7 @@ class StockAdjustmentController extends Controller
                 }
 
                 StockMovement::create([
-                    'part_id' => $part_id,
+                    'barang_id' => $barang_id, // GANTI part_id
                     'lokasi_id' => $lokasi_id,
                     'rak_id' => $rak_id,
                     'jumlah' => ($tipe === 'TAMBAH' ? $jumlahToAdjust : -$jumlahToAdjust),
@@ -197,6 +197,7 @@ class StockAdjustmentController extends Controller
         }
     }
 
+    // ... method reject() sama logicnya, tidak ada perubahan signifikan ...
     public function reject(Request $request, StockAdjustment $stockAdjustment)
     {
         $this->authorize('approve-stock-adjustment', $stockAdjustment);

@@ -1,196 +1,217 @@
 @extends('adminlte::page')
 
-@section('title', 'Buat Purchase Order Baru')
+@section('title', 'Buat Request PO Multi-Dealer')
+@section('plugins.Select2', true)
 
 @section('content_header')
-    <h1>Buat Purchase Order Baru</h1>
+    <h1>Request Stok ke Pusat (Multi-Dealer)</h1>
 @stop
 
 @section('content')
-    <div class="card">
-        <form action="{{ route('admin.purchase-orders.store') }}" method="POST" id="po-form">
-            @csrf
-            <div class="card-body">
-                @if ($errors->any())
-                    <div class="alert alert-danger">
-                        <ul class="mb-0">
-                            @foreach ($errors->all() as $error)
-                                <li>{{ $error }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                @endif
-                {{-- PO Header --}}
-                <div class="row">
-                    <div class="col-md-4 form-group">
-                        <label>Tanggal PO</label>
-                        <input type="date" class="form-control" name="tanggal_po" value="{{ now()->format('Y-m-d') }}" required>
-                    </div>
-                    <div class="col-md-4 form-group">
-                        <label>Supplier</label>
-                        <select class="form-control select2" id="supplier-select" name="supplier_id" required style="width: 100%;">
-                            <option value="" disabled selected>Pilih Supplier</option>
-                            @foreach($suppliers as $supplier)
-                            <option value="{{ $supplier->id }}">{{ $supplier->nama_supplier }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="col-md-4 form-group">
-                        <label>Tujuan lokasi</label>
-                            <input type="text" class="form-control" value="{{ $lokasiPusat->nama_lokasi }}" readonly>
-                            <input type="hidden" name="lokasi_id" value="{{ $lokasiPusat->id }}">
-                    </div>
-                </div>
-                 <div class="form-group">
-                    <label>Catatan</label>
-                    <textarea name="catatan" class="form-control" rows="2"></textarea>
-                </div>
+<div class="card">
+    <form action="{{ route('admin.purchase-orders.store') }}" method="POST" id="po-form">
+        @csrf
+        <input type="hidden" name="requests" id="requests_json">
 
-                {{-- PO Items Table --}}
-                <h5 class="mt-4">Item Sparepart</h5>
-                <hr>
-                <div class="table-responsive">
-                    <table class="table table-bordered">
-                        <thead>
-                            <tr>
-                                <th>Part</th>
-                                <th style="width: 120px">Qty</th>
-                                <th style="width: 200px">Harga Beli</th>
-                                <th style="width: 200px">Subtotal</th>
-                                <th style="width: 50px"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="po-items-table">
-                            {{-- Items will be added here by JavaScript --}}
-                        </tbody>
-                    </table>
+        <div class="card-body">
+            {{-- Header Info --}}
+            <div class="row">
+                <div class="col-md-6 form-group">
+                    <label>Tanggal Request</label>
+                    <input type="date" class="form-control" name="tanggal_po" value="{{ now()->format('Y-m-d') }}" required>
                 </div>
-                <button type="button" class="btn btn-success btn-sm" id="add-item-btn" disabled>+ Tambah Item</button>
-
-                {{-- Total Calculation --}}
-                <div class="row justify-content-end mt-4">
-                    <div class="col-md-5">
-                        <table class="table table-sm">
-                            <tr>
-                                <th>Subtotal</th>
-                                <td class="text-right" id="display-subtotal">Rp 0</td>
-                            </tr>
-                            {{-- ++ PERUBAHAN: Baris PPN dihapus ++ --}}
-                            <tr>
-                                <th style="font-size: 1.2rem;">Grand Total</th>
-                                <td class="text-right font-weight-bold" style="font-size: 1.2rem;" id="display-grand-total">Rp 0</td>
-                            </tr>
-                        </table>
-                    </div>
+                <div class="col-md-6 form-group">
+                    <label>Sumber Barang (Pusat)</label>
+                    <input type="text" class="form-control" value="{{ $sumberPusat->nama_lokasi ?? 'Gudang Pusat' }}" readonly>
+                    <input type="hidden" name="sumber_lokasi_id" value="{{ $sumberPusat->id ?? 1 }}">
                 </div>
             </div>
-            <div class="card-footer">
-                <button type="submit" class="btn btn-primary">Simpan Purchase Order</button>
-                 <a href="{{ route('admin.purchase-orders.index') }}" class="btn btn-secondary">Batal</a>
+
+            <hr>
+
+            {{-- Area Input Dinamis --}}
+            <div id="dealer-container">
+                {{-- Card Dealer akan ditambahkan di sini oleh JS --}}
             </div>
-        </form>
+
+            {{-- Tombol Tambah Dealer --}}
+            <div class="text-center mt-4">
+                <button type="button" class="btn btn-lg btn-outline-primary" id="btn-add-dealer">
+                    <i class="fas fa-store"></i> Tambah Dealer Tujuan
+                </button>
+            </div>
+
+        </div>
+        <div class="card-footer text-right">
+            <a href="{{ route('admin.purchase-orders.index') }}" class="btn btn-secondary">Batal</a>
+            <button type="button" id="btn-submit" class="btn btn-success">
+                <i class="fas fa-save"></i> Proses Semua Request
+            </button>
+        </div>
+    </form>
+</div>
+
+{{-- TEMPLATE: Card Dealer --}}
+<template id="tpl-dealer-card">
+    <div class="card card-secondary card-outline mb-3 dealer-card" data-id="{id}">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <div style="width: 40%;">
+                    <select class="form-control select2-dealer dealer-select">
+                        <option value="">-- Pilih Dealer --</option>
+                        @foreach($dealers as $dealer)
+                            <option value="{{ $dealer->id }}">{{ $dealer->nama_lokasi }} ({{ $dealer->kode_lokasi }})</option>
+                        @endforeach
+                    </select>
+                </div>
+                <button type="button" class="btn btn-tool text-danger btn-remove-dealer" title="Hapus Dealer Ini">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-2">
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>Barang</th>
+                        <th width="15%">Qty</th>
+                        <th width="5%"></th>
+                    </tr>
+                </thead>
+                <tbody class="item-list">
+                    {{-- Item Rows Here --}}
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-xs btn-info btn-add-item"><i class="fas fa-plus"></i> Tambah Barang</button>
+        </div>
     </div>
+</template>
 
-    {{-- Hidden template for a new row --}}
-    <template id="po-item-template">
-        <tr>
-            <td>
-                <select class="form-control item-part" name="items[__INDEX__][part_id]" required style="width: 100%;">
-                    <option value="" disabled selected>Pilih Part</option>
-                    @foreach($parts as $part)
-                        {{-- ++ PERUBAHAN: Tambahkan data-harga pada option ++ --}}
-                        <option value="{{ $part->id }}" data-harga="{{ $part->harga_satuan }}">{{ $part->nama_part }} ({{ $part->kode_part }})</option>
-                    @endforeach
-                </select>
-            </td>
-            <td><input type="number" class="form-control item-qty" name="items[__INDEX__][qty]" min="1" value="1" required></td>
-            <td>
-                <input type="text" class="form-control item-harga text-right" readonly>
-            </td>
-            <td><input type="text" class="form-control item-subtotal text-right" readonly></td>
-            <td><button type="button" class="btn btn-danger btn-sm remove-item-btn">&times;</button></td>
-        </tr>
-    </template>
+{{-- TEMPLATE: Item Row --}}
+<template id="tpl-item-row">
+    <tr class="item-row">
+        <td>
+            <select class="form-control form-control-sm select2-item item-select">
+                <option value="">Pilih Barang</option>
+                @foreach($barangs as $barang)
+                    <option value="{{ $barang->id }}">
+                        {{ $barang->part_name }} ({{ $barang->part_code }}) - Stok: {{ $barang->selling_out }}
+                    </option>
+                @endforeach
+            </select>
+        </td>
+        <td>
+            <input type="number" class="form-control form-control-sm item-qty" min="1" value="1" placeholder="Qty">
+        </td>
+        <td>
+            <button type="button" class="btn btn-xs btn-danger btn-remove-item">&times;</button>
+        </td>
+    </tr>
+</template>
+
 @stop
 
-@section('plugins.Select2', true)
+@push('js')
+<script>
+$(document).ready(function() {
+    let uniqueId = 0;
 
-@push('css')
-<style>
-    .select2-container .select2-selection--single { height: calc(2.25rem + 2px) !important; }
-    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 1.5 !important; padding-left: .75rem !important; padding-top: .375rem !important; }
-    .select2-container--default .select2-selection--single .select2-selection__arrow { height: calc(2.25rem + 2px) !important; }
-</style>
-@endpush
+    // Tambah Dealer Baru
+    $('#btn-add-dealer').click(function() {
+        uniqueId++;
+        let tpl = $('#tpl-dealer-card').html().replace(/{id}/g, uniqueId);
+        $('#dealer-container').append(tpl);
 
-@section('js')
-    <script>
-        $(document).ready(function() {
-            $('.select2').select2({ placeholder: "Pilih Opsi" });
+        // Init Select2 untuk dealer baru
+        let newCard = $('#dealer-container').find('.dealer-card').last();
+        newCard.find('.select2-dealer').select2({ theme: 'bootstrap4', width: '100%' });
 
-            let itemIndex = 0;
-            const addItemBtn = $('#add-item-btn');
-            const supplierSelect = $('#supplier-select');
-            const itemsTable = $('#po-items-table');
+        // Otomatis tambah 1 baris item
+        addItemRow(newCard);
+    });
 
-            const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+    // Hapus Dealer
+    $(document).on('click', '.btn-remove-dealer', function() {
+        if(confirm('Hapus dealer ini dari list?')) {
+            $(this).closest('.dealer-card').remove();
+        }
+    });
 
-            supplierSelect.on('change', function() {
-                if ($(this).val()) {
-                    addItemBtn.prop('disabled', false);
-                    itemsTable.empty();
-                    calculateAll();
-                } else {
-                    addItemBtn.prop('disabled', true);
+    // Tambah Item di dalam Dealer
+    $(document).on('click', '.btn-add-item', function() {
+        let card = $(this).closest('.dealer-card');
+        addItemRow(card);
+    });
+
+    function addItemRow(card) {
+        let tpl = $('#tpl-item-row').html();
+        let tbody = card.find('.item-list');
+        tbody.append(tpl);
+
+        // Init Select2 Item
+        tbody.find('.item-row').last().find('.select2-item').select2({ theme: 'bootstrap4', width: '100%' });
+    }
+
+    // Hapus Item
+    $(document).on('click', '.btn-remove-item', function() {
+        $(this).closest('tr').remove();
+    });
+
+    // Submit Form Logic
+    $('#btn-submit').click(function() {
+        let payload = [];
+        let isValid = true;
+
+        $('.dealer-card').each(function() {
+            let card = $(this);
+            let dealerId = card.find('.dealer-select').val();
+            let items = [];
+
+            if (!dealerId) {
+                alert('Silakan pilih dealer tujuan.');
+                isValid = false;
+                return false;
+            }
+
+            card.find('.item-row').each(function() {
+                let row = $(this);
+                let barangId = row.find('.item-select').val();
+                let qty = row.find('.item-qty').val();
+
+                if(barangId && qty > 0) {
+                    items.push({
+                        barang_id: barangId,
+                        qty: qty
+                    });
                 }
             });
 
-            addItemBtn.on('click', function() {
-                let template = $('#po-item-template').html().replace(/__INDEX__/g, itemIndex);
-                itemsTable.append(template);
-                itemsTable.find('tr').last().find('.item-part').select2({ placeholder: "Pilih Part" });
-                itemIndex++;
-            });
-
-            itemsTable.on('click', '.remove-item-btn', function() {
-                $(this).closest('tr').remove();
-                calculateAll();
-            });
-
-            // ++ PERUBAHAN UTAMA: Logika AJAX diganti, harga diambil dari data-attribute ++
-            itemsTable.on('change', '.item-part', function() {
-                let row = $(this).closest('tr');
-                let selectedOption = $(this).find('option:selected');
-                let harga = parseFloat(selectedOption.data('harga')) || 0;
-
-                row.find('.item-harga').val(formatRupiah(harga));
-                updateSubtotal(row);
-            });
-
-            itemsTable.on('keyup change', '.item-qty', function() {
-                updateSubtotal($(this).closest('tr'));
-            });
-
-            function updateSubtotal(row) {
-                let hargaText = row.find('.item-harga').val().replace(/[^0-9,-]+/g,"").replace(',','.');
-                let harga = parseFloat(hargaText) || 0;
-                let qty = parseInt(row.find('.item-qty').val()) || 0;
-                row.find('.item-subtotal').val(formatRupiah(qty * harga));
-                calculateAll();
-            }
-
-            // ++ PERUBAHAN: Fungsi kalkulasi disederhanakan (tanpa PPN) ++
-            function calculateAll() {
-                let subtotalTotal = 0;
-                itemsTable.find('tr').each(function() {
-                    let subtotalText = $(this).find('.item-subtotal').val().replace(/[^0-9,-]+/g,"").replace(',','.');
-                    subtotalTotal += parseFloat(subtotalText) || 0;
+            if (items.length > 0) {
+                payload.push({
+                    lokasi_id: dealerId,
+                    items: items
                 });
-
-                $('#display-subtotal').text(formatRupiah(subtotalTotal));
-                // Grand total sama dengan subtotal
-                $('#display-grand-total').text(formatRupiah(subtotalTotal));
             }
         });
-    </script>
-@stop
+
+        if (!isValid) return;
+        if (payload.length === 0) {
+            alert('Mohon isi minimal satu dealer dan satu barang.');
+            return;
+        }
+
+        // Masukkan JSON ke input hidden
+        $('#requests_json').val(JSON.stringify(payload));
+
+        // Submit Form
+        $('#po-form').submit();
+    });
+
+    // Trigger klik tambah dealer pertama kali load
+    $('#btn-add-dealer').click();
+});
+</script>
+<style>
+    .dealer-card { border-left: 5px solid #007bff; }
+</style>
+@endpush

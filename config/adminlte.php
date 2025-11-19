@@ -191,7 +191,7 @@ return [
     'laravel_css_path' => 'css/app.css',
     'laravel_js_path' => 'js/app.js',
 
-'menu' => [
+    'menu' => [
         // Navbar items:
         ['type' => 'fullscreen-widget', 'topnav_right' => true],
         [
@@ -220,7 +220,7 @@ return [
         [
             'text' => 'Manajemen Lokasi',
             'icon' => 'fas fa-fw fa-map-marked-alt',
-            'can'  => 'manage-locations', // SA & PIC
+            'can'  => 'manage-locations',
             'submenu' => [
                 ['text' => 'Lokasi', 'icon' => 'fas fa-fw fa-warehouse', 'route' => 'admin.lokasi.index'],
                 ['text' => 'Master Dealer', 'icon' => 'fas fa-fw fa-store', 'route' => 'admin.dealers.index'],
@@ -230,10 +230,8 @@ return [
         [
             'text'    => 'Master Data',
             'icon'    => 'fas fa-fw fa-database',
-            // ++ UBAH BARIS INI MENJADI ARRAY ++
             'can'     => ['view-master-data', 'manage-converts', 'manage-barangs'],
             'submenu' => [
-                // ++ TAMBAHKAN 'can' PADA SETIAP ITEM DI BAWAH INI ++
                 ['text' => 'Brand', 'icon' => 'far fa-fw fa-copyright', 'route' => 'admin.brands.index', 'can' => 'view-master-data'],
                 ['text' => 'Kategori', 'icon' => 'far fa-fw fa-folder-open', 'route' => 'admin.categories.index', 'can' => 'view-master-data'],
                 ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index', 'can' => 'view-master-data'],
@@ -241,10 +239,9 @@ return [
                 ['text' => 'Konsumen', 'icon' => 'fas fa-fw fa-user-friends', 'route' => 'admin.konsumens.index', 'can' => 'view-master-data'],
                 [
                     'text' => 'Master Convert',
-                    // 'url'  => 'admin/converts',
                     'route'=> 'admin.converts.index',
                     'icon' => 'fas fa-fw fa-exchange-alt',
-                    'can'  => 'manage-converts', // Gate ini sudah benar
+                    'can'  => 'manage-converts',
                 ],
                 [
                     'text' => 'Item',
@@ -258,7 +255,7 @@ return [
             'text' => 'Pengguna',
             'route'  => 'admin.users.index',
             'icon' => 'fas fa-fw fa-users-cog',
-            'can' => 'manage-users', // Hanya SA
+            'can' => 'manage-users',
         ],
 
         // ================== OPERASIONAL ==================
@@ -266,56 +263,128 @@ return [
             'header' => 'OPERASIONAL',
             'can' => ['is-pusat-staff', 'is-dealer-staff', 'is-pic'],
         ],
+
+        // --- PEMBELIAN (PO) ---
         [
-            'text' => 'Transaksi Pusat',
-            'icon' => 'fas fa-fw fa-industry',
-            'can'  => ['is-pusat-staff', 'is-pic'],
+            'text'    => 'Pembelian (PO)',
+            'icon'    => 'fas fa-shopping-cart',
+            'can'     => 'view-po-module', // Pusat (Approve) & Dealer UA22001 (Create) bisa lihat
             'submenu' => [
-                ['text' => 'Purchase Order (PO)', 'icon' => 'fas fa-fw fa-shopping-cart', 'route' => 'admin.purchase-orders.index', 'can' => 'access-po-module'], // Gate ini sudah OK
-                ['text' => 'Penerimaan Barang', 'icon' => 'fas fa-fw fa-box-open', 'route' => 'admin.receivings.index', 'can' => 'perform-warehouse-ops'], // Gate ini sudah OK
-                ['text' => 'Quality Control (QC)', 'icon' => 'fas fa-fw fa-check-double', 'route' => 'admin.qc.index', 'can' => 'perform-warehouse-ops'], // Gate ini sudah OK
-                ['text' => 'Penyimpanan (Putaway)', 'icon' => 'fas fa-fw fa-dolly', 'route' => 'admin.putaway.index', 'can' => 'perform-warehouse-ops'], // Gate ini sudah OK
-                // ++ PERUBAHAN: Gunakan Gate menu baru ++
-                ['text' => 'Adjusment Stok', 'icon' => 'fas fa-fw fa-sliders-h', 'route' => 'admin.stock-adjustments.index', 'can' => 'view-stock-adjustments-menu'],
-                ['text' => 'Mutasi Stok', 'icon' => 'fas fa-fw fa-people-arrows', 'route' => 'admin.stock-mutations.index', 'can' => 'view-stock-mutations-menu'],
-                ['text' => 'Penerimaan Mutasi', 'icon' => 'fas fa-fw fa-truck-loading', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'], // Gate ini sudah OK
-                ['text' => 'Stok Karantina', 'icon' => 'fas fa-fw fa-biohazard', 'route' => 'admin.quarantine-stock.index', 'can' => 'view-quarantine-stock'], // Gate ini sudah OK
-                ['text' => 'Retur Pembelian', 'icon' => 'fas fa-fw fa-undo-alt', 'route' => 'admin.purchase-returns.index', 'can' => 'manage-purchase-returns'], // Gate ini sudah OK
+                [
+                    'text' => 'Buat Request PO',
+                    'url'  => 'admin/purchase-orders/create',
+                    'icon' => 'fas fa-plus',
+                    'can'  => 'create-po', // HANYA muncul untuk Dealer UA22001
+                ],
+                [
+                    'text' => 'Daftar PO',
+                    'url'  => 'admin/purchase-orders',
+                    'icon' => 'fas fa-list',
+                ],
+                [
+                    'text' => 'Retur Pembelian',
+                    'icon' => 'fas fa-fw fa-undo-alt',
+                    'route' => 'admin.purchase-returns.index',
+                    'can' => 'manage-purchase-returns'
+                ],
             ],
         ],
+
+        // --- PENERIMAAN (INBOUND) ---
         [
-            'text' => 'Transaksi Dealer',
+            'text'    => 'Penerimaan (Inbound)',
+            'icon'    => 'fas fa-truck-loading',
+            'can'     => 'perform-warehouse-ops',
+            'submenu' => [
+                [
+                    'text'  => 'Receiving',
+                    'route' => 'admin.receivings.index', // Ganti 'url' jadi 'route'
+                    'icon'  => 'fas fa-dolly',
+                ],
+                [
+                    'text'  => 'Quality Control (QC)',
+                    'route' => 'admin.qc.index', // PERBAIKAN: Menggunakan route yang benar (URL: /admin/quality-control)
+                    'icon'  => 'fas fa-check-double',
+                ],
+                [
+                    'text'  => 'Putaway (Rak)',
+                    'route' => 'admin.putaway.index', // Ganti 'url' jadi 'route'
+                    'icon'  => 'fas fa-box-open',
+                ],
+                [
+                    'text'  => 'Stok Karantina',
+                    'route' => 'admin.quarantine-stock.index', // Ganti 'url' jadi 'route'
+                    'icon'  => 'fas fa-ban',
+                    'can'   => 'manage-quarantine-stock'
+                ],
+            ],
+        ],
+
+        // --- TRANSAKSI STOK ---
+        // HILANG untuk Admin Gudang Pusat, Muncul untuk Approver (KG) & Dealer
+        [
+            'text'    => 'Transaksi Stok',
+            'icon'    => 'fas fa-exchange-alt',
+            'can'     => ['view-stock-mutations-menu', 'view-stock-adjustments-menu'],
+            'submenu' => [
+                [
+                    'text' => 'Mutasi Stok',
+                    'route'  => 'admin.stock-mutations.index',
+                    'icon' => 'fas fa-random',
+                    'can'  => 'view-stock-mutations-menu',
+                ],
+                [
+                    'text' => 'Penyesuaian Stok',
+                    'route'  => 'admin.stock-adjustments.index',
+                    'icon' => 'fas fa-sliders-h',
+                    'can'  => 'view-stock-adjustments-menu',
+                ],
+                [
+                    'text' => 'Penerimaan Mutasi',
+                    'icon' => 'fas fa-fw fa-truck-loading',
+                    'route' => 'admin.mutation-receiving.index',
+                    'can' => 'view-mutation-receiving'
+                ],
+            ],
+        ],
+
+        // --- SERVICE & PENJUALAN (DEALER ONLY) ---
+        [
+            'text' => 'Service & Penjualan',
             'icon' => 'fas fa-fw fa-store-alt',
-            'can'  => ['is-dealer-staff', 'is-pic'],
+            'can'  => ['view-sales', 'view-service'],
             'submenu' => [
-                ['text' => 'Penerimaan Mutasi', 'icon' => 'fas fa-fw fa-truck-loading', 'route' => 'admin.mutation-receiving.index', 'can' => 'view-mutation-receiving'], // Gate ini sudah OK
-                // ++ PERUBAHAN: Gunakan Gate menu baru ++
-                ['text' => 'Adjusment Stok', 'icon' => 'fas fa-fw fa-sliders-h', 'route' => 'admin.stock-adjustments.index', 'can' => 'view-stock-adjustments-menu'],
-                ['text' => 'Mutasi Stok', 'icon' => 'fas fa-fw fa-people-arrows', 'route' => 'admin.stock-mutations.index', 'can' => 'view-stock-mutations-menu'],
-                ['text' => 'Stok Karantina', 'icon' => 'fas fa-fw fa-biohazard', 'route' => 'admin.quarantine-stock.index', 'can' => 'manage-quarantine-stock'], // Gate ini sudah OK
-                ['text' => 'Data Service', 'icon' => 'fas fa-fw fa-wrench', 'route' => 'admin.services.index', 'can' => 'view-service'], // Gate ini sudah OK
+                 [
+                    'text' => 'Data Service',
+                    'icon' => 'fas fa-fw fa-wrench',
+                    'route' => 'admin.services.index',
+                    'can' => 'view-service'
+                 ],
+                 [
+                    'text' => 'Buat Penjualan',
+                    'icon' => 'fas fa-fw fa-plus-circle',
+                    'route' => 'admin.penjualans.create',
+                    'can' => 'create-sale'
+                 ],
+                 [
+                    'text' => 'Riwayat Penjualan',
+                    'icon' => 'fas fa-fw fa-history',
+                    'route' => 'admin.penjualans.index',
+                    'can' => 'view-sales'
+                 ],
             ],
         ],
-        [
-            'text'    => 'Penjualan',
-            'icon'    => 'fas fa-fw fa-cash-register',
-            'can'     => 'view-sales',
-            'submenu' => [
-                ['text' => 'Buat Transaksi', 'icon' => 'fas fa-fw fa-plus-circle', 'route' => 'admin.penjualans.create', 'can' => 'create-sale'],
-                ['text' => 'Riwayat Penjualan', 'icon' => 'fas fa-fw fa-history', 'route' => 'admin.penjualans.index'],
-                // ['text' => 'Retur Penjualan', 'icon' => 'fas fa-fw fa-exchange-alt', 'route' => 'admin.sales-returns.index', 'can' => 'create-sale'],
-            ],
-        ],
+
 
         // ================== ANALISIS & MARKETING ==================
         [
             'header' => 'ANALISIS & MARKETING',
-            'can' => ['manage-marketing', 'view-reports'], // SA, PIC, MA
+            'can' => ['manage-marketing', 'view-reports'],
         ],
         [
             'text'    => 'Marketing',
             'icon'    => 'fas fa-fw fa-bullhorn',
-            'can'     => 'manage-marketing', // SA, PIC, MA
+            'can'     => 'manage-marketing',
             'submenu' => [
                 ['text' => 'Manajemen Campaign', 'icon' => 'fas fa-fw fa-tags', 'route' => 'admin.campaigns.index'],
                 ['text' => 'Kategori Diskon', 'icon' => 'fas fa-fw fa-percent', 'route' => 'admin.customer-discount-categories.index'],
@@ -332,7 +401,7 @@ return [
         [
             'text'    => 'Laporan',
             'icon'    => 'fas fa-fw fa-chart-pie',
-            'can'     => 'view-reports', // SA, PIC, MA, KG, KC
+            'can'     => 'view-reports',
             'submenu' => [
                 ['text' => 'Kartu Stok', 'icon' => 'fas fa-fw fa-clipboard-list', 'route' => 'admin.reports.stock-card'],
                 ['text' => 'Stok Per Lokasi', 'icon' => 'fas fa-fw fa-boxes', 'route' => 'admin.reports.stock-by-warehouse'],
