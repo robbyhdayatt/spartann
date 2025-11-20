@@ -5,7 +5,7 @@
 @section('plugins.Datatables', true)
 
 @section('content_header')
-    <h1>Manajemen Gudang & Dealer)</h1>
+    <h1>Manajemen Gudang & Dealer</h1>
 @stop
 
 @section('content')
@@ -46,7 +46,7 @@
                         <td>{{ $item->kode_lokasi }}</td>
                         <td>{{ $item->nama_lokasi }}</td>
                         <td>{{ $item->npwp ?? '-' }}</td>
-                        <td>{{ $item->alamat }}</td>
+                        <td>{{ Str::limit($item->alamat, 30) }}</td> {{-- Limit alamat biar tabel rapi --}}
                         <td>
                             @if($item->is_active)
                                 <span class="badge badge-success">Aktif</span>
@@ -55,6 +55,7 @@
                             @endif
                         </td>
                         <td>
+                            {{-- PERBAIKAN: Data Attribute harus lengkap --}}
                             <button class="btn btn-warning btn-xs edit-btn"
                                     data-id="{{ $item->id }}"
                                     data-tipe="{{ $item->tipe }}"
@@ -65,13 +66,14 @@
                                     data-is_active="{{ $item->is_active }}"
                                     data-toggle="modal"
                                     data-target="#editLokasiModal">
-                                Edit
+                                <i class="fas fa-edit"></i> Edit
                             </button>
+
                             @if($item->tipe != 'PUSAT')
                             <form action="{{ route('admin.lokasi.destroy', $item->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus lokasi ini?');">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-danger btn-xs">Hapus</button>
+                                <button type="submit" class="btn btn-danger btn-xs"><i class="fas fa-trash"></i> Hapus</button>
                             </form>
                             @endif
                         </td>
@@ -82,7 +84,7 @@
         </div>
     </div>
 
-    {{-- Modal Tambah --}}
+    {{-- Modal Tambah (Tidak Berubah) --}}
     <div class="modal fade" id="createLokasiModal" tabindex="-1" role="dialog">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
@@ -182,19 +184,37 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        $('#lokasi-table').DataTable({ "responsive": true });
+        // Simpan instance DataTable ke variabel (opsional, tapi praktik bagus)
+        var table = $('#lokasi-table').DataTable({ "responsive": true });
 
-        $('.edit-btn').on('click', function() {
+        // PERBAIKAN: Gunakan Event Delegation ('body' atau ID tabel)
+        // Ganti $('.edit-btn').on('click', ...) menjadi:
+        $('#lokasi-table').on('click', '.edit-btn', function() {
+
+            // Ambil data dari tombol yang diklik
             var id = $(this).data('id');
+            var tipe = $(this).data('tipe');
+            var kode = $(this).data('kode_lokasi');
+            var nama = $(this).data('nama_lokasi');
+            var npwp = $(this).data('npwp');
+            var alamat = $(this).data('alamat');
+            var active = $(this).data('is_active');
+
+            // Set URL Form Action
             var url = "{{ url('admin/lokasi') }}/" + id;
             $('#editLokasiForm').attr('action', url);
 
-            $('#edit_tipe').val($(this).data('tipe'));
-            $('#edit_kode_lokasi').val($(this).data('kode_lokasi'));
-            $('#edit_nama_lokasi').val($(this).data('nama_lokasi'));
-            $('#edit_npwp').val($(this).data('npwp'));
-            $('#edit_alamat').val($(this).data('alamat'));
-            $('#edit_is_active').val($(this).data('is_active'));
+            // Isi Field Input
+            $('#edit_tipe').val(tipe);
+            $('#edit_kode_lokasi').val(kode);
+            $('#edit_nama_lokasi').val(nama);
+
+            // Handle nilai null/kosong
+            $('#edit_npwp').val(npwp ? npwp : '');
+            $('#edit_alamat').val(alamat ? alamat : '');
+
+            // Handle Boolean (1/0)
+            $('#edit_is_active').val(active ? 1 : 0);
         });
     });
 </script>

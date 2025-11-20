@@ -1,109 +1,70 @@
 <div class="row">
-    <div class="col-md-12">
-        <div class="callout callout-info">
-            <h5><i class="fas fa-bullseye"></i> Performa Penjualan Anda Bulan Ini</h5>
-            <p>Selamat datang, <strong>{{ Auth::user()->nama }}</strong>! Berikut adalah ringkasan kinerja penjualan Anda untuk bulan {{ now()->translatedFormat('F Y') }}.</p>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    {{-- Info Box Target --}}
-    <div class="col-md-6 col-lg-3">
-        <div class="info-box">
-            <span class="info-box-icon bg-primary"><i class="fas fa-flag-checkered"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Target Bulan Ini</span>
-                <span class="info-box-number">Rp {{ number_format($data['targetAmount'], 0, ',', '.') }}</span>
-            </div>
-        </div>
-    </div>
-    {{-- Info Box Pencapaian --}}
-    <div class="col-md-6 col-lg-3">
-        <div class="info-box">
-            <span class="info-box-icon bg-success"><i class="fas fa-trophy"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Penjualan Tercapai</span>
-                <span class="info-box-number">Rp {{ number_format($data['achievedAmount'], 0, ',', '.') }}</span>
-            </div>
-        </div>
-    </div>
-    {{-- Info Box Persentase --}}
-   <div class="col-md-6 col-lg-3">
-        <div class="info-box">
-            <span class="info-box-icon bg-info"><i class="fas fa-percentage"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Pencapaian Target</span>
-
-                {{-- ++ PERBAIKAN PADA PROGRESS BAR ++ --}}
-                <div class="progress" style="height: 20px; background-color: #e9ecef;">
-                    {{-- 1. Tambah kelas bg-info --}}
-                    {{-- 2. Batasi lebar visual maks 100% menggunakan min() --}}
-                    <div class="progress-bar bg-info"
-                         role="progressbar"
-                         style="width: {{ min($data['achievementPercentage'], 100) }}%;"
-                         aria-valuenow="{{ $data['achievementPercentage'] }}"
-                         aria-valuemin="0"
-                         aria-valuemax="100">
-
-                        {{-- 3. Tambah kelas text-dark agar teks terlihat --}}
-                        <strong class="text-dark">{{ number_format($data['achievementPercentage'], 1) }}%</strong>
-                    </div>
+    <div class="col-md-4">
+        <div class="card card-widget widget-user-2">
+            <div class="widget-user-header bg-primary">
+                <div class="widget-user-image">
+                    <img class="img-circle elevation-2" src="{{ asset('img/SPARTAN.png') }}" alt="User Avatar">
                 </div>
-                {{-- ++ AKHIR PERBAIKAN ++ --}}
-
+                <h3 class="widget-user-username">{{ Auth::user()->nama }}</h3>
+                <h5 class="widget-user-desc">{{ Auth::user()->jabatan->nama_jabatan }}</h5>
+            </div>
+            <div class="card-footer p-0">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link">
+                            Target Bulan Ini <span class="float-right badge bg-primary">@rupiah($data['targetAmount'])</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link">
+                            Pencapaian <span class="float-right badge bg-success">@rupiah($data['achievedAmount'])</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link">
+                            Estimasi Insentif <span class="float-right badge bg-warning">@rupiah($data['jumlahInsentif'])</span>
+                        </a>
+                    </li>
+                </ul>
             </div>
         </div>
     </div>
 
-        {{-- Info Box Insentif --}}
-        <div class="col-md-6 col-lg-3">
-            <div class="info-box bg-gradient-warning">
-                <span class="info-box-icon"><i class="fas fa-gift"></i></span>
-                <div class="info-box-content">
-                    <span class="info-box-text">Perolehan Insentif</span>
-                    {{-- Ini sekarang akan menampilkan nilai yang dihitung real-time --}}
-                    <span class="info-box-number">Rp {{ number_format($data['incentiveAmount'], 0, ',', '.') }}</span>
-                </div>
+    <div class="col-md-8">
+        <div class="card card-outline card-success">
+            <div class="card-header">
+                <h3 class="card-title">Progress Target</h3>
+            </div>
+            <div class="card-body text-center">
+                <input type="text" class="knob" value="{{ round($data['achievementPercentage']) }}" data-width="150" data-height="150" data-fgColor="#39CCCC" data-readonly="true">
+                <div class="knob-label">Persentase Pencapaian</div>
             </div>
         </div>
-    </div>
-</div>
 
-<div class="row">
-    <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-history"></i> 5 Transaksi Penjualan Terakhir Anda</h3>
+                <h3 class="card-title">Penjualan Terakhir Anda</h3>
             </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-hover text-nowrap">
+            <div class="card-body p-0">
+                <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Nomor Invoice</th>
                             <th>Tanggal</th>
-                            <th>Konsumen</th>
-                            <th>Total Harga</th>
-                            <th>Aksi</th>
+                            <th>No Faktur</th>
+                            <th>Pelanggan</th>
+                            <th>Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($data['recentSales'] as $sale)
-                            <tr>
-                                <td>{{ $sale->nomor_invoice }}</td>
-                                <td>{{ \Carbon\Carbon::parse($sale->tanggal_jual)->format('d M Y') }}</td>
-                                <td>{{ $sale->konsumen->nama_konsumen }}</td>
-                                <td>Rp {{ number_format($sale->total_harga, 0, ',', '.') }}</td>
-                                <td>
-                                    <a href="{{ route('admin.penjualans.show', $sale->id) }}" class="btn btn-xs btn-primary">
-                                        <i class="fas fa-eye"></i> Detail
-                                    </a>
-                                </td>
-                            </tr>
+                        <tr>
+                            <td>{{ $sale->tanggal_jual->format('d-m-Y') }}</td>
+                            <td>{{ $sale->nomor_faktur }}</td>
+                            <td>{{ $sale->konsumen->nama_konsumen }}</td>
+                            <td>@rupiah($sale->total_harga)</td>
+                        </tr>
                         @empty
-                            <tr>
-                                <td colspan="5" class="text-center">Anda belum memiliki transaksi penjualan bulan ini.</td>
-                            </tr>
+                        <tr><td colspan="4" class="text-center">Belum ada penjualan.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -111,3 +72,12 @@
         </div>
     </div>
 </div>
+
+@push('js')
+<script src="{{ asset('vendor/jquery-knob/jquery.knob.min.js') }}"></script>
+<script>
+    $(function () {
+        $('.knob').knob();
+    })
+</script>
+@endpush

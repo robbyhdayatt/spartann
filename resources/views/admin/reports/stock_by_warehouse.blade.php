@@ -1,22 +1,19 @@
 @extends('adminlte::page')
 
-@section('title', 'Laporan Stok per Lokasi') {{-- DIUBAH --}}
-
+@section('title', 'Laporan Stok per Lokasi')
 @section('plugins.Datatables', true)
 @section('plugins.Select2', true)
 
 @section('content_header')
-    <h1>Laporan Stok per Lokasi</h1> {{-- DIUBAH --}}
+    <h1>Laporan Stok per Lokasi</h1>
 @stop
 
 @section('content')
 @php
-    // Logika untuk menentukan siapa yang bisa mem-filter (SA, PIC, MA)
-    // Selain peran ini (misal KG, KC), mereka akan otomatis melihat lokasi mereka.
-    $canFilter = Auth::user()->hasRole(['SA', 'PIC', 'MA']);
+    $user = Auth::user();
+    $canFilter = $user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'SMD']);
 @endphp
 
-{{-- Form Filter hanya ditampilkan jika user BISA mem-filter --}}
 @if($canFilter)
 <div class="card card-outline card-primary">
     <div class="card-header">
@@ -27,16 +24,12 @@
             <div class="row align-items-end">
                 <div class="col-md-4">
                     <div class="form-group">
-                        {{-- DIUBAH: Label dan ID --}}
-                        <label for="lokasi_id">Pilih Lokasi (Gudang / Dealer)</label>
-                        {{-- DIUBAH: name, id --}}
+                        <label for="lokasi_id">Pilih Lokasi</label>
                         <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
                             <option value="">-- Pilih Lokasi --</option>
-                            {{-- DIUBAH: Variabel $lokasiList (dari Controller) --}}
-                            @foreach ($lokasiList as $lokasi)
-                                {{-- DIUBAH: Variabel $selectedLokasi (dari Controller) --}}
-                                <option value="{{ $lokasi->id }}" {{ optional($selectedLokasi)->id == $lokasi->id ? 'selected' : '' }}>
-                                    {{-- DIUBAH: Tampilkan tipe dan nama lokasi --}}
+                            @foreach ($lokasis as $lokasi)
+                                {{-- PERBAIKAN: Menghapus optional() --}}
+                                <option value="{{ $lokasi->id }}" {{ $selectedLokasiId == $lokasi->id ? 'selected' : '' }}>
                                     [{{ $lokasi->tipe }}] - {{ $lokasi->nama_lokasi }} ({{ $lokasi->kode_lokasi }})
                                 </option>
                             @endforeach
@@ -54,74 +47,58 @@
 </div>
 @endif
 
-{{-- Tabel Hasil akan ditampilkan jika ada data ATAU jika login sebagai staf (non-filter) --}}
 @if($inventoryItems->isNotEmpty() || !$canFilter)
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">
-            Rincian Stok Part Tersedia
-            {{-- DIUBAH: Variabel $selectedLokasi --}}
-            @if($selectedLokasi)
-                di {{ $selectedLokasi->nama_lokasi }}
-            @endif
+            Stok di {{ $selectedLokasiName ?? 'Lokasi Anda' }}
         </h3>
-        @if($selectedLokasi)
+        @if($selectedLokasiId)
         <div class="card-tools">
-            {{-- DIUBAH: Parameter route ke lokasi_id --}}
-            <a href="{{ route('admin.reports.stock-by-warehouse.export', ['lokasi_id' => $selectedLokasi->id]) }}" class="btn btn-sm btn-success">
+            <a href="{{ route('admin.reports.stock-by-warehouse.export', ['lokasi_id' => $selectedLokasiId]) }}" class="btn btn-sm btn-success">
                 <i class="fas fa-file-excel"></i> Export
             </a>
         </div>
         @endif
     </div>
     <div class="card-body">
-        @if($inventoryItems->isNotEmpty())
-            <table id="stock-table" class="table table-bordered table-striped">
-                <thead>
+        <table id="stock-table" class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>Kode Barang</th>
+                    <th>Nama Barang</th>
+                    <th>Merk</th>
+                    <th>Rak</th>
+                    <th class="text-right">Qty</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($inventoryItems as $item)
                     <tr>
-                        <th>Kode Part</th>
-                        <th>Nama Part</th>
-                        <th>Brand</th>
-                        <th>Kategori</th>
-                        <th>Rak</th>
-                        <th class="text-right">Qty</th>
-                        <th>Satuan</th>
+                        <td>{{ $item->barang->part_code ?? '-' }}</td>
+                        <td>{{ $item->barang->part_name ?? '-' }}</td>
+                        <td>{{ $item->barang->merk ?? '-' }}</td>
+                        <td>{{ $item->rak->kode_rak ?? '-' }}</td>
+                        <td class="text-right font-weight-bold">{{ $item->quantity }}</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @foreach ($inventoryItems as $item)
-                        <tr>
-                            <td>{{ $item->part->kode_part }}</td>
-                            <td>{{ $item->part->nama_part }}</td>
-                            <td>{{ $item->part->brand->nama_brand ?? 'N/A' }}</td>
-                            <td>{{ $item->part->category->nama_kategori ?? 'N/A' }}</td>
-                            <td>{{ $item->rak->kode_rak ?? 'N/A' }}</td>
-                            <td class="text-right">{{ $item->quantity }}</td>
-                            <td>{{ $item->part->satuan }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @else
-             {{-- DIUBAH: Teks "gudang" menjadi "lokasi" --}}
-            <p class="text-center mt-4">Tidak ada data stok untuk lokasi ini.</p>
-        @endif
+                @endforeach
+            </tbody>
+        </table>
     </div>
 </div>
 @endif
-
 @stop
 
 @push('css')
 <style>
-    /* Menyesuaikan tinggi Select2 agar sama dengan input form lainnya */
     .select2-container .select2-selection--single {
         height: calc(2.25rem + 2px) !important;
     }
     .select2-container--default .select2-selection--single .select2-selection__rendered {
         line-height: 1.5 !important;
-        padding-left: .75rem !important;
-        padding-top: .375rem !important;
+        padding-top: 0.375rem !important;
+        padding-bottom: 0.375rem !important;
+        padding-left: 0.75rem !important;
     }
     .select2-container--default .select2-selection--single .select2-selection__arrow {
         height: calc(2.25rem + 2px) !important;
@@ -132,13 +109,13 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        $('.select2').select2();
+        $('.select2').select2({
+            theme: 'bootstrap4'
+        });
         $('#stock-table').DataTable({
             "responsive": true,
-            "lengthChange": true,
-            "autoWidth": false,
-            "buttons": ["excel", "pdf", "print", "colvis"]
-        }).buttons().container().appendTo('#stock-table_wrapper .col-md-6:eq(0)');
+            "autoWidth": false
+        });
     });
 </script>
 @stop

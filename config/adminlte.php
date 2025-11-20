@@ -212,11 +212,12 @@ return [
             'icon' => 'fas fa-fw fa-user-circle',
         ],
 
-        // ================== MASTER & PENGATURAN ==================
+        // ================== MASTER & PENGATURAN (TETAP SAMA) ==================
         [
             'header' => 'MASTER & PENGATURAN',
             'can'    => ['manage-locations', 'view-master-data', 'manage-users','manage-converts', 'manage-barangs'],
         ],
+        // ... (Menu Master Data TETAP SAMA) ...
         [
             'text' => 'Manajemen Lokasi',
             'icon' => 'fas fa-fw fa-map-marked-alt',
@@ -268,13 +269,13 @@ return [
         [
             'text'    => 'Pembelian (PO)',
             'icon'    => 'fas fa-shopping-cart',
-            'can'     => 'view-po-module', // Pusat (Approve) & Dealer UA22001 (Create) bisa lihat
+            'can'     => 'view-po-module',
             'submenu' => [
                 [
                     'text' => 'Buat Request PO',
                     'url'  => 'admin/purchase-orders/create',
                     'icon' => 'fas fa-plus',
-                    'can'  => 'create-po', // HANYA muncul untuk Dealer UA22001
+                    'can'  => 'create-po',
                 ],
                 [
                     'text' => 'Daftar PO',
@@ -294,26 +295,38 @@ return [
         [
             'text'    => 'Penerimaan (Inbound)',
             'icon'    => 'fas fa-truck-loading',
-            'can'     => 'perform-warehouse-ops',
+            // Gate ini mengizinkan Dealer (termasuk AD), tapi memblokir Pusat
+            'can'     => ['perform-warehouse-ops', 'view-mutation-receiving'],
             'submenu' => [
                 [
-                    'text'  => 'Receiving',
-                    'route' => 'admin.receivings.index', // Ganti 'url' jadi 'route'
+                    'text'  => 'Receiving PO', // Diperjelas
+                    'route' => 'admin.receivings.index',
                     'icon'  => 'fas fa-dolly',
+                    'can'   => 'perform-warehouse-ops'
                 ],
+                // ++ PERUBAHAN: Menu Penerimaan Mutasi dipindah ke sini ++
+                [
+                    'text' => 'Receiving Mutasi', // Penerimaan Barang dari Cabang Lain/Pusat
+                    'icon' => 'fas fa-fw fa-truck-moving',
+                    'route' => 'admin.mutation-receiving.index',
+                    'can' => 'view-mutation-receiving'
+                ],
+                // -------------------------------------------------------
                 [
                     'text'  => 'Quality Control (QC)',
-                    'route' => 'admin.qc.index', // PERBAIKAN: Menggunakan route yang benar (URL: /admin/quality-control)
+                    'route' => 'admin.qc.index',
                     'icon'  => 'fas fa-check-double',
+                    'can'   => 'perform-warehouse-ops'
                 ],
                 [
                     'text'  => 'Putaway (Rak)',
-                    'route' => 'admin.putaway.index', // Ganti 'url' jadi 'route'
+                    'route' => 'admin.putaway.index',
                     'icon'  => 'fas fa-box-open',
+                    'can'   => 'perform-warehouse-ops'
                 ],
                 [
                     'text'  => 'Stok Karantina',
-                    'route' => 'admin.quarantine-stock.index', // Ganti 'url' jadi 'route'
+                    'route' => 'admin.quarantine-stock.index',
                     'icon'  => 'fas fa-ban',
                     'can'   => 'manage-quarantine-stock'
                 ],
@@ -321,7 +334,7 @@ return [
         ],
 
         // --- TRANSAKSI STOK ---
-        // HILANG untuk Admin Gudang Pusat, Muncul untuk Approver (KG) & Dealer
+        // Menu ini akan HILANG untuk Admin Dealer (AD) karena dia tidak punya akses view (create/approve)
         [
             'text'    => 'Transaksi Stok',
             'icon'    => 'fas fa-exchange-alt',
@@ -338,12 +351,6 @@ return [
                     'route'  => 'admin.stock-adjustments.index',
                     'icon' => 'fas fa-sliders-h',
                     'can'  => 'view-stock-adjustments-menu',
-                ],
-                [
-                    'text' => 'Penerimaan Mutasi',
-                    'icon' => 'fas fa-fw fa-truck-loading',
-                    'route' => 'admin.mutation-receiving.index',
-                    'can' => 'view-mutation-receiving'
                 ],
             ],
         ],
@@ -376,11 +383,12 @@ return [
         ],
 
 
-        // ================== ANALISIS & MARKETING ==================
+        // ================== ANALISIS & MARKETING (TETAP SAMA) ==================
         [
             'header' => 'ANALISIS & MARKETING',
             'can' => ['manage-marketing', 'view-reports'],
         ],
+        // ... (Menu Marketing & Laporan TETAP SAMA) ...
         [
             'text'    => 'Marketing',
             'icon'    => 'fas fa-fw fa-bullhorn',

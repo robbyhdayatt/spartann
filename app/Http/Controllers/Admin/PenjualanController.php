@@ -25,7 +25,7 @@ class PenjualanController extends Controller
         $query = Penjualan::with(['konsumen', 'sales', 'lokasi', 'details.barang'])->latest();
 
         // Filter Lokasi: Dealer hanya lihat data mereka sendiri
-        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
+        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ASD'])) {
             if ($user->lokasi_id) {
                 $query->where('lokasi_id', $user->lokasi_id);
             } else {

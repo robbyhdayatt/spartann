@@ -20,7 +20,9 @@ class JabatanSeeder extends Seeder
             ['nama_jabatan' => 'Super Admin', 'singkatan' => 'SA'],
             ['nama_jabatan' => 'PIC', 'singkatan' => 'PIC'],
             ['nama_jabatan' => 'Manajer Area', 'singkatan' => 'MA'],
-            ['nama_jabatan' => 'Area Service Development', 'singkatan' => 'ASD'], // ++ TAMBAHKAN INI ++
+            ['nama_jabatan' => 'Area Service Development', 'singkatan' => 'ASD'],
+            ['nama_jabatan' => 'Service MD', 'singkatan' => 'SMD'],
+            ['nama_jabatan' => 'Accounting MD', 'singkatan' => 'ACC'],
 
             // Level Gudang Pusat
             ['nama_jabatan' => 'Kepala Gudang', 'singkatan' => 'KG'],

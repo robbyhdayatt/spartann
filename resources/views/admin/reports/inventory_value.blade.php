@@ -1,7 +1,6 @@
 @extends('adminlte::page')
 
 @section('title', 'Laporan Nilai Persediaan')
-
 @section('plugins.Datatables', true)
 
 @section('content_header')
@@ -9,26 +8,24 @@
 @stop
 
 @section('content')
-    {{-- Info Box untuk Total Nilai --}}
     <div class="row">
         <div class="col-12">
             <div class="info-box">
                 <span class="info-box-icon bg-success"><i class="fas fa-dollar-sign"></i></span>
                 <div class="info-box-content">
-                    <span class="info-box-text">Total Nilai Persediaan Saat Ini</span>
+                    <span class="info-box-text">Total Nilai Aset (Berdasarkan HPP / Selling In)</span>
                     <span class="info-box-number"><h2>Rp {{ number_format($totalValue, 0, ',', '.') }}</h2></span>
                 </div>
             </div>
         </div>
     </div>
 
-    {{-- Tabel Rincian --}}
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Rincian Nilai Persediaan</h3>
+            <h3 class="card-title">Rincian Nilai</h3>
             <div class="card-tools">
                 <a href="{{ route('admin.reports.inventory-value.export') }}" class="btn btn-sm btn-success">
-                    <i class="fas fa-file-excel"></i> Export to Excel
+                    <i class="fas fa-file-excel"></i> Export
                 </a>
             </div>
         </div>
@@ -37,27 +34,29 @@
                 <thead>
                     <tr>
                         <th>Lokasi</th>
-                        <th>Part</th>
+                        <th>Barang</th>
                         <th>Rak</th>
                         <th class="text-right">Stok</th>
-                        <th class="text-right">Harga Satuan</th>
-                        <th class="text-right">Subtotal Nilai</th>
+                        <th class="text-right">HPP Satuan</th>
+                        <th class="text-right">Total Nilai</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($inventoryDetails as $item)
+                    @php
+                        $hpp = $item->barang->selling_in ?? 0;
+                        $total = $item->quantity * $hpp;
+                    @endphp
                     <tr>
-                        <td>{{ $item->lokasi->nama_lokasi }}</td>
-                        <td>{{ $item->part->nama_part }} ({{ $item->part->kode_part }})</td>
-                        <td>{{ $item->rak->nama_rak }} ({{ $item->rak->kode_rak }})</td>
+                        <td>{{ $item->lokasi->nama_lokasi ?? '-' }}</td>
+                        <td>{{ $item->barang->part_name ?? '-' }} ({{ $item->barang->part_code ?? '-' }})</td>
+                        <td>{{ $item->rak->kode_rak ?? '-' }}</td>
                         <td class="text-right">{{ $item->quantity }}</td>
-                        <td class="text-right">{{ number_format($item->part->harga_satuan, 0, ',', '.') }}</td>
-                        <td class="text-right font-weight-bold">{{ number_format($item->quantity * $item->part->harga_satuan, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($hpp, 0, ',', '.') }}</td>
+                        <td class="text-right font-weight-bold">{{ number_format($total, 0, ',', '.') }}</td>
                     </tr>
                     @empty
-                    <tr>
-                        <td colspan="6" class="text-center">Tidak ada stok di dalam inventaris.</td>
-                    </tr>
+                    <tr><td colspan="6" class="text-center">Tidak ada stok.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -68,10 +67,7 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        $('#inventory-table').DataTable({
-            "responsive": true,
-            "lengthMenu": [ [10, 25, 50, -1], [10, 25, 50, "All"] ],
-        });
+        $('#inventory-table').DataTable({ "responsive": true });
     });
 </script>
 @stop

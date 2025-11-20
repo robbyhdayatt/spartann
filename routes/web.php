@@ -116,6 +116,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('reports/stock-card', [ReportController::class, 'stockCard'])->name('reports.stock-card');
     Route::get('reports/stock-by-warehouse', [ReportController::class, 'stockByWarehouse'])->name('reports.stock-by-warehouse');
     Route::get('reports/stock-report', [ReportController::class, 'stockReport'])->name('reports.stock-report');
+    Route::get('reports/stock-report/export', [ReportController::class, 'exportStockReport'])->name('reports.stock-report.export');
     Route::get('reports/sales-journal', [ReportController::class, 'salesJournal'])->name('reports.sales-journal');
     Route::get('reports/sales-journal/export', [ReportController::class, 'exportSalesJournal'])->name('reports.sales-journal.export');
     Route::get('reports/purchase-journal', [ReportController::class, 'purchaseJournal'])->name('reports.purchase-journal');

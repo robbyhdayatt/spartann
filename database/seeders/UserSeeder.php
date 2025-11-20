@@ -25,16 +25,10 @@ class UserSeeder extends Seeder
         User::query()->truncate();
         Schema::enableForeignKeyConstraints();
 
-        // Ambil data yang dibutuhkan untuk relasi
         $jabatans = Jabatan::pluck('id', 'singkatan');
         $gudangPusat = Lokasi::where('tipe', 'PUSAT')->first();
-        // Ambil semua lokasi dealer beserta data dealer terkait (jika ada)
-        // Menggunakan eager loading untuk efisiensi
         $dealerLokasi = Lokasi::where('tipe', 'DEALER')
                               ->with(['dealer' => function ($query) {
-                                  // Asumsi relasi di model Lokasi bernama 'dealer'
-                                  // dan foreign key di tabel dealers adalah 'kode_dealer'
-                                  // yang berelasi dengan 'kode_lokasi' di tabel lokasi
                                   $query->select('kode_dealer', 'singkatan');
                               }])
                               ->get();
@@ -68,6 +62,26 @@ class UserSeeder extends Seeder
             'password' => Hash::make('password'),
             'is_active' => true,
             'lokasi_id' => null, // Tidak terikat lokasi
+        ]);
+
+        User::create([
+            'nik' => 'SMD-001',
+            'username' => 'servicemd',
+            'nama' => 'Service MD',
+            'jabatan_id' => $jabatans['SMD'],
+            'password' => Hash::make('password'),
+            'is_active' => true,
+            'lokasi_id' => null, // Level Pusat
+        ]);
+
+        User::create([
+            'nik' => 'ACC-001',
+            'username' => 'accounting',
+            'nama' => 'Accounting MD',
+            'jabatan_id' => $jabatans['ACC'],
+            'password' => Hash::make('password'),
+            'is_active' => true,
+            'lokasi_id' => null, // Level Pusat / Global
         ]);
 
         // =================================================================

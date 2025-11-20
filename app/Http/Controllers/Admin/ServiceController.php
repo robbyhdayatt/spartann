@@ -34,7 +34,7 @@ class ServiceController extends Controller
         $selectedDealer = null;
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
-        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC']);
+        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC', 'ASD']);
 
         if ($canFilterByDealer) {
             $dealers = Lokasi::where('tipe', 'DEALER')->orderBy('kode_lokasi')->get(['kode_lokasi', 'nama_lokasi']);

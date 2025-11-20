@@ -38,7 +38,7 @@
             <thead>
                 <tr>
                     <th>Kode Part</th>
-                    <th>Nama Part / Jasa</th>
+                    <th>Nama Item</th>
                     <th>Merk</th>
                     <th class="text-right">Selling In</th>
                     <th class="text-right">Selling Out</th>

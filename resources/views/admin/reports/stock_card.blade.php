@@ -20,20 +20,20 @@
 
                 @php
                     $user = Auth::user();
-                    // Cek apakah user BISA mem-filter lokasi (SA, PIC, MA)
-                    $canFilterLokasi = $user->hasRole(['SA', 'PIC', 'MA']);
+                    // Cek apakah user BISA mem-filter lokasi (SA, PIC, MA, ACC, SMD)
+                    $canFilterLokasi = $user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'SMD']);
                 @endphp
 
                 <div class="row align-items-end">
-                    {{-- Filter Part --}}
+                    {{-- Filter Barang --}}
                     <div class="col-md-4">
                         <div class="form-group">
-                            <label>Spare Part <span class="text-danger">*</span></label>
-                            <select name="barang_id" id="barang_id" class="form-control" required>
-                                <option></option> {{-- Placeholder untuk Select2 --}}
-                                @foreach($barangs as $barang)
-                                    <option value="{{ $barang->id }}" {{ request('barang_id') == $barang->id ? 'selected' : '' }}>
-                                        {{ $barang->part_name }} ({{ $barang->part_code }})
+                            <label>Barang <span class="text-danger">*</span></label>
+                            <select name="barang_id" id="barang_id" class="form-control select2" required>
+                                <option></option>
+                                @foreach($barangs as $item)
+                                    <option value="{{ $item->id }}" {{ request('barang_id') == $item->id ? 'selected' : '' }}>
+                                        {{ $item->part_name }} ({{ $item->part_code }})
                                     </option>
                                 @endforeach
                             </select>
@@ -44,16 +44,13 @@
                     <div class="col-md-3">
                         <div class="form-group">
                             <label>Lokasi</label>
-                            @if(!$canFilterLokasi && $user->lokasi)
-                                {{-- Jika Staf (KG/KC), tampilkan sebagai teks biasa --}}
-                                <input type="text" class="form-control" value="{{ $user->lokasi->nama_lokasi }}" readonly>
+                            @if(!$canFilterLokasi && $user->lokasi_id)
+                                <input type="text" class="form-control" value="{{ $user->lokasi->nama_lokasi ?? '-' }}" readonly>
                                 <input type="hidden" name="lokasi_id" value="{{ $user->lokasi_id }}">
                             @else
-                                {{-- Jika SA/PIC/MA, tampilkan dropdown --}}
-                                <select name="lokasi_id" id="lokasi_id" class="form-control">
+                                <select name="lokasi_id" id="lokasi_id" class="form-control select2">
                                     <option value="">Semua lokasi</option>
                                     @foreach($lokasis as $lokasi)
-                                        {{-- Gunakan $selectedLokasiId dari controller --}}
                                         <option value="{{ $lokasi->id }}" {{ $selectedLokasiId == $lokasi->id ? 'selected' : '' }}>
                                             [{{ $lokasi->tipe }}] {{ $lokasi->nama_lokasi }}
                                         </option>
@@ -129,7 +126,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="7" class="text-center">Tidak ada riwayat pergerakan untuk part ini pada periode dan lokasi yang dipilih.</td>
+                        <td colspan="7" class="text-center">Tidak ada data.</td>
                     </tr>
                     @endforelse
                 </tbody>
@@ -139,15 +136,16 @@
     @endif
 @stop
 
-{{-- (CSS Anda sudah benar) --}}
 @push('css')
 <style>
+    /* CSS untuk merapikan ukuran Select2 agar sama dengan input form Bootstrap 4 */
     .select2-container .select2-selection--single {
         height: calc(2.25rem + 2px) !important;
     }
     .select2-container--default .select2-selection--single .select2-selection__rendered {
         line-height: 1.5 !important;
         padding-top: 0.375rem !important;
+        padding-bottom: 0.375rem !important;
         padding-left: 0.75rem !important;
     }
     .select2-container--default .select2-selection--single .select2-selection__arrow {
@@ -159,21 +157,13 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        // Inisialisasi Select2
-        $('#barang_id').select2({
-            placeholder: "--- Pilih Spare Part ---"
+        $('.select2').select2({
+            theme: 'bootstrap4',
+            placeholder: "Pilih Opsi"
         });
-
-        // Hanya inisialisasi Select2 untuk lokasi jika elemennya ada (bukan readonly input)
-        if ($('#lokasi_id').is('select')) {
-            $('#lokasi_id').select2();
-        }
-
-        // Inisialisasi DataTable
         $('#stock-table').DataTable({
             "responsive": true,
-            "lengthMenu": [ [10, 25, 50, -1], [10, 25, 50, "All"] ],
-            "order": [[ 0, "asc" ]] // Urutkan berdasarkan tanggal (kolom pertama)
+            "order": [[ 0, "asc" ]]
         });
     });
 </script>

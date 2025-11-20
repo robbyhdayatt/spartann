@@ -24,25 +24,45 @@
                value="{{ old('part_code', $currentBarang->part_code ?? '') }}" required>
     </div>
 </div>
+
 <div class="row">
-    <div class="col-md-4 form-group">
+    <div class="col-md-3 form-group">
         <label for="{{ $idPrefix }}_merk">Merk</label>
         <input type="text" id="{{ $idPrefix }}_merk" name="merk" class="form-control"
                value="{{ old('merk', $currentBarang->merk ?? '') }}">
     </div>
+
+    {{-- 1. Selling In (Modal) --}}
     <div class="col-md-3 form-group">
-        <label for="{{ $idPrefix }}_selling_in">Selling In (Rp) <span class="text-danger">*</span></label>
+        <label for="{{ $idPrefix }}_selling_in">Selling In (Rp)</label>
+        {{-- Perubahan: Value default '' (kosong), bukan 0 --}}
         <input type="number" id="{{ $idPrefix }}_selling_in" name="selling_in" class="form-control"
-               value="{{ old('selling_in', $currentBarang->selling_in ?? 0) }}" min="0" step="0.01" required>
+               value="{{ old('selling_in', $currentBarang->selling_in ?? '') }}" min="0" step="0.01">
+        {{-- Tambahan Keterangan --}}
+        <small class="form-text text-muted">
+            Harga beli MD Part ke Supplier
+        </small>
     </div>
-    <div class="col-md-4 form-group">
+
+    {{-- 2. Selling Out (Harga Transfer) --}}
+    <div class="col-md-3 form-group">
         <label for="{{ $idPrefix }}_selling_out">Selling Out (Rp) <span class="text-danger">*</span></label>
         <input type="number" id="{{ $idPrefix }}_selling_out" name="selling_out" class="form-control"
-               value="{{ old('selling_out', $currentBarang->selling_out ?? 0) }}" min="0" step="0.01" required>
+               value="{{ old('selling_out', $currentBarang->selling_out ?? '') }}" min="0" step="0.01" required>
+        {{-- Tambahan Keterangan --}}
+        <small class="form-text text-muted">
+            Harga jual MD Part ke Dealer
+        </small>
     </div>
-    <div class="col-md-4 form-group">
+
+    {{-- 3. Retail (HET) --}}
+    <div class="col-md-3 form-group">
         <label for="{{ $idPrefix }}_retail">Retail (Rp) <span class="text-danger">*</span></label>
         <input type="number" id="{{ $idPrefix }}_retail" name="retail" class="form-control"
-               value="{{ old('retail', $currentBarang->retail ?? 0) }}" min="0" step="0.01" required>
+               value="{{ old('retail', $currentBarang->retail ?? '') }}" min="0" step="0.01" required>
+        {{-- Tambahan Keterangan --}}
+        <small class="form-text text-muted">
+            Harga jual Dealer ke Konsumen
+        </small>
     </div>
 </div>

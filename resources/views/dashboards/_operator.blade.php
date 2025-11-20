@@ -1,46 +1,70 @@
-<div class="row">
+<div class="row mb-3">
     <div class="col-12">
-        <h4>Tugas Operasional di {{ $data['lokasi']->nama_lokasi }}</h4>
-        <hr>
+        <h4>Halo, {{ Auth::user()->nama }}!</h4>
+        <p>Anda login sebagai <strong>{{ Auth::user()->jabatan->nama_jabatan }}</strong> di <strong>{{ $data['lokasi']->nama_lokasi }}</strong></p>
     </div>
+</div>
 
+<div class="row">
+    {{-- KHUSUS ADMIN PUSAT: APPROVAL PO --}}
     @if($data['isPusat'])
-    <div class="col-md-4">
-        <a href="{{ route('admin.receivings.index') }}" class="info-box mb-3 bg-info">
-            <span class="info-box-icon"><i class="fas fa-box-open"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Penerimaan dari PO</span>
-                <span class="info-box-number">{{ $data['taskCounts']['pending_receiving_po'] ?? 0 }} Tugas</span>
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-warning">
+            <div class="inner">
+                <h3>{{ $data['taskCounts']['pending_po_approval'] ?? 0 }}</h3>
+                <p>PO Butuh Approval</p>
             </div>
-        </a>
-    </div>
-    <div class="col-md-4">
-        <a href="#" class="info-box mb-3 bg-warning">
-            <span class="info-box-icon"><i class="fas fa-check-circle"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Quality Control</span>
-                <span class="info-box-number">{{ $data['taskCounts']['pending_qc'] ?? 0 }} Tugas</span>
-            </div>
-        </a>
-    </div>
-    <div class="col-md-4">
-        <a href="#" class="info-box mb-3 bg-success">
-            <span class="info-box-icon"><i class="fas fa-dolly-flatbed"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Penyimpanan (Putaway)</span>
-                <span class="info-box-number">{{ $data['taskCounts']['pending_putaway'] ?? 0 }} Tugas</span>
-            </div>
-        </a>
+            <div class="icon"><i class="fas fa-check-circle"></i></div>
+            <a href="{{ route('admin.purchase-orders.index') }}" class="small-box-footer">Proses Approval <i class="fas fa-arrow-circle-right"></i></a>
+        </div>
     </div>
     @endif
 
-    <div class="col-md-4">
-        <a href="{{ route('admin.mutation-receiving.index') }}" class="info-box mb-3 bg-purple">
-            <span class="info-box-icon"><i class="fas fa-people-carry"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Penerimaan Mutasi</span>
-                <span class="info-box-number">{{ $data['taskCounts']['pending_receiving_mutation'] ?? 0 }} Tugas</span>
+    {{-- KHUSUS DEALER: RECEIVING, QC, PUTAWAY --}}
+    @if(!$data['isPusat'])
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-primary">
+            <div class="inner">
+                <h3>{{ $data['taskCounts']['receiving_po'] }}</h3>
+                <p>PO Siap Diterima</p>
             </div>
-        </a>
+            <div class="icon"><i class="fas fa-truck-loading"></i></div>
+            <a href="{{ route('admin.receivings.create') }}" class="small-box-footer">Proses Penerimaan <i class="fas fa-arrow-circle-right"></i></a>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-warning">
+            <div class="inner">
+                <h3>{{ $data['taskCounts']['qc'] }}</h3>
+                <p>Pending Quality Control</p>
+            </div>
+            <div class="icon"><i class="fas fa-check-double"></i></div>
+            <a href="{{ route('admin.qc.index') }}" class="small-box-footer">Lakukan QC <i class="fas fa-arrow-circle-right"></i></a>
+        </div>
+    </div>
+
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-success">
+            <div class="inner">
+                <h3>{{ $data['taskCounts']['putaway'] }}</h3>
+                <p>Pending Putaway (Rak)</p>
+            </div>
+            <div class="icon"><i class="fas fa-box-open"></i></div>
+            <a href="{{ route('admin.putaway.index') }}" class="small-box-footer">Simpan ke Rak <i class="fas fa-arrow-circle-right"></i></a>
+        </div>
+    </div>
+    @endif
+
+    {{-- SEMUA: TERIMA MUTASI --}}
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-info">
+            <div class="inner">
+                <h3>{{ $data['taskCounts']['receiving_mutation'] }}</h3>
+                <p>Mutasi Masuk (In Transit)</p>
+            </div>
+            <div class="icon"><i class="fas fa-people-carry"></i></div>
+            <a href="{{ route('admin.mutation-receiving.index') }}" class="small-box-footer">Terima Mutasi <i class="fas fa-arrow-circle-right"></i></a>
+        </div>
     </div>
 </div>

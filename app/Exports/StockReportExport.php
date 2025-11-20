@@ -9,38 +9,30 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Illuminate\Support\Facades\DB;
 
-class StockByWarehouseExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize
+class StockReportExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize
 {
-    protected $lokasi_id;
-
-    public function __construct($lokasi_id)
-    {
-        $this->lokasi_id = $lokasi_id;
-    }
-
     public function collection()
     {
         return InventoryBatch::select(
                 'barang_id',
-                'rak_id',
                 'lokasi_id',
+                'rak_id',
                 DB::raw('SUM(quantity) as quantity')
             )
-            ->where('lokasi_id', $this->lokasi_id)
             ->where('quantity', '>', 0)
-            ->with(['barang', 'rak', 'lokasi'])
-            ->groupBy('barang_id', 'rak_id', 'lokasi_id')
+            ->with(['barang', 'lokasi', 'rak'])
+            ->groupBy('barang_id', 'lokasi_id', 'rak_id')
             ->get()
-            ->sortBy('barang.part_name');
+            ->sortBy(['barang.part_name', 'lokasi.nama_lokasi']);
     }
 
     public function headings(): array
     {
         return [
-            'Lokasi',
             'Kode Barang',
             'Nama Barang',
             'Merk',
+            'Lokasi',
             'Rak',
             'Stok',
         ];
@@ -49,10 +41,10 @@ class StockByWarehouseExport implements FromCollection, WithHeadings, WithMappin
     public function map($item): array
     {
         return [
-            $item->lokasi->nama_lokasi ?? '-',
             $item->barang->part_code ?? '-',
             $item->barang->part_name ?? '-',
             $item->barang->merk ?? '-',
+            $item->lokasi->nama_lokasi ?? '-',
             $item->rak->kode_rak ?? '-',
             $item->quantity,
         ];
