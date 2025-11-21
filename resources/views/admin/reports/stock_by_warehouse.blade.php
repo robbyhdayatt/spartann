@@ -28,7 +28,6 @@
                         <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
                             <option value="">-- Pilih Lokasi --</option>
                             @foreach ($lokasis as $lokasi)
-                                {{-- PERBAIKAN: Menghapus optional() --}}
                                 <option value="{{ $lokasi->id }}" {{ $selectedLokasiId == $lokasi->id ? 'selected' : '' }}>
                                     [{{ $lokasi->tipe }}] - {{ $lokasi->nama_lokasi }} ({{ $lokasi->kode_lokasi }})
                                 </option>
@@ -69,6 +68,10 @@
                     <th>Nama Barang</th>
                     <th>Merk</th>
                     <th>Rak</th>
+                    {{-- TAMBAHAN KOLOM HARGA --}}
+                    <th class="text-right">Selling In</th>
+                    <th class="text-right">Selling Out</th>
+                    <th class="text-right">Retail</th>
                     <th class="text-right">Qty</th>
                 </tr>
             </thead>
@@ -79,6 +82,11 @@
                         <td>{{ $item->barang->part_name ?? '-' }}</td>
                         <td>{{ $item->barang->merk ?? '-' }}</td>
                         <td>{{ $item->rak->kode_rak ?? '-' }}</td>
+                        {{-- DATA HARGA --}}
+                        <td class="text-right">Rp {{ number_format($item->barang->selling_in ?? 0, 0, ',', '.') }}</td>
+                        <td class="text-right">Rp {{ number_format($item->barang->selling_out ?? 0, 0, ',', '.') }}</td>
+                        <td class="text-right">Rp {{ number_format($item->barang->retail ?? 0, 0, ',', '.') }}</td>
+
                         <td class="text-right font-weight-bold">{{ $item->quantity }}</td>
                     </tr>
                 @endforeach

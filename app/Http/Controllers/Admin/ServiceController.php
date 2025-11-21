@@ -116,7 +116,6 @@ class ServiceController extends Controller
         }
 
         $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
-        // ... logic PDF paper size sama ...
         $width_cm = 24;
         $height_cm = 14;
         $points_per_cm = 28.3465;
@@ -131,7 +130,6 @@ class ServiceController extends Controller
         return $pdf->stream($fileName);
     }
 
-    // ... Copy method import() and exportExcel() as is ...
     public function import(Request $request)
     {
         $this->authorize('manage-service');
@@ -172,13 +170,11 @@ class ServiceController extends Controller
     public function exportExcel(Request $request)
     {
         $this->authorize('export-service-report');
-        // ... isi exportExcel sama seperti file yang anda kirim ...
-         $user = Auth::user();
+        $user = Auth::user();
         $selectedDealer = $request->query('dealer_code');
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
 
-        // ... (copy paste logic export Anda) ...
         if (!$startDate || !$endDate) return redirect()->back()->with('error', 'Pilih tanggal.');
 
         try {
@@ -191,16 +187,13 @@ class ServiceController extends Controller
         return Excel::download(new ServiceDailyReportExport($selectedDealer, $validStartDate, $validEndDate), 'Laporan_Service.xlsx');
     }
 
-    // ==========================================================================
-    // METHOD BARU: Update Service (Menambah Part & Potong Stok FIFO)
-    // ==========================================================================
     public function update(Request $request, Service $service)
     {
         $this->authorize('manage-service');
 
         $validated = $request->validate([
             'items' => 'required|array',
-            'items.*.part_id' => 'required|exists:barangs,id', // Ganti parts ke barangs
+            'items.*.part_id' => 'required|exists:barangs,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
         ]);
@@ -236,22 +229,16 @@ class ServiceController extends Controller
                     ->get();
 
                 $sisaQty = $qtyKeluar;
-                $totalHpp = 0; // Untuk menghitung rata-rata cost price (selling_in) item ini
+                $totalHpp = 0;
 
                 foreach ($batches as $batch) {
                     if ($sisaQty <= 0) break;
 
                     $potong = min($batch->quantity, $sisaQty);
-
-                    // Ambil nilai selling_in barang saat ini sebagai estimasi cost
-                    // (Idealnya batch menyimpan harga beli spesifik, tapi kita pakai master selling_in untuk simplifikasi jika batch tidak punya data harga)
-                    $costPerUnit = $barang->selling_in;
+                    $costPerUnit = $barang->selling_out;
                     $totalHpp += ($costPerUnit * $potong);
-
-                    // Update Batch
                     $batch->decrement('quantity', $potong);
 
-                    // Catat Stock Movement
                     StockMovement::create([
                         'barang_id'      => $barang->id,
                         'lokasi_id'      => $lokasiId,
@@ -268,10 +255,8 @@ class ServiceController extends Controller
                     $sisaQty -= $potong;
                 }
 
-                // Hitung rata-rata cost price untuk detail ini
                 $avgCostPrice = ($qtyKeluar > 0) ? ($totalHpp / $qtyKeluar) : 0;
 
-                // 3. Simpan ke Service Details
                 ServiceDetail::create([
                     'service_id'    => $service->id,
                     'barang_id'     => $barang->id,

@@ -13,7 +13,8 @@
             <div class="info-box">
                 <span class="info-box-icon bg-success"><i class="fas fa-dollar-sign"></i></span>
                 <div class="info-box-content">
-                    <span class="info-box-text">Total Nilai Aset (Berdasarkan HPP / Selling In)</span>
+                    {{-- Update Judul Info Box --}}
+                    <span class="info-box-text">Total Nilai Persediaan (Berdasarkan Selling Out)</span>
                     <span class="info-box-number"><h2>Rp {{ number_format($totalValue, 0, ',', '.') }}</h2></span>
                 </div>
             </div>
@@ -25,7 +26,7 @@
             <h3 class="card-title">Rincian Nilai</h3>
             <div class="card-tools">
                 <a href="{{ route('admin.reports.inventory-value.export') }}" class="btn btn-sm btn-success">
-                    <i class="fas fa-file-excel"></i> Export
+                    <i class="fas fa-file-excel"></i> Export to Excel
                 </a>
             </div>
         </div>
@@ -37,22 +38,24 @@
                         <th>Barang</th>
                         <th>Rak</th>
                         <th class="text-right">Stok</th>
-                        <th class="text-right">HPP Satuan</th>
+                        {{-- Ubah Judul Kolom --}}
+                        <th class="text-right">Harga Satuan (Selling Out)</th>
                         <th class="text-right">Total Nilai</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($inventoryDetails as $item)
                     @php
-                        $hpp = $item->barang->selling_in ?? 0;
-                        $total = $item->quantity * $hpp;
+                        // PERUBAHAN: Gunakan selling_out
+                        $hargaSatuan = $item->barang->selling_out ?? 0;
+                        $total = $item->quantity * $hargaSatuan;
                     @endphp
                     <tr>
                         <td>{{ $item->lokasi->nama_lokasi ?? '-' }}</td>
                         <td>{{ $item->barang->part_name ?? '-' }} ({{ $item->barang->part_code ?? '-' }})</td>
                         <td>{{ $item->rak->kode_rak ?? '-' }}</td>
                         <td class="text-right">{{ $item->quantity }}</td>
-                        <td class="text-right">{{ number_format($hpp, 0, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($hargaSatuan, 0, ',', '.') }}</td>
                         <td class="text-right font-weight-bold">{{ number_format($total, 0, ',', '.') }}</td>
                     </tr>
                     @empty

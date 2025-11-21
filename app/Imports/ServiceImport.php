@@ -91,27 +91,26 @@ class ServiceImport implements OnEachRow, WithChunkReading
         return is_numeric($cleaned) ? floatval($cleaned) : 0;
     }
 
-    // =================================================================
-    // LOGIKA UTAMA PENGURANGAN STOK ADA DI SINI
-    // =================================================================
-    private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId)
+    private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId, $invoiceNo)
     {
         if (!$barangId || !$lokasiId || $qty <= 0) return 0;
 
-        // Cek Stok Tersedia
+        $barangMaster = Barang::find($barangId);
+        $namaBarang = $barangMaster->part_name ?? 'Unknown Item';
+
+        // 1. Cek Stok Tersedia
         $stokTersedia = InventoryBatch::where('barang_id', $barangId)
             ->where('lokasi_id', $lokasiId)
             ->sum('quantity');
 
-        // Jika stok tidak cukup, kembalikan cost default master barang (tanpa potong stok)
-        // Atau Anda bisa pilih untuk throw error agar import gagal
+        // ++ PERUBAHAN: STOP JIKA STOK HABIS ++
         if ($stokTersedia < $qty) {
-            Log::warning("Import Service ID {$serviceId}: Stok Barang ID {$barangId} tidak cukup (Butuh {$qty}, Ada {$stokTersedia}). Stok tidak dipotong.");
-            $barang = Barang::find($barangId);
-            return $barang ? $barang->selling_in : 0;
+            // Throw Exception agar ditangkap oleh try-catch di createServiceDetail
+            // Ini akan menyebabkan baris ini di-skip dan masuk ke daftar error
+            throw new \Exception("Stok Barang '{$namaBarang}' (ID: {$barangId}) TIDAK MENCUKUPI. Butuh: {$qty}, Tersedia: {$stokTersedia}. Import dibatalkan.");
         }
 
-        // Ambil Batch FIFO
+        // 2. Proses Potong Stok (FIFO)
         $batches = InventoryBatch::where('barang_id', $barangId)
             ->where('lokasi_id', $lokasiId)
             ->where('quantity', '>', 0)
@@ -120,21 +119,19 @@ class ServiceImport implements OnEachRow, WithChunkReading
 
         $sisaQty = $qty;
         $totalCost = 0;
-        $barangMaster = Barang::find($barangId); // Untuk fallback cost
 
         foreach ($batches as $batch) {
             if ($sisaQty <= 0) break;
 
             $potong = min($batch->quantity, $sisaQty);
 
-            // Gunakan selling_in master sebagai estimasi cost jika batch tidak punya data harga beli
-            $costPerUnit = $barangMaster->selling_in;
+            // Gunakan Selling Out sebagai Cost
+            $costPerUnit = $barangMaster->selling_out;
             $totalCost += ($costPerUnit * $potong);
 
-            // Update Batch
             $batch->decrement('quantity', $potong);
 
-            // Catat Movement
+            // ++ PERUBAHAN: KETERANGAN LEBIH JELAS ++
             StockMovement::create([
                 'barang_id'      => $barangId,
                 'lokasi_id'      => $lokasiId,
@@ -142,9 +139,9 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 'jumlah'         => -$potong,
                 'stok_sebelum'   => $batch->quantity + $potong,
                 'stok_sesudah'   => $batch->quantity,
-                'referensi_type' => 'App\Models\Service', // Hardcode class name string biar aman
+                'referensi_type' => 'App\Models\Service',
                 'referensi_id'   => $serviceId,
-                'keterangan'     => "Import Service (Auto-Deduct)",
+                'keterangan'     => "Import Service #{$invoiceNo} ({$namaBarang})", // Keterangan Jelas
                 'user_id'        => $this->userId,
             ]);
 
@@ -157,6 +154,8 @@ class ServiceImport implements OnEachRow, WithChunkReading
     private function createServiceDetail(Service $service, array $row, int $rowIndex)
     {
         $hasActivity = false;
+
+        // Definisi Index Kolom (Sama)
         $serviceCategoryCode_idx = 18;
         $servicePackageName_idx = 21;
         $laborCostService_idx = 22;
@@ -182,24 +181,22 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $partsQty = $row[$partsQty_idx] ?? null;
         $partsPrice = $row[$partsPrice_idx] ?? null;
 
-        $lokasiId = $service->lokasi_id; // Ambil lokasi dari header service
+        $lokasiId = $service->lokasi_id;
 
         if (!empty($servicePackageNameNormalized)) {
-            // 1. Cek KONVERSI (Paket Servis)
+            // 1. Cek KONVERSI
             if (isset($this->convertMapping[$servicePackageNameNormalized])) {
                 $convertData = $this->convertMapping[$servicePackageNameNormalized];
 
-                // Cari Barang
                 $barang = Barang::where('part_code', $convertData->part_code)->first();
                 $costPrice = 0;
 
-                // ++ PROSES POTONG STOK ++
-                if ($barang) {
-                    $costPrice = $this->processStockDeduction($barang->id, $convertData->quantity, $service->id, $lokasiId);
-                }
-                // ------------------------
-
                 try {
+                    // ++ UPDATE: Kirim Invoice No ++
+                    if ($barang) {
+                        $costPrice = $this->processStockDeduction($barang->id, $convertData->quantity, $service->id, $lokasiId, $service->invoice_no);
+                    }
+
                     $service->details()->create([
                         'item_category' => 'PART',
                         'service_category_code' => $serviceCategoryCode,
@@ -249,17 +246,15 @@ class ServiceImport implements OnEachRow, WithChunkReading
 
             if ($cleanedPartsQty <= 0) $cleanedPartsQty = 1;
 
-            // Cari Barang
             $barang = Barang::where('part_code', $partsNo)->first();
             $costPrice = 0;
 
-            // ++ PROSES POTONG STOK ++
-            if ($barang) {
-                $costPrice = $this->processStockDeduction($barang->id, $cleanedPartsQty, $service->id, $lokasiId);
-            }
-            // ------------------------
-
             try {
+                // ++ UPDATE: Kirim Invoice No ++
+                if ($barang) {
+                    $costPrice = $this->processStockDeduction($barang->id, $cleanedPartsQty, $service->id, $lokasiId, $service->invoice_no);
+                }
+
                 $service->details()->create([
                     'item_category' => $itemCategory,
                     'service_category_code' => $serviceCategoryCode,
@@ -274,6 +269,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 ]);
                 $hasActivity = true;
             } catch (\Exception $e) {
+                // Error dari processStockDeduction akan tertangkap disini
                 Log::error("Baris {$rowIndex}: Gagal detail {$itemCategory}. " . $e->getMessage());
                 $this->skippedCount++;
             }

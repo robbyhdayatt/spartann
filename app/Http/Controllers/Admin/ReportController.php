@@ -215,9 +215,11 @@ class ReportController extends Controller
 
         $inventoryDetails = $inventoryQuery->get();
 
+        // PERUBAHAN: Gunakan 'selling_out' untuk perhitungan nilai total
         $totalValue = $inventoryDetails->sum(function($item) {
             if ($item->barang) {
-                return $item->quantity * $item->barang->selling_in;
+                // Menggunakan selling_out sesuai permintaan
+                return $item->quantity * $item->barang->selling_out;
             }
             return 0;
         });
@@ -349,7 +351,7 @@ class ReportController extends Controller
         $grandTotalKeuntungan = 0;
 
         foreach ($reportData as $data) {
-            $modal_satuan = $data->barang->selling_in ?? 0;
+            $modal_satuan = $data->barang->selling_out ?? 0;
             $total_modal_item = $data->qty_jual * $modal_satuan;
             $total_keuntungan_item = $data->subtotal - $total_modal_item;
 
@@ -400,12 +402,12 @@ class ReportController extends Controller
                 DB::raw('SUM(service_details.quantity) as total_qty'),
                 DB::raw('SUM(service_details.price + service_details.labor_cost_service) as total_penjualan'),
                 DB::raw("SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_in, 0)
+                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_out, 0)
                                 ELSE 0
                             END) as total_modal"),
                 DB::raw("SUM(service_details.price + service_details.labor_cost_service) -
                          SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_in, 0)
+                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_out, 0)
                                 ELSE 0
                             END) as total_keuntungan")
             )

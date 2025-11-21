@@ -14,29 +14,31 @@ $npwpDealer = 'NPWP No.: ' . ($service->lokasi->npwp ?? $service->customer_npwp_
 
 // === Jenis Service Order ===
 $serviceOrder = $service->service_order ?? 'Walk In Service';
-// Deteksi apakah ini penjualan part retail (bukan service motor biasa)
 $isPartRetail = stripos($serviceOrder, 'part') !== false;
 
-// === Pengaturan Font ===
+// === Pengaturan Font & Tampilan (DIPERKECIL) ===
 $totalDetailsCount = $service->details->count();
-$maxItemsPerPage = 28;
-$baseFontSize = 20;
-$lineHeight = 1.35;
-$rowPadding = 4;
-$signaturePaddingTop = 70;
+$maxItemsPerPage = 40; // Bisa muat lebih banyak item karena font kecil
 
+// Ukuran Font Standar (Diperkecil)
+$baseFontSize = 12;
+$lineHeight = 1.2;
+$rowPadding = 2;
+$signaturePaddingTop = 30;
+
+// Logika Scaling Otomatis (Jika item sangat banyak)
 if ($totalDetailsCount > $maxItemsPerPage) {
     $scale = max(0.85, 1 - (($totalDetailsCount - $maxItemsPerPage) * 0.01));
-    $baseFontSize = floor(20 * $scale);
-    $lineHeight = max(1.05, 1.35 * $scale);
-    $rowPadding = max(2, floor(4 * $scale));
-    $signaturePaddingTop = max(30, floor(70 * $scale));
+    $baseFontSize = floor(11 * $scale);
+    $lineHeight = max(1.0, 1.2 * $scale);
+    $rowPadding = max(1, floor(2 * $scale));
+    $signaturePaddingTop = max(20, floor(30 * $scale));
 }
 
 $conditionalStyles = "
     .invoice-box { font-size: {$baseFontSize}px; }
     .invoice-box table { line-height: {$lineHeight}; }
-    .items-table td, .items-table th { padding: {$rowPadding}px 3px; line-height: 1.05; }
+    .items-table td, .items-table th { padding: {$rowPadding}px 2px; line-height: 1.1; }
     .signature-box td[style*='padding-top'] { padding-top: {$signaturePaddingTop}px !important; }
 ";
 @endphp
@@ -61,13 +63,22 @@ $conditionalStyles = "
             color: #000;
             width: 100%;
             height: 100%;
-            letter-spacing: 0.2px;
+            letter-spacing: 0.1px; /* Sedikit dirapatkan */
         }
 
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .font-bold { font-weight: bold; }
 
+        /* Style Header & Footer Tabel agar lebih compact */
+        .items-table th {
+            border-top: 1px solid #000;
+            border-bottom: 1px solid #000;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* Render style dinamis dari PHP */
         {!! $conditionalStyles !!}
     </style>
 </head>
@@ -75,20 +86,19 @@ $conditionalStyles = "
 <div class="invoice-box">
 
     {{-- ================= HEADER ================= --}}
-    <table style="width: 100%; margin-bottom: 8px;">
+    <table style="width: 100%; margin-bottom: 5px;">
         <tr>
             <td style="text-align: center;">
-                {{-- PERUBAHAN DISINI: Judul Dinamis --}}
-                <div style="font-size: 1.6em; font-weight: bold; text-transform: uppercase;">
+                <div style="font-size: 1.4em; font-weight: bold; text-transform: uppercase;">
                     {{ $isPartRetail ? 'FAKTUR PENJUALAN' : 'FAKTUR SERVICE' }}
                 </div>
             </td>
         </tr>
     </table>
 
-    <table style="width: 100%; margin-bottom: 8px;">
+    <table style="width: 100%; margin-bottom: 5px;">
         <tr>
-            <td style="width: 60%; font-weight: bold;">{{ $namaDealer }}</td>
+            <td style="width: 60%; font-weight: bold; font-size: 1.1em;">{{ $namaDealer }}</td>
             <td style="width: 40%; text-align: right;">
                 <div>{{ $alamatDealer }}</div>
                 <div>{{ $npwpDealer }}</div>
@@ -96,26 +106,24 @@ $conditionalStyles = "
         </tr>
     </table>
 
-    <hr style="border:0; border-top:2px solid #000; margin:8px 0 6px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 3px 0;">
 
     {{-- ================= INFO PELANGGAN ================= --}}
-    <table style="width: 100%; line-height: 1.1;">
+    <table style="width: 100%; line-height: 1.2;">
         <tr>
             <td style="width:13%;"><strong>Tanggal</strong></td>
-            <td style="width:18%;">: {{ $service->reg_date ? \Carbon\Carbon::parse($service->reg_date)->format('d/m/Y') : '-' }}</td>
+            <td style="width:22%;">: {{ $service->reg_date ? \Carbon\Carbon::parse($service->reg_date)->format('d/m/Y') : '-' }}</td>
             <td style="width:13%;"><strong>Nama</strong></td>
             <td style="width:20%;">: {{ $service->customer_name ?? '-' }}</td>
-            {{-- Sembunyikan No Rangka jika Part Retail --}}
             @unless($isPartRetail)
                 <td style="width:14%;"><strong>No. Rangka</strong></td>
-                <td style="width:22%;">: {{ $service->mc_frame_no ?? '-' }}</td>
+                <td style="width:18%;">: {{ $service->mc_frame_no ?? '-' }}</td>
             @endunless
         </tr>
         <tr>
             <td><strong>No. Invoice</strong></td>
             <td>: {{ $service->invoice_no ?? '-' }}</td>
             <td><strong>Alamat</strong></td>
-            {{-- Colspan disesuaikan agar rapi jika kolom kanan hilang --}}
             <td colspan="{{ $isPartRetail ? 3 : 3 }}">: {{ $service->customer_address ?? '-' }}</td>
         </tr>
         <tr>
@@ -138,18 +146,18 @@ $conditionalStyles = "
         </tr>
     </table>
 
-    <hr style="border:0; border-top:2px solid #000; margin:8px 0 8px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 5px 0;">
 
     {{-- ================= ITEM TABLE ================= --}}
     <table class="items-table" style="width: 100%;">
         <thead>
             <tr>
-                <th style="width:3%;">No.</th>
-                <th style="width:22%;">Package</th>
+                <th style="width:4%;">No.</th>
+                <th style="width:20%;">Package</th>
                 <th style="width:15%;">Nomor Item</th>
                 <th style="width:35%;">Nama Item</th>
-                <th style="width:10%;">Harga Satuan</th>
-                <th style="width:5%;">Qty</th>
+                <th style="width:12%;">Harga Satuan</th>
+                <th style="width:4%;">Qty</th>
                 <th style="width:10%;">Total</th>
             </tr>
         </thead>
@@ -161,10 +169,9 @@ $conditionalStyles = "
                     $sparepartDetails = $details->whereIn('item_category', ['PART', 'OLI'])->sortByDesc('price');
                 @endphp
 
-                {{-- Sembunyikan Header Grup jika Part Retail (biasanya kosong atau default) --}}
                 @unless($isPartRetail)
-                    <tr style="font-weight:bold; border-top:2px solid #000;">
-                        <td colspan="7">{{ $groupCode ?: 'Lain-lain' }}</td>
+                    <tr style="font-weight:bold; border-top:1px solid #ccc;">
+                        <td colspan="7" style="padding-top: 5px;">{{ $groupCode ?: 'Lain-lain' }}</td>
                     </tr>
                 @endunless
 
@@ -183,7 +190,7 @@ $conditionalStyles = "
 
                 @if ($sparepartDetails->isNotEmpty())
                     @unless($isPartRetail)
-                        <tr style="font-weight:bold;"><td colspan="7">Sparepart</td></tr>
+                        <tr><td colspan="7" style="font-style:italic; font-weight:bold; padding-left: 10px;">Sparepart:</td></tr>
                     @endunless
                     @foreach ($sparepartDetails as $detail)
                         @php $totalItem = ($detail->quantity ?? 0) * ($detail->price ?? 0); @endphp
@@ -202,7 +209,7 @@ $conditionalStyles = "
         </tbody>
     </table>
 
-    <hr style="border:0; border-top:2px solid #000; margin:8px 0 8px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 5px 0;">
 
     {{-- ================= FOOTER ================= --}}
     @php
@@ -220,44 +227,45 @@ $conditionalStyles = "
             <td style="width: 60%; vertical-align: top;">
                 <div><strong>Harga sudah termasuk PPN 11%</strong></div>
                 <div><strong>Terbilang:</strong></div>
-                <div style="padding:6px; font-style:italic;">
+                <div style="font-style:italic; text-transform: capitalize;">
                     # {{ trim(NumberHelper::terbilang($totalPayment)) }} Rupiah #
                 </div>
             </td>
             <td style="width: 40%; vertical-align: top;">
                 <table style="width: 100%;">
                     @if($isPartRetail)
-                        <tr><td><strong>Sub Total Spare Parts:</strong></td><td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td></tr>
-                        <tr><td><strong>Down Payment:</strong></td><td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td></tr>
-                        <tr><td><strong>Member Benefit:</strong></td><td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td></tr>
-                        <tr><td style="border-top:2px solid #000;"><strong>Total Bayar:</strong></td>
-                            <td style="border-top:2px solid #000; text-align:right;"><strong>Rp {{ number_format($totalPayment, 0, ',', '.') }}</strong></td></tr>
+                        <tr><td>Sub Total Spare Parts:</td><td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td></tr>
+                        <tr><td>Down Payment:</td><td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td></tr>
+                        <tr><td>Member Benefit:</td><td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td></tr>
+                        <tr><td style="border-top:1px solid #000;"><strong>Total Bayar:</strong></td>
+                            <td style="border-top:1px solid #000; text-align:right;"><strong>Rp {{ number_format($totalPayment, 0, ',', '.') }}</strong></td></tr>
                     @else
-                        <tr><td><strong>Total Service:</strong></td><td class="text-right">Rp {{ number_format($totalService, 0, ',', '.') }}</td></tr>
-                        <tr><td><strong>Total Sparepart:</strong></td><td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td></tr>
-                        <tr><td><strong>Member Benefit Amount:</strong></td><td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td></tr>
-                        <tr><td style="border-top:2px solid #000;"><strong>Total Bayar:</strong></td>
-                            <td style="border-top:2px solid #000; text-align:right;"><strong>Rp {{ number_format($totalPayment, 0, ',', '.') }}</strong></td></tr>
-                        <tr><td><strong>Down Payment:</strong></td><td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td></tr>
+                        <tr><td>Total Service:</td><td class="text-right">Rp {{ number_format($totalService, 0, ',', '.') }}</td></tr>
+                        <tr><td>Total Sparepart:</td><td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td></tr>
+                        <tr><td>Member Benefit:</td><td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td></tr>
+                        <tr><td style="border-top:1px solid #000;"><strong>Total Bayar:</strong></td>
+                            <td style="border-top:1px solid #000; text-align:right;"><strong>Rp {{ number_format($totalPayment, 0, ',', '.') }}</strong></td></tr>
+                        <tr><td>Down Payment:</td><td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td></tr>
                     @endif
                 </table>
             </td>
         </tr>
     </table>
 
-    <hr style="border:0; border-top:2px solid #000; margin:8px 0 8px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 8px 0 2px 0;">
 
     {{-- ================= SIGNATURE ================= --}}
-    <table class="signature-box" style="width: 100%; text-align: center; margin-top: 12px;">
+    <table class="signature-box" style="width: 100%; text-align: center;">
         <tr>
             <td style="width:33%;">Counter Service,</td>
             <td style="width:33%;">Konsumen,</td>
             <td style="width:34%;">Kasir,</td>
         </tr>
         <tr>
-            <td style="padding-top:55px;">(__________________)</td>
-            <td style="padding-top:55px;">(__________________)</td>
-            <td style="padding-top:55px;">(__________________)</td>
+            {{-- Padding top diatur oleh variabel $signaturePaddingTop --}}
+            <td style="padding-top:30px;">(__________________)</td>
+            <td style="padding-top:30px;">(__________________)</td>
+            <td style="padding-top:30px;">(__________________)</td>
         </tr>
     </table>
 
@@ -267,10 +275,10 @@ $conditionalStyles = "
 <script type="text/php">
 if (isset($pdf)) {
     $font = $fontMetrics->get_font("Arial", "normal");
-    $size = 12;
-    $pageText = "{PAGE_NUM}/{PAGE_COUNT}";
-    $x = $pdf->get_width() - 50;
-    $y = $pdf->get_height() - 20;
+    $size = 9; // Font size untuk nomor halaman juga diperkecil
+    $pageText = "Hal {PAGE_NUM} dari {PAGE_COUNT}";
+    $x = $pdf->get_width() - 60;
+    $y = $pdf->get_height() - 15;
     $pdf->page_text($x, $y, $pageText, $font, $size, [0,0,0]);
 }
 </script>
