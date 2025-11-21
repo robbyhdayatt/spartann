@@ -204,6 +204,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
 
+                // Tambah baris untuk Group Header
                 $sheet->insertNewRowBefore(1, 1);
                 $groupHeaderRow = 1;
                 $headerRow = 2;
@@ -211,6 +212,8 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                 $headings = $this->headings();
                 $numHeadings = count($headings);
                 $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($numHeadings);
+
+                // Definisi Group Header
                 $groupHeaders = [
                     'K' => ['range' => "K{$groupHeaderRow}:O{$groupHeaderRow}", 'title' => 'Customer Information'],
                     'P' => ['range' => "P{$groupHeaderRow}:R{$groupHeaderRow}", 'title' => 'M/C Information'],
@@ -229,6 +232,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                     }
                 }
 
+                // Isi header yang tidak tergrup
                 for ($colIndex = 1; $colIndex <= $numHeadings; $colIndex++) {
                     if (!isset($groupedColumns[$colIndex])) {
                         $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
@@ -238,6 +242,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                     }
                 }
 
+                // Styling Header
                 $headerStyle = [
                     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
@@ -248,34 +253,58 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                 $sheet->getRowDimension($groupHeaderRow)->setRowHeight(25);
                 $sheet->getRowDimension($headerRow)->setRowHeight(40);
 
+                // Styling dan Rumus Total
                 if ($this->totalRows > 0) {
                     $firstDataRow = $this->headerRowCount + 1;
                     $lastDataRow = $this->totalRows + $this->headerRowCount;
+
                     $totalRow = $lastDataRow + 1;
+                    $totalNonKSGRow = $lastDataRow + 2; // Baris Baru untuk Total Tanpa KSG
 
+                    $columnsToSum = ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AM', 'AN'];
                     $mergeUntilCol = 'AA';
-                    $sheet->setCellValue("A{$totalRow}", 'TOTAL');
-                    $sheet->mergeCells("A{$totalRow}:{$mergeUntilCol}{$totalRow}");
 
-                    $columnsToSum = [
-                        'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AM', 'AN'
-                    ];
+                    // --- BARIS 1: TOTAL SEMUA ---
+                    $sheet->setCellValue("A{$totalRow}", 'TOTAL SEMUA');
+                    $sheet->mergeCells("A{$totalRow}:{$mergeUntilCol}{$totalRow}");
 
                     foreach ($columnsToSum as $column) {
                         $sheet->setCellValue("{$column}{$totalRow}", "=SUM({$column}{$firstDataRow}:{$column}{$lastDataRow})");
-                        $sheet->getStyle("{$column}{$totalRow}")
-                              ->getNumberFormat()
-                              ->setFormatCode("Rp #,##0_);(Rp #,##0)");
+                        $sheet->getStyle("{$column}{$totalRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
                     }
 
+                    // --- BARIS 2: TOTAL TANPA KSG (SUMIF) ---
+                    $sheet->setCellValue("A{$totalNonKSGRow}", 'TOTAL (TANPA KSG)');
+                    $sheet->mergeCells("A{$totalNonKSGRow}:{$mergeUntilCol}{$totalNonKSGRow}");
+
+                    foreach ($columnsToSum as $column) {
+                        // Rumus: =SUMIF(S2:S100, "<>*KSG*", AB2:AB100)
+                        // S adalah kolom 'Service Category'
+                        $rangeCategory = "S{$firstDataRow}:S{$lastDataRow}";
+                        $rangeSum = "{$column}{$firstDataRow}:{$column}{$lastDataRow}";
+
+                        // Kriteria: "<>*KSG*" artinya tidak mengandung kata KSG
+                        $sheet->setCellValue("{$column}{$totalNonKSGRow}", "=SUMIF({$rangeCategory}, \"<>*KSG*\", {$rangeSum})");
+                        $sheet->getStyle("{$column}{$totalNonKSGRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
+                    }
+
+                    // Styling Footer (Total)
                     $totalRowStyle = [
                         'font' => ['bold' => true],
-                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFE0B2']],
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFE0B2']], // Warna Orange Muda
                         'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
                         'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
                     ];
+
+                    // Terapkan style ke baris Total Semua
                     $sheet->getStyle("A{$totalRow}:{$lastColLetter}{$totalRow}")->applyFromArray($totalRowStyle);
                     $sheet->getStyle("A{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+                    // Terapkan style ke baris Total Tanpa KSG (Warna beda dikit biar kontras)
+                    $sheet->getStyle("A{$totalNonKSGRow}:{$lastColLetter}{$totalNonKSGRow}")->applyFromArray(array_merge($totalRowStyle, [
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFC6EFCE']], // Warna Hijau Muda
+                    ]));
+                    $sheet->getStyle("A{$totalNonKSGRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
                 }
 
                 $sheet->freezePane('A' . ($this->headerRowCount + 1));
