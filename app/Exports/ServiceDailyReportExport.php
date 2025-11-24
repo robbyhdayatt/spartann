@@ -33,13 +33,13 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
     WithCustomValueBinder
 {
     protected $dealerCode;
-    protected $startDate; // Diubah dari filterDate
-    protected $endDate;   // Ditambahkan
+    protected $startDate;
+    protected $endDate;
     protected $dealers;
     private $totalRows = 0;
     private $headerRowCount = 2;
+    private $rowNumber = 0;
 
-    // Constructor menerima start dan end date
     public function __construct($dealerCode, $startDate, $endDate)
     {
         $this->dealerCode = $dealerCode;
@@ -50,20 +50,21 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
 
     public function bindValue(Cell $cell, $value)
     {
-        if (in_array($cell->getColumn(), ['L', 'O', 'R', 'V'])) {
+        // Format Text
+        if (in_array($cell->getColumn(), ['M', 'P', 'S', 'W'])) {
             $cell->setValueExplicit($value, DataType::TYPE_STRING);
             return true;
         }
-
-        // Format Rupiah untuk kolom nominal
-        if (in_array($cell->getColumn(), ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AM', 'AN'])) {
+        
+        // Format Rupiah (AC s/d AO)
+        $moneyColumns = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO'];
+        if (in_array($cell->getColumn(), $moneyColumns)) {
              if (is_numeric($value)) {
                  $cell->setValueExplicit($value, DataType::TYPE_NUMERIC);
                  $cell->getStyle()->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
                  return true;
              }
         }
-
         return parent::bindValue($cell, $value);
     }
 
@@ -73,18 +74,14 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                  ->with(['lokasi', 'details'])
                  ->orderBy('created_at', 'desc');
 
-        // Filter Berdasarkan Rentang Tanggal (Start - End)
         if ($this->startDate && $this->endDate) {
             $start = Carbon::parse($this->startDate)->startOfDay();
             $end = Carbon::parse($this->endDate)->endOfDay();
-
             $query->whereBetween('services.created_at', [$start, $end]);
         } elseif ($this->startDate) {
-            // Fallback jika hanya ada start date
             $query->whereDate('services.created_at', '>=', $this->startDate);
         }
 
-        // Filter Dealer (Jika 'all', maka filter ini dilewati)
         if ($this->dealerCode && $this->dealerCode !== 'all') {
             $query->where('dealer_code', $this->dealerCode);
         }
@@ -93,11 +90,9 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         return $query;
     }
 
-    /**
-     * @var Service $service
-     */
     public function map($service): array
     {
+        $this->rowNumber++;
         $namaDealer = $this->dealers->get($service->dealer_code) ?? $service->dealer_code;
 
         $detailCols = [
@@ -123,6 +118,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         $separator = PHP_EOL;
 
         return [
+            $this->rowNumber,
             $service->yss,
             $service->dealer_code,
             $namaDealer,
@@ -141,7 +137,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             $service->mc_brand,
             $service->mc_model_name,
             $service->mc_frame_no,
-
             implode($separator, $detailCols['service_category_code']),
             implode($separator, $detailCols['service_package_name']),
             implode($separator, $detailCols['labor_cost_service']),
@@ -149,42 +144,37 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             implode($separator, $detailCols['item_name']),
             implode($separator, $detailCols['quantity']),
             implode($separator, $detailCols['price']),
-
             $service->payment_type,
             $service->transaction_code,
-            $service->e_payment_amount,     // AB
-            $service->cash_amount,          // AC
-            $service->debit_amount,         // AD
-            $service->total_down_payment,   // AE
-            $service->total_labor,          // AF
-            $service->total_part_service,   // AG
-            $service->total_oil_service,    // AH
-            $service->total_retail_parts,   // AI
-            $service->total_retail_oil,     // AJ
-            $service->total_amount,         // AK
-            $service->benefit_amount,       // AL
-            $service->total_payment,        // AM
-            $service->balance,              // AN
-            $service->technician_name,      // AO
-            $service->printed_at ? Carbon::parse($service->printed_at)->format('Y-m-d H:i:s') : null, // AP
-            $service->created_at ? Carbon::parse($service->created_at)->format('Y-m-d H:i:s') : null, // AQ
+            $service->e_payment_amount,
+            $service->cash_amount,
+            $service->debit_amount,
+            $service->total_down_payment,
+            $service->total_labor,
+            $service->total_part_service,
+            $service->total_oil_service,
+            $service->total_retail_parts,
+            $service->total_retail_oil,
+            $service->total_amount,
+            $service->benefit_amount,
+            $service->total_payment,
+            $service->balance,
+            $service->technician_name,
+            $service->printed_at ? Carbon::parse($service->printed_at)->format('Y-m-d H:i:s') : null,
+            $service->created_at ? Carbon::parse($service->created_at)->format('Y-m-d H:i:s') : null,
         ];
     }
 
-     /**
-     * Helper function to format number as Rupiah for Excel display within concatenated strings.
-     */
     private function formatRupiahExcel($number)
     {
-        if (!is_numeric($number)) {
-            return $number;
-        }
+        if (!is_numeric($number)) return $number;
         return 'Rp ' . number_format($number, 0, ',', '.');
     }
 
     public function headings(): array
     {
         return [
+            'No.',
             'YSS', 'Kode Dealer', 'Nama Dealer', 'Point', 'Tanggal Service', 'Service Order',
             'No Polisi', 'No Work Order', 'Status Work Order', 'No Invoice',
             'Nama Pelanggan', 'KTP Pelanggan', 'NPWP No Pelanggan', 'NPWP Nama Pelanggan', 'Telepon Pelanggan',
@@ -203,8 +193,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
-
-                // Tambah baris untuk Group Header
                 $sheet->insertNewRowBefore(1, 1);
                 $groupHeaderRow = 1;
                 $headerRow = 2;
@@ -212,37 +200,35 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                 $headings = $this->headings();
                 $numHeadings = count($headings);
                 $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($numHeadings);
-
-                // Definisi Group Header
+                
                 $groupHeaders = [
-                    'K' => ['range' => "K{$groupHeaderRow}:O{$groupHeaderRow}", 'title' => 'Customer Information'],
-                    'P' => ['range' => "P{$groupHeaderRow}:R{$groupHeaderRow}", 'title' => 'M/C Information'],
-                    'S' => ['range' => "S{$groupHeaderRow}:Y{$groupHeaderRow}", 'title' => 'Service Details'],
-                    'AE' => ['range' => "AE{$groupHeaderRow}:AJ{$groupHeaderRow}", 'title' => 'Amount Breakdown'],
-                    'AK' => ['range' => "AK{$groupHeaderRow}:AN{$groupHeaderRow}", 'title' => 'Totals & Balance']
+                    'L' => ['range' => "L{$groupHeaderRow}:P{$groupHeaderRow}", 'title' => 'Customer Information'],
+                    'Q' => ['range' => "Q{$groupHeaderRow}:S{$groupHeaderRow}", 'title' => 'M/C Information'],
+                    'T' => ['range' => "T{$groupHeaderRow}:Z{$groupHeaderRow}", 'title' => 'Service Details'],
+                    'AF' => ['range' => "AF{$groupHeaderRow}:AK{$groupHeaderRow}", 'title' => 'Amount Breakdown'],
+                    'AL' => ['range' => "AL{$groupHeaderRow}:AO{$groupHeaderRow}", 'title' => 'Totals & Balance']
                 ];
 
-                $groupedColumns = [];
                 foreach ($groupHeaders as $startCol => $group) {
                     $sheet->mergeCells($group['range']);
                     $sheet->setCellValue("{$startCol}{$groupHeaderRow}", $group['title']);
-                    list($rangeStart, $rangeEnd) = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::rangeBoundaries($group['range']);
-                    for ($colIdx = $rangeStart[0]; $colIdx <= $rangeEnd[0]; $colIdx++) {
-                         $groupedColumns[$colIdx] = true;
-                    }
                 }
 
-                // Isi header yang tidak tergrup
                 for ($colIndex = 1; $colIndex <= $numHeadings; $colIndex++) {
-                    if (!isset($groupedColumns[$colIndex])) {
-                        $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                    $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                    // Check if inside group
+                    $inGroup = false;
+                    foreach($groupHeaders as $g) {
+                        list($start, $end) = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::rangeBoundaries($g['range']);
+                        if ($colIndex >= $start[0] && $colIndex <= $end[0]) $inGroup = true;
+                    }
+                    if (!$inGroup) {
                         $headerValue = $sheet->getCell("{$colLetter}{$headerRow}")->getValue();
                         $sheet->setCellValue("{$colLetter}{$groupHeaderRow}", $headerValue);
                         $sheet->mergeCells("{$colLetter}{$groupHeaderRow}:{$colLetter}{$headerRow}");
                     }
                 }
 
-                // Styling Header
                 $headerStyle = [
                     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
@@ -253,56 +239,47 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                 $sheet->getRowDimension($groupHeaderRow)->setRowHeight(25);
                 $sheet->getRowDimension($headerRow)->setRowHeight(40);
 
-                // Styling dan Rumus Total
                 if ($this->totalRows > 0) {
                     $firstDataRow = $this->headerRowCount + 1;
                     $lastDataRow = $this->totalRows + $this->headerRowCount;
-
+                    
                     $totalRow = $lastDataRow + 1;
-                    $totalNonKSGRow = $lastDataRow + 2; // Baris Baru untuk Total Tanpa KSG
+                    $totalNonKSGRow = $lastDataRow + 2;
 
-                    $columnsToSum = ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AM', 'AN'];
-                    $mergeUntilCol = 'AA';
+                    // Kolom yang dijumlahkan (Termasuk AK)
+                    $columnsToSum = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO'];
+                    $mergeUntilCol = 'AB';
 
-                    // --- BARIS 1: TOTAL SEMUA ---
+                    // 1. Total Semua
                     $sheet->setCellValue("A{$totalRow}", 'TOTAL SEMUA');
                     $sheet->mergeCells("A{$totalRow}:{$mergeUntilCol}{$totalRow}");
-
                     foreach ($columnsToSum as $column) {
                         $sheet->setCellValue("{$column}{$totalRow}", "=SUM({$column}{$firstDataRow}:{$column}{$lastDataRow})");
                         $sheet->getStyle("{$column}{$totalRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
                     }
 
-                    // --- BARIS 2: TOTAL TANPA KSG (SUMIF) ---
+                    // 2. Total Tanpa KSG
                     $sheet->setCellValue("A{$totalNonKSGRow}", 'TOTAL (TANPA KSG)');
                     $sheet->mergeCells("A{$totalNonKSGRow}:{$mergeUntilCol}{$totalNonKSGRow}");
-
                     foreach ($columnsToSum as $column) {
-                        // Rumus: =SUMIF(S2:S100, "<>*KSG*", AB2:AB100)
-                        // S adalah kolom 'Service Category'
-                        $rangeCategory = "S{$firstDataRow}:S{$lastDataRow}";
+                        $rangeCategory = "T{$firstDataRow}:T{$lastDataRow}";
                         $rangeSum = "{$column}{$firstDataRow}:{$column}{$lastDataRow}";
-
-                        // Kriteria: "<>*KSG*" artinya tidak mengandung kata KSG
                         $sheet->setCellValue("{$column}{$totalNonKSGRow}", "=SUMIF({$rangeCategory}, \"<>*KSG*\", {$rangeSum})");
                         $sheet->getStyle("{$column}{$totalNonKSGRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
                     }
 
-                    // Styling Footer (Total)
                     $totalRowStyle = [
                         'font' => ['bold' => true],
-                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFE0B2']], // Warna Orange Muda
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFE0B2']],
                         'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
                         'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
                     ];
-
-                    // Terapkan style ke baris Total Semua
+                    
                     $sheet->getStyle("A{$totalRow}:{$lastColLetter}{$totalRow}")->applyFromArray($totalRowStyle);
                     $sheet->getStyle("A{$totalRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
-
-                    // Terapkan style ke baris Total Tanpa KSG (Warna beda dikit biar kontras)
+                    
                     $sheet->getStyle("A{$totalNonKSGRow}:{$lastColLetter}{$totalNonKSGRow}")->applyFromArray(array_merge($totalRowStyle, [
-                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFC6EFCE']], // Warna Hijau Muda
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFC6EFCE']],
                     ]));
                     $sheet->getStyle("A{$totalNonKSGRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
                 }
@@ -317,18 +294,16 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         $lastDataRow = $this->totalRows + $this->headerRowCount;
         $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($this->headings()));
 
-        $stylesArray = [
+        return [
             "A" . ($this->headerRowCount + 1) . ":{$lastColLetter}{$lastDataRow}" => [
                 'alignment' => ['vertical' => Alignment::VERTICAL_TOP],
             ],
-            "S" . ($this->headerRowCount + 1) . ":Y{$lastDataRow}" => [
+            "T" . ($this->headerRowCount + 1) . ":Z{$lastDataRow}" => [
                  'alignment' => [
                     'wrapText' => true,
                     'vertical' => Alignment::VERTICAL_TOP
                  ],
             ],
         ];
-
-        return $stylesArray;
     }
 }
