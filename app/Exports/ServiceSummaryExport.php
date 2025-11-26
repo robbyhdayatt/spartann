@@ -32,18 +32,21 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
                 'service_details.item_name',
                 'service_details.item_category',
                 DB::raw('SUM(service_details.quantity) as total_qty'),
+                
+                // Total Penjualan (Part + Labor yg nempel di part)
                 DB::raw('SUM(service_details.price + service_details.labor_cost_service) as total_penjualan'),
-                DB::raw("SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_in, 0)
-                                ELSE 0
-                            END) as total_modal"),
+                
+                // Total Modal (HPP) - Menggunakan selling_in (Harga Beli) sesuai file asli Anda
+                DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_in, 0)) as total_modal"),
+                
+                // Total Profit
                 DB::raw("SUM(service_details.price + service_details.labor_cost_service) -
-                         SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_in, 0)
-                                ELSE 0
-                            END) as total_keuntungan")
+                         SUM(service_details.quantity * COALESCE(barangs.selling_in, 0)) as total_keuntungan")
             )
             ->whereBetween('services.reg_date', [$this->startDate, $this->endDate])
+            // --- FILTER BARU: HANYA YANG ADA BARANG_ID ---
+            ->whereNotNull('service_details.barang_id')
+            // ---------------------------------------------
             ->groupBy('service_details.item_code', 'service_details.item_name', 'service_details.item_category')
             ->orderBy('total_qty', 'desc');
 

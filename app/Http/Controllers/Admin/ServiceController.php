@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Service;
-use App\Models\ServiceDetail; // Tambahkan ini
-use App\Models\Barang;        // Tambahkan ini
-use App\Models\InventoryBatch; // Tambahkan ini
-use App\Models\StockMovement;  // Tambahkan ini
+use App\Models\ServiceDetail; 
+use App\Models\Barang;        
+use App\Models\InventoryBatch; 
+use App\Models\StockMovement;  
 use App\Imports\ServiceImport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Auth;
@@ -21,9 +21,6 @@ use App\Exports\ServiceDailyReportExport;
 
 class ServiceController extends Controller
 {
-    // ... (Method index, import, show, downloadPDF, exportExcel TETAP SAMA seperti sebelumnya) ...
-
-    // ... Salin method index() dari file lama Anda ...
     public function index(Request $request)
     {
         $this->authorize('view-service');
@@ -31,14 +28,30 @@ class ServiceController extends Controller
         $user = Auth::user();
         $query = Service::query();
         $dealers = collect();
-        $selectedDealer = null;
-        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
-        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+
+        // --- LOGIKA STICKY FILTER (Simpan Filter ke Session) ---
+        if ($request->filled('start_date') || $request->filled('end_date')) {
+            session([
+                'service.start_date' => $request->input('start_date'),
+                'service.end_date' => $request->input('end_date'),
+            ]);
+        }
+        
+        if ($request->has('dealer_code')) {
+            session(['service.dealer_code' => $request->input('dealer_code')]);
+        }
+
+        // Ambil Data (Prioritas: Request -> Session -> Default Hari Ini)
+        $startDate = $request->input('start_date', session('service.start_date', now()->toDateString()));
+        $endDate = $request->input('end_date', session('service.end_date', now()->toDateString()));
+        // -------------------------------------------------------
+
         $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC', 'ASD']);
+        $selectedDealer = null;
 
         if ($canFilterByDealer) {
             $dealers = Lokasi::where('tipe', 'DEALER')->orderBy('kode_lokasi')->get(['kode_lokasi', 'nama_lokasi']);
-            $selectedDealer = $request->input('dealer_code');
+            $selectedDealer = $request->input('dealer_code', session('service.dealer_code'));
 
             if ($selectedDealer && $selectedDealer !== 'all') {
                 $query->where('dealer_code', $selectedDealer);
@@ -52,20 +65,25 @@ class ServiceController extends Controller
             }
         }
 
+        // KEMBALI KE FILTER TANGGAL IMPORT (created_at)
         if ($startDate && $endDate) {
             try {
-                $validStartDate = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
-                $validEndDate = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
-                $query->whereBetween('services.created_at', [$validStartDate, $validEndDate]);
+                // Karena created_at ada jam-nya, kita harus set startOfDay dan endOfDay
+                $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
+                $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
+                
+                $query->whereBetween('services.created_at', [$start, $end]);
 
             } catch (\Exception $e) {
-                $startDate = now()->startOfMonth()->toDateString();
-                $endDate = now()->endOfMonth()->toDateString();
-                $query->whereBetween('services.created_at', [Carbon::parse($startDate)->startOfDay(), Carbon::parse($endDate)->endOfDay()]);
+                // Fallback jika error
+                $query->whereDate('services.created_at', today());
             }
         }
 
-        $services = $query->orderBy('created_at', 'desc')->paginate(1000)->withQueryString();
+        // Sorting default kembali ke created_at
+        $services = $query->orderBy('created_at', 'desc')
+                          ->paginate(1000)
+                          ->withQueryString();
 
         return view('admin.services.index', [
             'services' => $services,
@@ -75,59 +93,6 @@ class ServiceController extends Controller
             'startDate' => $startDate,
             'endDate' => $endDate
         ]);
-    }
-
-    // ... Salin method import(), show(), downloadPDF(), exportExcel() dari file lama Anda ...
-    // (Pastikan Anda menyalin method-method tersebut ke sini)
-
-    public function show(Service $service)
-    {
-        $user = Auth::user();
-        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC']);
-
-        if (!$isSuperAdminOrPic) {
-            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
-                abort(403, 'Anda tidak diizinkan melihat detail service ini.');
-            }
-        }
-
-        $this->authorize('view-service');
-        $service->load('details.barang', 'lokasi'); // Updated relation load
-        return view('admin.services.show', compact('service'));
-    }
-
-    public function downloadPDF($id)
-    {
-        $this->authorize('view-service');
-        $service = Service::with('details.barang', 'lokasi')->findOrFail($id); // Updated relation
-
-        $user = Auth::user();
-        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC']);
-
-        if (!$isSuperAdminOrPic) {
-            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
-                abort(403, 'Anda tidak diizinkan mengunduh PDF service ini.');
-            }
-        }
-
-        if (is_null($service->printed_at)) {
-            $service->printed_at = now();
-            $service->save();
-        }
-
-        $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
-        $width_cm = 24;
-        $height_cm = 14;
-        $points_per_cm = 28.3465;
-        $widthInPoints = $width_cm * $points_per_cm;
-        $heightInPoints = $height_cm * $points_per_cm;
-        $customPaper = [0, 0, $widthInPoints, $heightInPoints];
-
-        $pdf = PDF::loadView('admin.services.pdf', compact('service'))
-            ->setPaper($customPaper)
-            ->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
-
-        return $pdf->stream($fileName);
     }
 
     public function import(Request $request)
@@ -170,12 +135,10 @@ class ServiceController extends Controller
     public function exportExcel(Request $request)
     {
         $this->authorize('export-service-report');
-        $user = Auth::user();
-        $selectedDealer = $request->query('dealer_code');
-        $startDate = $request->query('start_date');
-        $endDate = $request->query('end_date');
-
-        if (!$startDate || !$endDate) return redirect()->back()->with('error', 'Pilih tanggal.');
+        
+        $startDate = $request->input('start_date') ?? session('service.start_date') ?? now()->toDateString();
+        $endDate = $request->input('end_date') ?? session('service.end_date') ?? now()->toDateString();
+        $selectedDealer = $request->input('dealer_code') ?? session('service.dealer_code');
 
         try {
             $validStartDate = Carbon::createFromFormat('Y-m-d', $startDate)->format('Y-m-d');
@@ -187,8 +150,60 @@ class ServiceController extends Controller
         return Excel::download(new ServiceDailyReportExport($selectedDealer, $validStartDate, $validEndDate), 'Laporan_Service.xlsx');
     }
 
+    public function show(Service $service)
+    {
+        $user = Auth::user();
+        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC', 'ASD']);
+
+        if (!$isSuperAdminOrPic) {
+            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
+                abort(403, 'Anda tidak diizinkan melihat detail service ini.');
+            }
+        }
+
+        $this->authorize('view-service');
+        $service->load('details.barang', 'lokasi'); 
+        return view('admin.services.show', compact('service'));
+    }
+
+    public function downloadPDF($id)
+    {
+        $this->authorize('view-service');
+        $service = Service::with('details.barang', 'lokasi')->findOrFail($id); 
+
+        $user = Auth::user();
+        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC', 'ASD']);
+
+        if (!$isSuperAdminOrPic) {
+            if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
+                abort(403, 'Anda tidak diizinkan mengunduh PDF service ini.');
+            }
+        }
+
+        if (is_null($service->printed_at)) {
+            $service->printed_at = now();
+            $service->save();
+        }
+
+        $fileName = 'Invoice-' . $service->invoice_no . '.pdf';
+        $width_cm = 24;
+        $height_cm = 14;
+        $points_per_cm = 28.3465;
+        $widthInPoints = $width_cm * $points_per_cm;
+        $heightInPoints = $height_cm * $points_per_cm;
+        $customPaper = [0, 0, $widthInPoints, $heightInPoints];
+
+        $pdf = PDF::loadView('admin.services.pdf', compact('service'))
+            ->setPaper($customPaper)
+            ->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
+
+        return $pdf->stream($fileName);
+    }
+
+    // ... Method update() biarkan saja seperti semula ...
     public function update(Request $request, Service $service)
     {
+        // ... (Isi method update tetap sama, tidak perlu diubah) ...
         $this->authorize('manage-service');
 
         $validated = $request->validate([
@@ -198,7 +213,6 @@ class ServiceController extends Controller
             'items.*.price' => 'required|numeric|min:0',
         ]);
 
-        // Pastikan user punya lokasi untuk memotong stok
         $user = Auth::user();
         if (!$user->lokasi_id) {
             return back()->with('error', 'Akun Anda tidak memiliki lokasi gudang. Stok tidak dapat diproses.');
@@ -212,7 +226,6 @@ class ServiceController extends Controller
                 $qtyKeluar = $item['quantity'];
                 $hargaJual = $item['price'];
 
-                // 1. Cek Ketersediaan Stok
                 $stokTersedia = InventoryBatch::where('barang_id', $barang->id)
                     ->where('lokasi_id', $lokasiId)
                     ->sum('quantity');
@@ -221,7 +234,6 @@ class ServiceController extends Controller
                     throw new \Exception("Stok untuk {$barang->part_name} tidak mencukupi. Tersedia: {$stokTersedia}");
                 }
 
-                // 2. Logika FIFO (Potong Batch)
                 $batches = InventoryBatch::where('barang_id', $barang->id)
                     ->where('lokasi_id', $lokasiId)
                     ->where('quantity', '>', 0)
@@ -260,12 +272,12 @@ class ServiceController extends Controller
                 ServiceDetail::create([
                     'service_id'    => $service->id,
                     'barang_id'     => $barang->id,
-                    'item_code'     => $barang->part_code, // Historical data
+                    'item_code'     => $barang->part_code,
                     'item_name'     => $barang->part_name,
-                    'item_category' => 'PART', // Default category
+                    'item_category' => 'PART',
                     'quantity'      => $qtyKeluar,
                     'price'         => $hargaJual,
-                    'cost_price'    => $avgCostPrice, // Simpan HPP
+                    'cost_price'    => $avgCostPrice,
                     'subtotal'      => $qtyKeluar * $hargaJual,
                     'package_name'  => '-',
                 ]);

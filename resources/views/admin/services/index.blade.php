@@ -81,14 +81,14 @@
 
                         <div class="col-md-3">
                             <div class="form-group">
-                                <label for="start_date">Tanggal Mulai (Import):</label>
+                                <label for="start_date">Tanggal Mulai:</label>
                                 <input type="date" name="start_date" id="start_date" class="form-control" value="{{ $startDate ?? '' }}">
                             </div>
                         </div>
 
                         <div class="col-md-3">
                             <div class="form-group">
-                                <label for="end_date">Tanggal Selesai (Import):</label>
+                                <label for="end_date">Tanggal Selesai</label>
                                 <input type="date" name="end_date" id="end_date" class="form-control" value="{{ $endDate ?? '' }}">
                             </div>
                         </div>

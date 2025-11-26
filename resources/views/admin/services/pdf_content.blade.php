@@ -21,7 +21,7 @@ $totalDetailsCount = $service->details->count();
 $maxItemsPerPage = 40; // Bisa muat lebih banyak item karena font kecil
 
 // Ukuran Font Standar (Diperkecil)
-$baseFontSize = 12;
+$baseFontSize = 11;
 $lineHeight = 1.2;
 $rowPadding = 2;
 $signaturePaddingTop = 30;

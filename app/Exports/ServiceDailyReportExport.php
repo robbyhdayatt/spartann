@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\Service;
+use App\Models\ServiceDetail;
 use App\Models\Lokasi;
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -21,7 +22,7 @@ use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
 use PhpOffice\PhpSpreadsheet\Cell\Cell;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use Illuminate\Support\Facades\DB;
 
 class ServiceDailyReportExport extends DefaultValueBinder implements
     FromQuery,
@@ -36,6 +37,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
     protected $startDate;
     protected $endDate;
     protected $dealers;
+    
     private $totalRows = 0;
     private $headerRowCount = 2;
     private $rowNumber = 0;
@@ -50,13 +52,11 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
 
     public function bindValue(Cell $cell, $value)
     {
-        // Format Text
         if (in_array($cell->getColumn(), ['M', 'P', 'S', 'W'])) {
             $cell->setValueExplicit($value, DataType::TYPE_STRING);
             return true;
         }
         
-        // Format Rupiah (AC s/d AO)
         $moneyColumns = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO'];
         if (in_array($cell->getColumn(), $moneyColumns)) {
              if (is_numeric($value)) {
@@ -68,23 +68,36 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         return parent::bindValue($cell, $value);
     }
 
-    public function query(): Builder
-    {
-        $query = Service::query()
-                 ->with(['lokasi', 'details'])
-                 ->orderBy('created_at', 'desc');
-
+    /**
+     * Helper Filter untuk memastikan konsistensi data antara View dan Calculation
+     */
+    private function applyFilters($query) {
         if ($this->startDate && $this->endDate) {
             $start = Carbon::parse($this->startDate)->startOfDay();
             $end = Carbon::parse($this->endDate)->endOfDay();
-            $query->whereBetween('services.created_at', [$start, $end]);
+            $query->whereBetween('created_at', [$start, $end]);
         } elseif ($this->startDate) {
-            $query->whereDate('services.created_at', '>=', $this->startDate);
+            $start = Carbon::parse($this->startDate)->startOfDay();
+            $query->where('created_at', '>=', $start);
         }
 
         if ($this->dealerCode && $this->dealerCode !== 'all') {
             $query->where('dealer_code', $this->dealerCode);
         }
+        return $query;
+    }
+
+    private function getBaseQuery(): Builder
+    {
+        $query = Service::query();
+        return $this->applyFilters($query);
+    }
+
+    public function query(): Builder
+    {
+        $query = $this->getBaseQuery()
+                 ->with(['lokasi', 'details'])
+                 ->orderBy('created_at', 'desc');
 
         $this->totalRows = (clone $query)->count();
         return $query;
@@ -188,11 +201,95 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         ];
     }
 
+    /**
+     * METODE FINAL: Hitung Pengurang KSG Berdasarkan Nama Paket
+     * Solusi untuk masalah "Item Berbayar Tersandera Kategori KSG"
+     */
+    private function calculateTotalWithoutKSG()
+    {
+        // 1. Ambil Total Keseluruhan (Pasti Benar dari Database)
+        $grandTotal = (clone $this->getBaseQuery())->selectRaw('
+            SUM(e_payment_amount) as e_payment_amount,
+            SUM(cash_amount) as cash_amount,
+            SUM(debit_amount) as debit_amount,
+            SUM(total_down_payment) as total_down_payment,
+            SUM(total_labor) as total_labor,
+            SUM(total_part_service) as total_part_service,
+            SUM(total_oil_service) as total_oil_service,
+            SUM(total_retail_parts) as total_retail_parts,
+            SUM(total_retail_oil) as total_retail_oil,
+            SUM(total_amount) as total_amount,
+            SUM(benefit_amount) as benefit_amount,
+            SUM(total_payment) as total_payment,
+            SUM(balance) as balance
+        ')->first();
+
+        // 2. Hitung Nilai KSG (Hanya Jasa yang PAKET-nya benar-benar KSG)
+        // Mengabaikan "GANTI KAMPAS REM", "OVERHAUL CVT", dll meskipun kategori-nya KSG.
+        
+        $ksgLaborSum = ServiceDetail::whereHas('service', function($q) {
+             $this->applyFilters($q); // Reuse filter yang sama persis
+        })
+        ->where(function($q) {
+            // PERBAIKAN UTAMA: Filter berdasarkan NAMA PAKET, bukan Kategori
+            $q->where('service_package_name', 'LIKE', 'KSG%')
+              ->orWhere('service_package_name', 'LIKE', 'ksg%');
+        })
+        // Menjumlahkan labor_cost_service dari detail yang lolos filter
+        ->sum('labor_cost_service');
+
+        // 3. Lakukan Pengurangan
+        // Total Labor Ritel = Total Labor Semua - Labor Paket KSG
+        return (object) [
+            'e_payment_amount' => $grandTotal->e_payment_amount ?? 0,
+            'cash_amount' => $grandTotal->cash_amount ?? 0,
+            'debit_amount' => $grandTotal->debit_amount ?? 0,
+            'total_down_payment' => $grandTotal->total_down_payment ?? 0,
+            
+            // Labor dikurangi nilai PAKET KSG murni
+            'total_labor' => ($grandTotal->total_labor ?? 0) - $ksgLaborSum,
+            
+            'total_part_service' => $grandTotal->total_part_service ?? 0, 
+            'total_oil_service' => $grandTotal->total_oil_service ?? 0, 
+            'total_retail_parts' => $grandTotal->total_retail_parts ?? 0,
+            'total_retail_oil' => $grandTotal->total_retail_oil ?? 0,
+            
+            // Total Amount dikurangi nilai PAKET KSG murni
+            'total_amount' => ($grandTotal->total_amount ?? 0) - $ksgLaborSum, 
+            
+            'benefit_amount' => $grandTotal->benefit_amount ?? 0,
+            'total_payment' => $grandTotal->total_payment ?? 0, 
+            'balance' => ($grandTotal->total_payment ?? 0) - (($grandTotal->total_amount ?? 0) - $ksgLaborSum)
+        ];
+    }
+
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
+                
+                // 1. Hitung Total Semua
+                $grandTotalQuery = (clone $this->getBaseQuery())->selectRaw('
+                    SUM(e_payment_amount) as e_payment_amount,
+                    SUM(cash_amount) as cash_amount,
+                    SUM(debit_amount) as debit_amount,
+                    SUM(total_down_payment) as total_down_payment,
+                    SUM(total_labor) as total_labor,
+                    SUM(total_part_service) as total_part_service,
+                    SUM(total_oil_service) as total_oil_service,
+                    SUM(total_retail_parts) as total_retail_parts,
+                    SUM(total_retail_oil) as total_retail_oil,
+                    SUM(total_amount) as total_amount,
+                    SUM(benefit_amount) as benefit_amount,
+                    SUM(total_payment) as total_payment,
+                    SUM(balance) as balance
+                ')->first();
+
+                // 2. Hitung Total TANPA KSG (Metode Baru via Paket)
+                $nonKsgTotal = $this->calculateTotalWithoutKSG();
+
+                // Formatting Header
                 $sheet->insertNewRowBefore(1, 1);
                 $groupHeaderRow = 1;
                 $headerRow = 2;
@@ -216,7 +313,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
 
                 for ($colIndex = 1; $colIndex <= $numHeadings; $colIndex++) {
                     $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
-                    // Check if inside group
                     $inGroup = false;
                     foreach($groupHeaders as $g) {
                         list($start, $end) = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::rangeBoundaries($g['range']);
@@ -240,32 +336,45 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                 $sheet->getRowDimension($headerRow)->setRowHeight(40);
 
                 if ($this->totalRows > 0) {
-                    $firstDataRow = $this->headerRowCount + 1;
                     $lastDataRow = $this->totalRows + $this->headerRowCount;
-                    
                     $totalRow = $lastDataRow + 1;
                     $totalNonKSGRow = $lastDataRow + 2;
 
-                    // Kolom yang dijumlahkan (Termasuk AK)
-                    $columnsToSum = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO'];
+                    $colMap = [
+                        'AC' => 'e_payment_amount',
+                        'AD' => 'cash_amount',
+                        'AE' => 'debit_amount',
+                        'AF' => 'total_down_payment',
+                        'AG' => 'total_labor',
+                        'AH' => 'total_part_service',
+                        'AI' => 'total_oil_service',
+                        'AJ' => 'total_retail_parts',
+                        'AK' => 'total_retail_oil',
+                        'AL' => 'total_amount',
+                        'AM' => 'benefit_amount',
+                        'AN' => 'total_payment',
+                        'AO' => 'balance'
+                    ];
                     $mergeUntilCol = 'AB';
 
-                    // 1. Total Semua
+                    // 1. Output Total Semua
                     $sheet->setCellValue("A{$totalRow}", 'TOTAL SEMUA');
                     $sheet->mergeCells("A{$totalRow}:{$mergeUntilCol}{$totalRow}");
-                    foreach ($columnsToSum as $column) {
-                        $sheet->setCellValue("{$column}{$totalRow}", "=SUM({$column}{$firstDataRow}:{$column}{$lastDataRow})");
-                        $sheet->getStyle("{$column}{$totalRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
+                    
+                    foreach ($colMap as $col => $key) {
+                        $val = $grandTotalQuery->$key ?? 0;
+                        $sheet->setCellValue("{$col}{$totalRow}", $val);
+                        $sheet->getStyle("{$col}{$totalRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
                     }
 
-                    // 2. Total Tanpa KSG
+                    // 2. Output Total Tanpa KSG
                     $sheet->setCellValue("A{$totalNonKSGRow}", 'TOTAL (TANPA KSG)');
                     $sheet->mergeCells("A{$totalNonKSGRow}:{$mergeUntilCol}{$totalNonKSGRow}");
-                    foreach ($columnsToSum as $column) {
-                        $rangeCategory = "T{$firstDataRow}:T{$lastDataRow}";
-                        $rangeSum = "{$column}{$firstDataRow}:{$column}{$lastDataRow}";
-                        $sheet->setCellValue("{$column}{$totalNonKSGRow}", "=SUMIF({$rangeCategory}, \"<>*KSG*\", {$rangeSum})");
-                        $sheet->getStyle("{$column}{$totalNonKSGRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
+                    
+                    foreach ($colMap as $col => $key) {
+                        $val = $nonKsgTotal->$key ?? 0;
+                        $sheet->setCellValue("{$col}{$totalNonKSGRow}", $val);
+                        $sheet->getStyle("{$col}{$totalNonKSGRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
                     }
 
                     $totalRowStyle = [

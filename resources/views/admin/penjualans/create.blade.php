@@ -21,21 +21,20 @@
                     </div>
                 @endif
 
-                {{-- Header Penjualan (Layout mirip PO) --}}
+                {{-- Header Penjualan --}}
                 <div class="row">
                     <div class="col-md-4 form-group">
                         <label>Tanggal Penjualan</label>
                         <input type="date" class="form-control" name="tanggal_jual" value="{{ now()->format('Y-m-d') }}" required>
                     </div>
+                    
+                    {{-- PERUBAHAN: Input Manual Nama Pelanggan --}}
                     <div class="col-md-4 form-group">
-                        <label>Pelanggan / Konsumen</label>
-                        <select class="form-control select2" id="konsumen-select" name="konsumen_id" required style="width: 100%;">
-                            <option value="" disabled selected>Pilih Pelanggan</option>
-                            @foreach($konsumens as $k)
-                            <option value="{{ $k->id }}">{{ $k->nama_konsumen }}</option>
-                            @endforeach
-                        </select>
+                        <label>Nama Pelanggan</label>
+                        <input type="text" class="form-control" name="customer_name" placeholder="Ketik Nama Pelanggan (cth: Budi)" required>
                     </div>
+                    {{-- AKHIR PERUBAHAN --}}
+
                     <div class="col-md-4 form-group">
                         <label>Lokasi Stok (Sumber)</label>
                         <input type="text" class="form-control" value="{{ $lokasi->nama_lokasi }}" readonly>
@@ -126,11 +125,10 @@
 @section('js')
     <script>
         $(document).ready(function() {
-            // Init header select2
-            $('#konsumen-select').select2({ theme: 'bootstrap4', placeholder: "Pilih Pelanggan" });
+            // HAPUS: $('#konsumen-select').select2(...) karena elemennya sudah diganti input text biasa
 
             let itemIndex = 0;
-            let productList = []; // Cache data barang dari API
+            let productList = []; 
             const itemsTable = $('#sales-items-table');
             const displayGrandTotal = $('#display-grand-total');
 
@@ -140,13 +138,11 @@
             // Load data barang via API saat halaman dibuka
             let currentLokasiId = "{{ $lokasi->id ?? '' }}";
 
-            // Load data barang via API dengan parameter lokasi_id
             $.getJSON("{{ route('admin.api.get-barang-items') }}", { lokasi_id: currentLokasiId }, function(data) {
                 productList = data;
                 addItemRow();
             }).fail(function() {
                 console.error("Gagal memuat barang");
-                // Jangan alert terus menerus jika gagal, cukup log console
             });
 
             // Fungsi Tambah Baris
@@ -157,14 +153,12 @@
                 let lastRow = itemsTable.find('tr').last();
                 let select = lastRow.find('.item-select');
 
-                // Isi opsi dropdown dari cache
                 productList.forEach(p => {
                     let label = `${p.part_name} (${p.part_code})`;
                     if(p.merk) label += ` - ${p.merk}`;
                     select.append(new Option(label, p.id));
                 });
 
-                // Init Select2 pada baris baru
                 select.select2({
                     theme: 'bootstrap4',
                     placeholder: "Pilih Barang",
@@ -174,18 +168,15 @@
                 itemIndex++;
             }
 
-            // Event: Klik Tambah Item
             $('#add-item-btn').on('click', function() {
                 addItemRow();
             });
 
-            // Event: Hapus Item
             itemsTable.on('click', '.remove-item-btn', function() {
                 $(this).closest('tr').remove();
                 calculateAll();
             });
 
-            // Event: Pilih Barang Berubah
             itemsTable.on('change', '.item-select', function() {
                 let row = $(this).closest('tr');
                 let id = $(this).val();
@@ -195,20 +186,16 @@
                     row.find('.item-stok').val(item.total_stok);
                     row.find('.item-price').val(formatRupiah(item.retail));
 
-                    // Set max qty sesuai stok
                     let qtyInput = row.find('.item-qty');
                     qtyInput.attr('max', item.total_stok);
 
-                    // Jika qty sekarang melebihi stok baru, reset ke 1
                     if(parseInt(qtyInput.val()) > item.total_stok) {
                         qtyInput.val(1);
                     }
-
                     calculateRow(row, item.retail);
                 }
             });
 
-            // Event: Input Qty Berubah
             itemsTable.on('input change', '.item-qty', function() {
                 let row = $(this).closest('tr');
                 let id = row.find('.item-select').val();
@@ -219,7 +206,6 @@
                 }
             });
 
-            // Hitung Subtotal Per Baris
             function calculateRow(row, price) {
                 let qty = parseInt(row.find('.item-qty').val()) || 0;
                 let sub = qty * price;
@@ -227,24 +213,13 @@
                 calculateAll();
             }
 
-            // Hitung Grand Total
             function calculateAll() {
                 let grandTotal = 0;
                 itemsTable.find('tr').each(function() {
-                    // Ambil nilai subtotal, hapus karakter non-digit (Rp, titik, koma, spasi)
                     let subText = $(this).find('.item-subtotal').val();
-                    let subValue = subText.replace(/[^0-9,-]+/g,"").replace(',','.'); // Versi aman untuk format IDR
-
-                    // Alternatif sederhana jika format konsisten 'Rp 100.000' -> hapus non digit
-                    // let subValue = subText.replace(/\D/g, '');
-
-                    // Cara paling aman karena kita punya raw price & qty, tapi ambil dari field text harus hati2 parsingnya.
-                    // Kita gunakan logic parsing standar AdminLTE template sebelumnya:
-                    let cleanValue = subText.replace(/[^\d]/g, ''); // Ambil angka saja (asumsi tidak ada sen)
-
+                    let cleanValue = subText.replace(/[^\d]/g, ''); 
                     grandTotal += parseInt(cleanValue) || 0;
                 });
-
                 displayGrandTotal.text(formatRupiah(grandTotal));
             }
         });

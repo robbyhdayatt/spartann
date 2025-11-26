@@ -9,12 +9,12 @@ use App\Models\Barang;
 use App\Models\InventoryBatch;
 use App\Models\StockMovement;
 use Illuminate\Support\Facades\DB;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Concerns\OnEachRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Row;
+use Illuminate\Support\Str;
 
 class ServiceImport implements OnEachRow, WithChunkReading
 {
@@ -28,6 +28,10 @@ class ServiceImport implements OnEachRow, WithChunkReading
     private $userId;
     private $lokasiMapping = [];
     private $convertMapping = [];
+
+    // Mapping Dinamis Index Kolom
+    private $headerRowDetected = false;
+    private $colMap = [];
 
     public function __construct(string $userDealerCode)
     {
@@ -47,12 +51,13 @@ class ServiceImport implements OnEachRow, WithChunkReading
         if (!is_string($value)) return $value;
         $value = str_replace(['–', '—', '−', '‒', '―'], '-', $value);
         $value = preg_replace('/[\h\s\p{Zs}]+/u', ' ', $value);
-        $value = preg_replace('/[^\P{Cc}\t\n\r]/u', '', $value);
         return trim($value);
     }
 
     private function parseDate($dateValue)
     {
+        if (empty($dateValue)) return null;
+        // Handle format Excel serial number (e.g. 45982.0)
         if (is_numeric($dateValue)) {
             try {
                return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($dateValue)->format('Y-m-d');
@@ -60,40 +65,146 @@ class ServiceImport implements OnEachRow, WithChunkReading
         }
         try {
             return \Carbon\Carbon::createFromFormat('d/m/Y', trim(str_replace('"', '', $dateValue)))->format('Y-m-d');
-        } catch (\Exception $e) { return null; }
+        } catch (\Exception $e) {
+            try {
+                return \Carbon\Carbon::parse($dateValue)->format('Y-m-d');
+            } catch (\Exception $e) { return null; }
+        }
     }
 
-    // ++ PERBAIKAN: Logic pembersih angka lebih pintar ++
     private function cleanNumeric($value)
     {
         if (is_numeric($value)) return floatval($value);
         if (empty($value)) return 0;
 
         $str = strval($value);
-        $str = preg_replace('/[Rp\s]/i', '', $str); // Hapus Rp dan spasi
+        $str = preg_replace('/[Rp\s]/i', '', $str);
         
-        // Handle suffix .0 atau .00 (format desimal Excel string)
+        // PENTING: Hapus suffix .0 atau .00 (format string excel) sebelum deteksi ribuan
+        // Ini mencegah 24000.0 dianggap 240.000 oleh logika ribuan di bawah
         if (preg_match('/\.0+$/', $str)) {
             $str = preg_replace('/\.0+$/', '', $str);
         }
 
         $isNegative = (strpos($str, '-') !== false);
-        $str = preg_replace('/[^0-9.,]/', '', $str); // Sisakan angka, titik, koma
+        $str = preg_replace('/[^0-9.,]/', '', $str);
 
-        // Deteksi Ribuan vs Desimal
-        if (strpos($str, '.') !== false && strpos($str, ',') !== false) {
-            $str = str_replace('.', '', $str); // 25.000,00 -> 25000,00
-            $str = str_replace(',', '.', $str); // -> 25000.00
-        } elseif (strpos($str, '.') !== false) {
-            // Asumsi 25.000 adalah 25 ribu (Format Indo)
-            // Kecuali jika angka kecil misal 1.5 (jarang di harga)
-            $str = str_replace('.', '', $str); 
+        // Logika Deteksi Ribuan vs Desimal
+        if (strpos($str, ',') !== false && strpos($str, '.') !== false) {
+            $str = str_replace('.', '', $str); // Hapus titik ribuan
+            $str = str_replace(',', '.', $str); // Ganti koma jadi titik
         } elseif (strpos($str, ',') !== false) {
              $str = str_replace(',', '.', $str);
+        } elseif (strpos($str, '.') !== false) {
+             // Jika ada titik tapi tidak ada koma (misal: 25.000), hapus titik
+             $str = str_replace('.', '', $str);
         }
 
         $val = floatval($str);
         return $isNegative ? -$val : $val;
+    }
+
+    /**
+     * Mendeteksi baris header dan menyimpan index kolom
+     */
+    private function detectHeaderRow(array $row)
+    {
+        // Ubah header jadi slug untuk pencarian yang konsisten
+        $rowSlugs = array_map(function($item) {
+            return Str::slug(trim((string)$item), '_');
+        }, $row);
+
+        // Cek apakah ini baris header (harus ada kolom kunci)
+        if (!in_array('invoice_no', $rowSlugs) && !in_array('no_invoice', $rowSlugs)) {
+            return false;
+        }
+
+        // Kamus Kata Kunci Header
+        $possibleHeaders = [
+            'invoice_no'        => ['invoice_no', 'no_invoice'],
+            'dealer_code'       => ['dealer', 'dealer_code'],
+            'reg_date'          => ['reg_date', 'date', 'tanggal'],
+            'service_category'  => ['service_category'],
+            'total_oil'         => ['total_oil_service', 'total_oli', 'total_oil'], // Handle typo/variasi
+            'total_amount'      => ['total_amount', 'grand_total', 'jumlah_total'],
+            'technician'        => ['technician_name'],
+            
+            // Kolom Detail
+            'package_name'      => ['service_package'],
+            'labor_cost'        => ['labor_cost_service'],
+            'parts_no'          => ['parts_no'],
+            'parts_name'        => ['parts_name'],
+            'parts_qty'         => ['parts_qty'],
+            'parts_price'       => ['parts_price'],
+            
+            // Nominal Lain
+            'e_payment'         => ['e_payment_amount'],
+            'cash'              => ['cash_amount'],
+            'debit'             => ['debit_amount'],
+            'dp'                => ['down_payment_dp'],
+            'total_labor'       => ['total_labor'],
+            'total_part'        => ['total_part_service'],
+            'total_retail_parts'=> ['total_retail_parts'],
+            'total_retail_oil'  => ['total_retail_oil'],
+            'benefit'           => ['benefit_amount'],
+            'total_payment'     => ['total_payment'],
+            'balance'           => ['balance'],
+            
+            // Info Tambahan
+            'yss'               => ['yss'],
+            'point'             => ['point'],
+            'service_order'     => ['service_order'],
+            'plate_no'          => ['plate_no'],
+            'work_order'        => ['no_work_order'],
+            'wo_status'         => ['status_work_order'],
+            'cust_name'         => ['customer_information', 'nama_customer', 'nama'],
+            'cust_ktp'          => ['ktp'],
+            'cust_phone'        => ['telepon_no'],
+            'mc_brand'          => ['brand'],
+            'mc_model'          => ['model_name'],
+            'mc_frame'          => ['frame_no'],
+            'payment_type'      => ['payment_type'],
+            'trans_code'        => ['transaction_code'],
+        ];
+
+        foreach ($possibleHeaders as $key => $slugs) {
+            foreach ($slugs as $slug) {
+                $index = array_search($slug, $rowSlugs);
+                if ($index !== false) {
+                    $this->colMap[$key] = $index;
+                    break;
+                }
+            }
+        }
+
+        // Fallback (jika header tidak terdeteksi sempurna, gunakan posisi relatif file Anda)
+        if (!isset($this->colMap['cust_name'])) $this->colMap['cust_name'] = 10;
+        if (!isset($this->colMap['total_amount'])) $this->colMap['total_amount'] = 39; 
+        if (!isset($this->colMap['total_oil'])) $this->colMap['total_oil'] = 36;
+
+        $this->headerRowDetected = true;
+        Log::info("Header Import Detected: " . json_encode($this->colMap));
+        return true;
+    }
+
+    private function getVal($row, $key, $default = null)
+    {
+        // Fallback Index (Sesuai urutan CSV Anda) jika mapping gagal
+        $defaultIndex = [
+            'dealer_code' => 2, 'invoice_no' => 9, 'reg_date' => 4,
+            'service_category' => 18, 'package_name' => 21, 'labor_cost' => 22,
+            'parts_no' => 23, 'parts_name' => 24, 'parts_qty' => 25, 'parts_price' => 26,
+            'total_labor' => 34, 'total_part' => 35, 'total_oil' => 36, 
+            'total_retail_parts' => 37, 'total_retail_oil' => 38, 'total_amount' => 39,
+            'benefit' => 40, 'total_payment' => 41, 'balance' => 42, 'technician' => 43
+        ];
+
+        $index = $this->colMap[$key] ?? ($defaultIndex[$key] ?? -1);
+        
+        if ($index >= 0 && isset($row[$index])) {
+            return $row[$index];
+        }
+        return $default;
     }
 
     private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId, $invoiceNo)
@@ -106,10 +217,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $stokTersedia = InventoryBatch::where('barang_id', $barangId)
             ->where('lokasi_id', $lokasiId)
             ->sum('quantity');
-
-        if ($stokTersedia < $qty) {
-            throw new \Exception("Stok Barang '{$namaBarang}' (ID: {$barangId}) TIDAK MENCUKUPI. Butuh: {$qty}, Tersedia: {$stokTersedia}. Import Invoice #{$invoiceNo} dibatalkan.");
-        }
 
         $batches = InventoryBatch::where('barang_id', $barangId)
             ->where('lokasi_id', $lokasiId)
@@ -141,136 +248,94 @@ class ServiceImport implements OnEachRow, WithChunkReading
             ]);
             $sisaQty -= $potong;
         }
-
         return ($qty > 0) ? ($totalCost / $qty) : 0;
-    }
-
-    // ++ DETEKSI PERGESERAN KOLOM (Shift) ++
-    private function getColumnIndex($baseIndex, $row, $checkPartColumn = true) 
-    {
-        $offset = 0;
-        // Cek Indikator Pergeseran:
-        // Jika kolom 23 (Parts No normal) kosong TAPI kolom 25 (Parts No geser) ada isinya
-        // Maka asumsikan terjadi pergeseran 2 kolom ke kanan untuk data Parts & Amount
-        if ($checkPartColumn && empty($row[23]) && !empty($row[25])) {
-            $offset = 2;
-        }
-        
-        // Jika index yang diminta berada di area yang terpengaruh shift (> 22)
-        if ($baseIndex > 22) {
-            return $baseIndex + $offset;
-        }
-        return $baseIndex;
     }
 
     private function createServiceDetail(Service $service, array $row, int $rowIndex)
     {
-        $hasActivity = false;
-
-        // Tentukan Offset Shift (Cek kolom 23 vs 25)
-        $offset = (empty($row[23]) && !empty($row[25])) ? 2 : 0;
-
-        // Mapping Index (Dinamis dengan Offset)
-        $serviceCategoryCode_idx = 18; 
-        $servicePackageName_idx = 21; 
-        $laborCostService_idx = 22; 
-        
-        // Kolom Parts ke belakang kena shift
-        $partsNo_idx = 23 + $offset;      
-        $partsName_idx = 24 + $offset;     
-        $partsQty_idx = 25 + $offset;      
-        $partsPrice_idx = 26 + $offset;    
-
+        // Gunakan getVal() untuk konsistensi
         $serviceCategoryCode = $this->currentServiceCategoryCode;
         if (empty($serviceCategoryCode)) {
-            $serviceCategoryCode = $row[$serviceCategoryCode_idx] ?? null;
+            $serviceCategoryCode = $this->getVal($row, 'service_category');
         }
 
-        $servicePackageNameRaw = $row[$servicePackageName_idx] ?? null;
+        $servicePackageNameRaw = $this->getVal($row, 'package_name');
         $servicePackageNameNormalized = $this->normalizeString($servicePackageNameRaw);
 
-        $laborCostServiceValue = $row[$laborCostService_idx] ?? null;
+        $laborCostServiceValue = $this->getVal($row, 'labor_cost');
         $cleanedLaborCostService = $this->cleanNumeric($laborCostServiceValue);
         
-        $partsNo = trim($row[$partsNo_idx] ?? null);
-        $partsName = trim($row[$partsName_idx] ?? null);
-        $partsQty = $row[$partsQty_idx] ?? null;
-        $partsPrice = $row[$partsPrice_idx] ?? null;
+        $partsNo = trim($this->getVal($row, 'parts_no') ?? '');
+        $partsName = trim($this->getVal($row, 'parts_name') ?? '');
+        $partsQty = $this->getVal($row, 'parts_qty');
+        $partsPrice = $this->getVal($row, 'parts_price');
         
         $lokasiId = $service->lokasi_id;
+        $hasActivity = false;
 
-        // 1. PROSES PAKET / JASA
+        // 1. PROSES PAKET / JASA (Convert)
         if (!empty($servicePackageNameNormalized)) {
-            // Cek Master Convert
             if (isset($this->convertMapping[$servicePackageNameNormalized])) {
                 $convertData = $this->convertMapping[$servicePackageNameNormalized];
                 $barang = Barang::where('part_code', $convertData->part_code)->first();
                 $costPrice = 0;
 
-                try {
-                    if ($barang) {
+                if ($barang) {
+                    try {
                         $costPrice = $this->processStockDeduction($barang->id, $convertData->quantity, $service->id, $lokasiId, $service->invoice_no);
-                    }
-
-                    // Simpan Detail PART dari Paket
-                    $service->details()->create([
-                        'item_category' => 'PART',
-                        'service_category_code' => $serviceCategoryCode,
-                        'service_package_name' => null,
-                        'labor_cost_service' => 0,
-                        'item_code' => $convertData->part_code,
-                        'item_name' => $convertData->part_name,
-                        'quantity' => $convertData->quantity,
-                        'price' => $convertData->retail, 
-                        'barang_id' => $barang ? $barang->id : null,
-                        'cost_price' => $costPrice,
-                    ]);
-                    $hasActivity = true;
-
-                    // Simpan Detail JASA dari Paket (Jika ada nilai di Excel)
-                    if ($cleanedLaborCostService > 0) {
-                        $service->details()->create([
-                            'item_category' => 'JASA',
-                            'service_category_code' => $serviceCategoryCode,
-                            'service_package_name' => $servicePackageNameRaw,
-                            'labor_cost_service' => $cleanedLaborCostService,
-                            'item_code' => null,
-                            'item_name' => $servicePackageNameRaw . ' (Jasa)',
-                            'quantity' => 1,
-                            'price' => $cleanedLaborCostService, 
-                            'barang_id' => null,
-                            'cost_price' => 0,
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    Log::error("Baris {$rowIndex}: Gagal detail konversi. " . $e->getMessage());
-                    throw $e; 
+                    } catch(\Exception $e) { Log::warning($e->getMessage()); }
                 }
+
+                $service->details()->create([
+                    'item_category' => 'PART',
+                    'service_category_code' => $serviceCategoryCode,
+                    'service_package_name' => null,
+                    'labor_cost_service' => 0,
+                    'item_code' => $convertData->part_code,
+                    'item_name' => $convertData->part_name,
+                    'quantity' => $convertData->quantity,
+                    'price' => $convertData->retail, 
+                    'barang_id' => $barang ? $barang->id : null,
+                    'cost_price' => $costPrice,
+                ]);
+                $hasActivity = true;
             }
-            // Jika Bukan Konversi tapi ada Jasa
-            elseif ($cleanedLaborCostService > 0) { 
-                try {
-                    $service->details()->create([
-                        'item_category' => 'JASA',
-                        'service_category_code' => $serviceCategoryCode,
-                        'service_package_name' => $servicePackageNameRaw,
-                        'labor_cost_service' => $cleanedLaborCostService,
-                        'item_code' => null,
-                        'item_name' => $servicePackageNameRaw,
-                        'quantity' => 1,
-                        'price' => $cleanedLaborCostService,
-                        'barang_id' => null, 
-                        'cost_price' => 0,
-                    ]);
-                    $hasActivity = true;
-                } catch (\Exception $e) {
-                    Log::error("Baris {$rowIndex}: Gagal detail JASA. " . $e->getMessage());
-                    $this->skippedCount++;
-                }
+            
+            // Simpan Detail JASA dari Paket
+            if ($cleanedLaborCostService > 0) {
+                $service->details()->create([
+                    'item_category' => 'JASA',
+                    'service_category_code' => $serviceCategoryCode,
+                    'service_package_name' => $servicePackageNameRaw,
+                    'labor_cost_service' => $cleanedLaborCostService,
+                    'item_code' => null,
+                    'item_name' => $servicePackageNameRaw . ($hasActivity ? ' (Jasa)' : ''),
+                    'quantity' => 1,
+                    'price' => $cleanedLaborCostService, 
+                    'barang_id' => null,
+                    'cost_price' => 0,
+                ]);
+                $hasActivity = true;
             }
         }
+        // Fallback untuk Jasa non-paket
+        elseif ($cleanedLaborCostService > 0) {
+             $service->details()->create([
+                'item_category' => 'JASA',
+                'service_category_code' => $serviceCategoryCode,
+                'service_package_name' => $servicePackageNameRaw,
+                'labor_cost_service' => $cleanedLaborCostService,
+                'item_code' => null,
+                'item_name' => $servicePackageNameRaw ?? 'Biaya Jasa',
+                'quantity' => 1,
+                'price' => $cleanedLaborCostService, 
+                'barang_id' => null,
+                'cost_price' => 0,
+            ]);
+            $hasActivity = true;
+        }
 
-        // 2. PROSES PART MANUAL (Dari Excel)
+        // 2. PROSES PART MANUAL
         if (!empty($partsNo) && !empty($partsName)) {
             $cleanedPartsQty = $this->cleanNumeric($partsQty);
             $cleanedPartsPrice = $this->cleanNumeric($partsPrice);
@@ -281,54 +346,50 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $barang = Barang::where('part_code', $partsNo)->first();
             $costPrice = 0;
 
-            try {
-                if ($barang) {
+            if ($barang) {
+                try {
                     $costPrice = $this->processStockDeduction($barang->id, $cleanedPartsQty, $service->id, $lokasiId, $service->invoice_no);
-                }
-
-                $service->details()->create([
-                    'item_category' => $itemCategory,
-                    'service_category_code' => $serviceCategoryCode,
-                    'service_package_name' => null,
-                    'labor_cost_service' => 0,
-                    'item_code' => $partsNo,
-                    'item_name' => $partsName,
-                    'quantity' => $cleanedPartsQty,
-                    'price' => $cleanedPartsPrice,
-                    'barang_id' => $barang ? $barang->id : null,
-                    'cost_price' => $costPrice,
-                ]);
-                $hasActivity = true;
-            } catch (\Exception $e) {
-                Log::error("Baris {$rowIndex}: Gagal detail {$itemCategory}. " . $e->getMessage());
-                $this->skippedCount++;
+                } catch(\Exception $e) { Log::warning($e->getMessage()); }
             }
-        }
 
-        if (!$hasActivity && $rowIndex > 2) {
-            Log::info("Baris {$rowIndex} dilewati (tidak ada data valid).");
+            $service->details()->create([
+                'item_category' => $itemCategory,
+                'service_category_code' => $serviceCategoryCode,
+                'service_package_name' => null,
+                'labor_cost_service' => 0,
+                'item_code' => $partsNo,
+                'item_name' => $partsName,
+                'quantity' => $cleanedPartsQty,
+                'price' => $cleanedPartsPrice,
+                'barang_id' => $barang ? $barang->id : null,
+                'cost_price' => $costPrice,
+            ]);
+            $hasActivity = true;
         }
     }
 
     public function onRow(Row $row)
     {
         $rowIndex = $row->getIndex();
-        $row = $row->toArray();
+        $rowArray = $row->toArray();
 
-        if ($rowIndex <= 2 || empty(array_filter($row)) || strtolower(trim($row[1] ?? '')) == 'total') return;
+        if (empty(array_filter($rowArray))) return;
 
-        // Tentukan Offset untuk Kolom Header juga (karena Header Total ada di kanan)
-        $offset = (empty($row[23]) && !empty($row[25])) ? 2 : 0;
+        // 1. Deteksi Header (Cari baris yang ada tulisan 'Invoice No')
+        if (!$this->headerRowDetected) {
+            if ($this->detectHeaderRow($rowArray)) {
+                return; // Ini baris header, jangan diproses sebagai data
+            }
+        }
 
-        $invoiceNo_idx = 9;
-        $dealerCode_idx = 2;
-        $regDate_idx = 4;
-        $serviceCategoryCode_idx = 18;
+        if (strtolower(trim($rowArray[1] ?? '')) == 'total') return;
 
-        $invoiceNo = trim($row[$invoiceNo_idx] ?? null);
-        $dealerCode = trim($row[$dealerCode_idx] ?? null);
+        // Gunakan getVal untuk mengambil data (Aman dari pergeseran)
+        $invoiceNo = trim($this->getVal($rowArray, 'invoice_no') ?? '');
+        $dealerCode = trim($this->getVal($rowArray, 'dealer_code') ?? '');
 
         try {
+            // Validasi Dealer
             if (!empty($dealerCode)) {
                 if ($dealerCode !== $this->userDealerCode) {
                     $this->skippedDealerCount++;
@@ -342,8 +403,11 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 }
             }
 
+            // HEADER: Buat Invoice Baru
             if (!empty($invoiceNo)) {
-                $serviceExists = Service::where('invoice_no', $invoiceNo)->where('dealer_code', $dealerCode)->exists();
+                $serviceExists = Service::where('invoice_no', $invoiceNo)
+                                        ->where('dealer_code', $dealerCode)
+                                        ->exists();
                 if ($serviceExists) {
                     $this->skippedDuplicateCount++;
                     $this->currentService = null;
@@ -351,60 +415,60 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     return;
                 }
 
-                $regDate = $this->parseDate($row[$regDate_idx]);
+                $regDate = $this->parseDate($this->getVal($rowArray, 'reg_date'));
                 if (empty($regDate)) throw new \Exception("Tanggal registrasi invalid.");
 
+                // MAPPING SEMUA KOLOM ANGKA SECARA DINAMIS (TANPA OFFSET MANUAL)
                 $this->currentService = Service::create([
                     'invoice_no' => $invoiceNo,
                     'reg_date' => $regDate,
                     'dealer_code' => $dealerCode,
                     'lokasi_id' => $this->lokasiMapping[$dealerCode] ?? null,
-                    'yss' => $row[1] ?? null,
-                    'point' => $row[3] ?? null,
-                    'service_order' => $row[5] ?? null,
-                    'plate_no' => $row[6] ?? null,
-                    'work_order_no' => $row[7] ?? null,
-                    'work_order_status' => $row[8] ?? null,
-                    'technician_name' => $row[43 + $offset] ?? null, // Kena Shift
-                    'customer_name' => $row[10] ?? null,
-                    'customer_ktp' => $row[11] ?? null,
-                    'customer_npwp_no' => $row[12] ?? null,
-                    'customer_npwp_name' => $row[13] ?? null,
-                    'customer_phone' => $row[14] ?? null,
-                    'mc_brand' => $row[15] ?? null,
-                    'mc_model_name' => $row[16] ?? null,
-                    'mc_frame_no' => $row[17] ?? null,
-                    'payment_type' => $row[27 + $offset] ?? null,
-                    'transaction_code' => $row[28 + $offset] ?? null,
+                    'yss' => $this->getVal($rowArray, 'yss'),
+                    'point' => $this->getVal($rowArray, 'point'),
+                    'service_order' => $this->getVal($rowArray, 'service_order'),
+                    'plate_no' => $this->getVal($rowArray, 'plate_no'),
+                    'work_order_no' => $this->getVal($rowArray, 'work_order'),
+                    'work_order_status' => $this->getVal($rowArray, 'wo_status'),
+                    'technician_name' => $this->getVal($rowArray, 'technician'),
+                    'customer_name' => $this->getVal($rowArray, 'cust_name'),
+                    'customer_ktp' => $this->getVal($rowArray, 'cust_ktp'),
+                    'customer_phone' => $this->getVal($rowArray, 'cust_phone'),
+                    'mc_brand' => $this->getVal($rowArray, 'mc_brand'),
+                    'mc_model_name' => $this->getVal($rowArray, 'mc_model'),
+                    'mc_frame_no' => $this->getVal($rowArray, 'mc_frame'),
+                    'payment_type' => $this->getVal($rowArray, 'payment_type'),
+                    'transaction_code' => $this->getVal($rowArray, 'trans_code'),
                     
-                    // Kolom Angka dengan Shift Offset
-                    'e_payment_amount' => $this->cleanNumeric($row[30 + $offset] ?? 0),
-                    'cash_amount' => $this->cleanNumeric($row[31 + $offset] ?? 0),
-                    'debit_amount' => $this->cleanNumeric($row[32 + $offset] ?? 0),
-                    'total_down_payment' => $this->cleanNumeric($row[33 + $offset] ?? 0),
-                    'total_labor' => $this->cleanNumeric($row[34 + $offset] ?? 0),
-                    'total_part_service' => $this->cleanNumeric($row[35 + $offset] ?? 0),
-                    'total_oil_service' => $this->cleanNumeric($row[36 + $offset] ?? 0),
-                    'total_retail_parts' => $this->cleanNumeric($row[37 + $offset] ?? 0),
-                    'total_retail_oil' => $this->cleanNumeric($row[38 + $offset] ?? 0),
-                    'total_amount' => $this->cleanNumeric($row[39 + $offset] ?? 0),
-                    'benefit_amount' => $this->cleanNumeric($row[40 + $offset] ?? 0),
-                    'total_payment' => $this->cleanNumeric($row[41 + $offset] ?? 0),
-                    'balance' => $this->cleanNumeric($row[42 + $offset] ?? 0),
+                    // ANGKA DIAMBIL BERDASARKAN HEADER, BUKAN URUTAN KOLOM + OFFSET
+                    'e_payment_amount' => $this->cleanNumeric($this->getVal($rowArray, 'e_payment')),
+                    'cash_amount' => $this->cleanNumeric($this->getVal($rowArray, 'cash')),
+                    'debit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'debit')),
+                    'total_down_payment' => $this->cleanNumeric($this->getVal($rowArray, 'dp')),
+                    'total_labor' => $this->cleanNumeric($this->getVal($rowArray, 'total_labor')),
+                    'total_part_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_part')),
+                    'total_oil_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_oil')),
+                    'total_retail_parts' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_parts')),
+                    'total_retail_oil' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_oil')),
+                    'total_amount' => $this->cleanNumeric($this->getVal($rowArray, 'total_amount')),
+                    'benefit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'benefit')),
+                    'total_payment' => $this->cleanNumeric($this->getVal($rowArray, 'total_payment')),
+                    'balance' => $this->cleanNumeric($this->getVal($rowArray, 'balance')),
                 ]);
                 $this->importedCount++;
-                $this->currentServiceCategoryCode = $row[$serviceCategoryCode_idx] ?? null;
+                $this->currentServiceCategoryCode = $this->getVal($rowArray, 'service_category');
+            
             } elseif (empty($invoiceNo) && !$this->currentService) {
-                $this->skippedCount++;
                 return;
             }
 
+            // DETAIL
             if ($this->currentService) {
-                $this->createServiceDetail($this->currentService, $row, $rowIndex);
+                $this->createServiceDetail($this->currentService, $rowArray, $rowIndex);
             }
 
         } catch (\Exception $e) {
-            Log::error("Baris {$rowIndex} Error: " . $e->getMessage());
+            Log::error("Import Error Baris {$rowIndex}: " . $e->getMessage());
             $this->skippedCount++;
             if (!empty($invoiceNo)) $this->currentService = null;
         }

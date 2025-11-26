@@ -388,9 +388,22 @@ class ReportController extends Controller
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
-        $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+
+        // --- 1. LOGIKA STICKY FILTER (Sama seperti Menu Service) ---
+        // Jika user melakukan filter manual, simpan ke session
+        if ($request->filled('start_date') || $request->filled('end_date')) {
+            session([
+                'report.service.start_date' => $request->input('start_date'),
+                'report.service.end_date' => $request->input('end_date'),
+            ]);
+        }
+
+        // Ambil dari Request -> Session -> Default Hari Ini
+        $startDate = $request->input('start_date', session('report.service.start_date', now()->toDateString()));
+        $endDate = $request->input('end_date', session('report.service.end_date', now()->toDateString()));
+        
         $invoiceNo = $request->input('invoice_no');
+        // -----------------------------------------------------------
 
         $query = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
@@ -400,18 +413,18 @@ class ReportController extends Controller
                 'service_details.item_name',
                 'service_details.item_category',
                 DB::raw('SUM(service_details.quantity) as total_qty'),
+                // Penjualan = Harga Part + Jasa (jika ada jasa nempel)
                 DB::raw('SUM(service_details.price + service_details.labor_cost_service) as total_penjualan'),
-                DB::raw("SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_out, 0)
-                                ELSE 0
-                            END) as total_modal"),
+                // Modal = Qty * Harga Beli (selling_out/in sesuai kebijakan)
+                DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_modal"),
+                // Profit
                 DB::raw("SUM(service_details.price + service_details.labor_cost_service) -
-                         SUM(CASE
-                                WHEN service_details.item_category != 'JASA' THEN service_details.quantity * COALESCE(barangs.selling_out, 0)
-                                ELSE 0
-                            END) as total_keuntungan")
+                         SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_keuntungan")
             )
             ->whereBetween('services.reg_date', [$startDate, $endDate])
+            // --- FILTER KHUSUS: HANYA BARANG (PARTS ONLY) ---
+            ->whereNotNull('service_details.barang_id')
+            // ------------------------------------------------
             ->groupBy('service_details.item_code', 'service_details.item_name', 'service_details.item_category')
             ->orderBy('total_qty', 'desc');
 
