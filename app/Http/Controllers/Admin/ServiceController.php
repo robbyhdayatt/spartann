@@ -113,22 +113,28 @@ class ServiceController extends Controller
             Excel::import($import, $request->file('file'));
 
             $importedCount = $import->getImportedCount();
+            $updatedCount = $import->getUpdatedCount();
             $skippedCount = $import->getSkippedCount();
-            $skippedDealerCount = $import->getSkippedDealerCount();
+            $skippedDuplicate = $import->getSkippedDuplicateCount();
+            $errors = $import->getErrorMessages();
 
-            if ($importedCount > 0) {
-                $message = "Data service berhasil diimpor! {$importedCount} data baru ditambahkan.";
-                if ($skippedCount > 0) {
-                    $message .= " {$skippedCount} data duplikat/gagal dilewati (cek log).";
+            if ($importedCount > 0 || $updatedCount > 0) {
+                $message = "Sukses! {$importedCount} data baru ditambahkan.";
+                if ($updatedCount > 0) $message .= " {$updatedCount} data KSG diperbarui.";
+                if ($skippedDuplicate > 0) $message .= " {$skippedDuplicate} data duplikat dilewati.";
+                
+                // Jika ada error spesifik, tampilkan di session flash
+                if (!empty($errors)) {
+                    return redirect()->back()->with('success', $message)->with('import_errors', $errors);
                 }
-                if ($skippedDealerCount > 0) {
-                    $message .= " {$skippedDealerCount} data ditolak karena tidak sesuai dengan dealer Anda.";
-                }
+                
                 return redirect()->back()->with('success', $message);
             }
-             return redirect()->back()->with('error', 'Import gagal atau tidak ada data.');
+            
+            return redirect()->back()->with('error', 'Tidak ada data baru yang diimpor. ' . ($skippedDuplicate > 0 ? "{$skippedDuplicate} data duplikat ditemukan." : ""));
+
         } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Terjadi kesalahan saat mengimpor file: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Terjadi kesalahan fatal saat membaca file: ' . $e->getMessage());
         }
     }
 
@@ -200,10 +206,8 @@ class ServiceController extends Controller
         return $pdf->stream($fileName);
     }
 
-    // ... Method update() biarkan saja seperti semula ...
     public function update(Request $request, Service $service)
     {
-        // ... (Isi method update tetap sama, tidak perlu diubah) ...
         $this->authorize('manage-service');
 
         $validated = $request->validate([
