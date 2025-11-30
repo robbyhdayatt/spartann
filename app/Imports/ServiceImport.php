@@ -19,21 +19,29 @@ use Carbon\Carbon;
 
 class ServiceImport implements OnEachRow, WithChunkReading
 {
+    // Counters
     private $importedCount = 0;
-    private $updatedCount = 0; 
+    private $updatedCount = 0;
     private $skippedCount = 0;
     private $skippedDealerCount = 0;
     private $skippedDuplicateCount = 0;
+
+    // State
     private $currentService = null;
+    private $processedDetailIds = []; // Track detail yang valid agar tidak terhapus
     private $currentServiceCategoryCode = null;
+    
+    // Config & Cache
     private $userDealerCode;
     private $userId;
     private $lokasiMapping = [];
     private $convertMapping = [];
     private $errorMessages = [];
-
+    
+    // Header & Date
     private $headerRowDetected = false;
     private $colMap = [];
+    private $referenceRegDate = null;
 
     public function __construct(string $userDealerCode)
     {
@@ -48,11 +56,50 @@ class ServiceImport implements OnEachRow, WithChunkReading
              ->toArray();
     }
 
-    public function getErrorMessages()
+    // --- CLEANUP ---
+    public function __destruct()
     {
-        return $this->errorMessages;
+        if ($this->currentService) {
+            $this->cleanupOrphanDetails($this->currentService);
+        }
     }
 
+    private function cleanupOrphanDetails(Service $service)
+    {
+        // Hapus detail yang ada di DB tapi TIDAK ada di Excel import kali ini
+        // Ini menangani kasus item dihapus atau berubah tipe (Jasa -> Part)
+        $detailsToDelete = $service->details()
+            ->whereNotIn('id', $this->processedDetailIds)
+            ->get();
+
+        foreach ($detailsToDelete as $detail) {
+            // Jika detail yang dihapus adalah Barang, kembalikan stoknya
+            if ($detail->barang_id && $detail->quantity > 0) {
+                // Pass quantity negatif untuk refund stok
+                $this->processStockDeduction(
+                    $detail->barang_id, 
+                    -($detail->quantity), // Negatif = Refund
+                    $service->id, 
+                    $service->lokasi_id, 
+                    $service->invoice_no, 
+                    $service->created_at
+                );
+            }
+            $detail->delete();
+        }
+    }
+
+    // --- GETTERS ---
+    public function getErrorMessages() { return $this->errorMessages; }
+    public function getImportedCount(): int { return $this->importedCount; }
+    public function getUpdatedCount(): int { return $this->updatedCount; }
+    public function getSkippedCount(): int { return $this->skippedCount; }
+    public function getSkippedDealerCount(): int { return $this->skippedDealerCount; }
+    public function getSkippedDuplicateCount(): int { return $this->skippedDuplicateCount; }
+    public function batchSize(): int { return 200; }
+    public function chunkSize(): int { return 200; }
+
+    // --- HELPERS ---
     private function normalizeString($value)
     {
         if (!is_string($value)) return $value;
@@ -82,17 +129,11 @@ class ServiceImport implements OnEachRow, WithChunkReading
     {
         if (is_numeric($value)) return floatval($value);
         if (empty($value)) return 0;
-
         $str = strval($value);
         $str = preg_replace('/[Rp\s]/i', '', $str);
-        
-        if (preg_match('/\.0+$/', $str)) {
-            $str = preg_replace('/\.0+$/', '', $str);
-        }
-
+        if (preg_match('/\.0+$/', $str)) $str = preg_replace('/\.0+$/', '', $str);
         $isNegative = (strpos($str, '-') !== false);
         $str = preg_replace('/[^0-9.,]/', '', $str);
-
         if (strpos($str, ',') !== false && strpos($str, '.') !== false) {
             $str = str_replace('.', '', $str); 
             $str = str_replace(',', '.', $str); 
@@ -101,62 +142,52 @@ class ServiceImport implements OnEachRow, WithChunkReading
         } elseif (strpos($str, '.') !== false) {
              $str = str_replace('.', '', $str);
         }
-
         $val = floatval($str);
         return $isNegative ? -$val : $val;
     }
 
     private function detectHeaderRow(array $row)
     {
-        $rowSlugs = array_map(function($item) {
-            return Str::slug(trim((string)$item), '_');
-        }, $row);
-
-        if (!in_array('invoice_no', $rowSlugs) && !in_array('no_invoice', $rowSlugs)) {
-            return false;
-        }
+        $rowSlugs = array_map(function($item) { return Str::slug(trim((string)$item), '_'); }, $row);
+        if (!in_array('invoice_no', $rowSlugs) && !in_array('no_invoice', $rowSlugs)) return false;
 
         $possibleHeaders = [
-            'invoice_no'        => ['invoice_no', 'no_invoice'],
-            'dealer_code'       => ['dealer', 'dealer_code'],
-            'reg_date'          => ['reg_date', 'date', 'tanggal'],
-            'service_category'  => ['service_category'],
-            'total_oil'         => ['total_oil_service', 'total_oli', 'total_oil'],
-            'total_amount'      => ['total_amount', 'grand_total', 'jumlah_total'],
-            'technician'        => ['technician_name'],
-            'package_name'      => ['service_package', 'paket_servis'],
-            'labor_cost'        => ['labor_cost_service'],
-            'parts_no'          => ['parts_no'],
-            'parts_name'        => ['parts_name'],
-            'parts_qty'         => ['parts_qty'],
-            'parts_price'       => ['parts_price'],
-            'cust_name'         => ['customer_information', 'nama_customer', 'nama'],
-            'cust_ktp'          => ['ktp', 'nik'],
-            'cust_npwp_no'      => ['no_npwp', 'npwp'],
-            'cust_npwp_name'    => ['name_npwp', 'nama_npwp'],
-            'cust_phone'        => ['telepon_no', 'phone'],
-            'mc_brand'          => ['brand', 'merk'],
-            'mc_model'          => ['model_name', 'tipe_motor'],
-            'mc_frame'          => ['frame_no', 'no_rangka'],
-            'dp'                => ['down_payment_dp', 'dp'],
-            'payment_type'      => ['payment_type'],
-            'trans_code'        => ['transaction_code'],
-            'e_payment'         => ['e_payment_amount'],
-            'cash'              => ['cash_amount'],
-            'debit'             => ['debit_amount'],
-            'total_labor'       => ['total_labor'],
-            'total_part'        => ['total_part_service'],
-            'total_retail_parts'=> ['total_retail_parts'],
-            'total_retail_oil'  => ['total_retail_oil'],
-            'benefit'           => ['benefit_amount'],
-            'total_payment'     => ['total_payment'],
-            'balance'           => ['balance'],
-            'yss'               => ['yss'],
-            'point'             => ['point'],
-            'service_order'     => ['service_order'],
-            'plate_no'          => ['plate_no'],
-            'work_order'        => ['no_work_order'],
-            'wo_status'         => ['status_work_order'],
+            'invoice_no' => ['invoice_no', 'no_invoice'],
+            'dealer_code' => ['dealer', 'dealer_code'],
+            'reg_date' => ['reg_date', 'date', 'tanggal'],
+            'service_category' => ['service_category'],
+            'total_oil' => ['total_oil_service'],
+            'total_amount' => ['total_amount', 'grand_total'],
+            'technician' => ['technician_name'],
+            'package_name' => ['service_package', 'paket_servis'],
+            'labor_cost' => ['labor_cost_service'],
+            'parts_no' => ['parts_no'],
+            'parts_name' => ['parts_name'],
+            'parts_qty' => ['parts_qty'],
+            'parts_price' => ['parts_price'],
+            'cust_name' => ['customer_information', 'nama_customer', 'nama'],
+            'cust_ktp' => ['ktp', 'nik'],
+            'cust_npwp_no' => ['no_npwp', 'npwp'],
+            'cust_npwp_name' => ['name_npwp', 'nama_npwp'],
+            'cust_phone' => ['telepon_no', 'phone'],
+            'mc_brand' => ['brand', 'merk'],
+            'mc_model' => ['model_name', 'tipe_motor'],
+            'mc_frame' => ['frame_no', 'no_rangka'],
+            'dp' => ['down_payment_dp', 'dp'],
+            'payment_type' => ['payment_type'],
+            'trans_code' => ['transaction_code'],
+            'e_payment' => ['e_payment_amount'],
+            'cash' => ['cash_amount'],
+            'debit' => ['debit_amount'],
+            'total_labor' => ['total_labor'],
+            'total_part' => ['total_part_service'],
+            'total_retail_parts' => ['total_retail_parts'],
+            'total_retail_oil' => ['total_retail_oil'],
+            'benefit' => ['benefit_amount'],
+            'total_payment' => ['total_payment'],
+            'balance' => ['balance'],
+            'yss' => ['yss'], 'point' => ['point'], 'service_order' => ['service_order'],
+            'plate_no' => ['plate_no'], 'work_order' => ['no_work_order'], 'wo_status' => ['status_work_order'],
         ];
 
         foreach ($possibleHeaders as $key => $slugs) {
@@ -188,201 +219,245 @@ class ServiceImport implements OnEachRow, WithChunkReading
             'yss' => 1, 'point' => 3, 'service_order' => 5, 'plate_no' => 6,
             'work_order' => 7, 'wo_status' => 8
         ];
-
         $index = $this->colMap[$key] ?? ($defaultIndex[$key] ?? -1);
-        
-        if ($index >= 0 && isset($row[$index])) {
-            return $row[$index];
-        }
-        return $default;
+        return ($index >= 0 && isset($row[$index])) ? $row[$index] : $default;
     }
 
-    private function rollbackStock(Service $service)
+    // --- CORE LOGIC: STOCK MANAGEMENT (SAFE) ---
+    private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId, $invoiceNo, $customCreatedAt = null)
     {
-        $movements = StockMovement::where('referensi_type', get_class($service))
-            ->where('referensi_id', $service->id)
-            ->get();
-
-        foreach ($movements as $movement) {
-            if ($movement->jumlah < 0) {
-                $qtyToRestore = abs($movement->jumlah);
-                $batch = InventoryBatch::where('barang_id', $movement->barang_id)
-                    ->where('lokasi_id', $movement->lokasi_id)
-                    ->where('rak_id', $movement->rak_id)
-                    ->orderBy('created_at', 'desc')
-                    ->first();
-
-                if ($batch) {
-                    $batch->increment('quantity', $qtyToRestore);
-                } else {
-                    InventoryBatch::create([
-                        'barang_id' => $movement->barang_id,
-                        'lokasi_id' => $movement->lokasi_id,
-                        'rak_id' => $movement->rak_id,
-                        'quantity' => $qtyToRestore,
-                    ]);
-                }
-            }
-            $movement->delete();
-        }
-    }
-
-    private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId, $invoiceNo)
-    {
-        if (!$barangId || !$lokasiId || $qty <= 0) return 0;
+        if (!$barangId || !$lokasiId || $qty == 0) return 0;
 
         $barangMaster = Barang::find($barangId);
         $namaBarang = $barangMaster->part_name ?? 'Unknown Item';
+        $timestamp = $customCreatedAt ?? now();
 
-        $batches = InventoryBatch::where('barang_id', $barangId)
-            ->where('lokasi_id', $lokasiId)
-            ->where('quantity', '>', 0)
-            ->orderBy('created_at', 'asc')
-            ->get();
+        // 1. JIKA QTY > 0 (PENJUALAN / POTONG STOK)
+        if ($qty > 0) {
+            $batches = InventoryBatch::where('barang_id', $barangId)
+                ->where('lokasi_id', $lokasiId)
+                ->where('quantity', '>', 0)
+                ->orderBy('created_at', 'asc')
+                ->lockForUpdate() // Lock agar tidak balapan
+                ->get();
 
-        $sisaQty = $qty;
-        $totalCost = 0;
+            $sisaQty = $qty;
+            $totalCost = 0;
 
-        foreach ($batches as $batch) {
-            if ($sisaQty <= 0) break;
-            $potong = min($batch->quantity, $sisaQty);
-            $costPerUnit = $barangMaster->selling_out; 
-            $totalCost += ($costPerUnit * $potong);
-            $batch->decrement('quantity', $potong);
+            foreach ($batches as $batch) {
+                if ($sisaQty <= 0) break;
+                
+                $stokSaatIni = $batch->quantity;
+                $potong = min($stokSaatIni, $sisaQty);
+                
+                $costPerUnit = $barangMaster->selling_out; 
+                $totalCost += ($costPerUnit * $potong);
+                
+                // Update Stok
+                $batch->quantity -= $potong;
+                $batch->save();
+
+                // Catat History
+                StockMovement::create([
+                    'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $batch->rak_id,
+                    'jumlah' => -$potong,
+                    'stok_sebelum' => $stokSaatIni, 
+                    'stok_sesudah' => $stokSaatIni - $potong,
+                    'referensi_type' => 'App\Models\Service', 'referensi_id' => $serviceId,
+                    'keterangan' => "Pemakaian Service #{$invoiceNo} ({$namaBarang})",
+                    'user_id' => $this->userId,
+                    'created_at' => $timestamp, 'updated_at' => $timestamp,
+                ]);
+                $sisaQty -= $potong;
+            }
+            return ($qty > 0) ? ($totalCost / $qty) : 0;
+        } 
+        // 2. JIKA QTY < 0 (REFUND / KEMBALIKAN STOK)
+        else {
+            $qtyToRestore = abs($qty);
+            
+            $batch = InventoryBatch::where('barang_id', $barangId)
+                ->where('lokasi_id', $lokasiId)
+                ->orderBy('created_at', 'desc')
+                ->lockForUpdate()
+                ->first();
+
+            if ($batch) {
+                $stokAwal = $batch->quantity;
+                $batch->increment('quantity', $qtyToRestore);
+                $stokAkhir = $batch->quantity;
+                $rakId = $batch->rak_id;
+            } else {
+                // Create new batch if not exists
+                $stokAwal = 0;
+                $batch = InventoryBatch::create([
+                    'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'quantity' => $qtyToRestore
+                ]);
+                $stokAkhir = $qtyToRestore;
+                $rakId = $batch->rak_id;
+            }
 
             StockMovement::create([
-                'barang_id'      => $barangId,
-                'lokasi_id'      => $lokasiId,
-                'rak_id'         => $batch->rak_id,
-                'jumlah'         => -$potong,
-                'stok_sebelum'   => $batch->quantity + $potong,
-                'stok_sesudah'   => $batch->quantity,
-                'referensi_type' => 'App\Models\Service',
-                'referensi_id'   => $serviceId,
-                'keterangan'     => "Pemakaian Service #{$invoiceNo} ({$namaBarang})",
-                'user_id'        => $this->userId,
+                'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $rakId,
+                'jumlah' => $qtyToRestore,
+                'stok_sebelum' => $stokAwal, 
+                'stok_sesudah' => $stokAkhir,
+                'referensi_type' => 'App\Models\Service', 'referensi_id' => $serviceId,
+                'keterangan' => "Koreksi/Refund Service #{$invoiceNo} ({$namaBarang})",
+                'user_id' => $this->userId,
+                'created_at' => $timestamp, 'updated_at' => $timestamp,
             ]);
-            $sisaQty -= $potong;
+            return 0;
         }
-        return ($qty > 0) ? ($totalCost / $qty) : 0;
     }
 
-    private function createServiceDetail(Service $service, array $row, int $rowIndex)
+    // --- SMART SYNC (KUNCI PEMECAHAN MASALAH) ---
+    private function syncServiceDetail($service, $type, $data)
     {
-        $serviceCategoryCode = $this->currentServiceCategoryCode;
-        if (empty($serviceCategoryCode)) {
-            $serviceCategoryCode = $this->getVal($row, 'service_category');
+        $lokasiId = $service->lokasi_id;
+        $serviceDate = $service->created_at;
+
+        // Cari detail yang identik (Barang sama ATAU Jasa sama)
+        $query = $service->details()->where('item_category', $type);
+
+        $barangId = null;
+        if ($type == 'PART' || $type == 'OLI') {
+            $barang = Barang::where('part_code', $data['item_code'])->first();
+            if ($barang) {
+                $barangId = $barang->id;
+                $query->where('barang_id', $barangId);
+            }
+        } else {
+            // Untuk JASA, cari berdasarkan service_package_name bukan item_name
+            $query->where('service_package_name', $data['service_package_name']);
         }
 
+        // Ambil detail yang belum diproses di sesi ini
+        $existingDetail = $query->whereNotIn('id', $this->processedDetailIds)->first();
+
+        if ($existingDetail) {
+            // --- UPDATE MODE ---
+            $this->processedDetailIds[] = $existingDetail->id;
+
+            // Cek apakah QTY berubah?
+            $qtyDiff = $data['quantity'] - $existingDetail->quantity;
+
+            if ($qtyDiff != 0 && $barangId) {
+                // Ada perubahan qty -> Koreksi stok
+                // Jika positif: Potong lagi. Jika negatif: Refund.
+                $this->processStockDeduction($barangId, $qtyDiff, $service->id, $lokasiId, $service->invoice_no, $serviceDate);
+            }
+            // JIKA QTY SAMA, KITA TIDAK SENTUH STOK -> HISTORY BERSIH
+
+            // Update data nominal/nama tanpa ganggu stok
+            $existingDetail->update([
+                'service_category_code' => $data['service_category_code'],
+                'service_package_name' => $data['service_package_name'],
+                'labor_cost_service' => $data['labor_cost_service'],
+                'item_code' => $data['item_code'],
+                'item_name' => $data['item_name'],
+                'quantity' => $data['quantity'],
+                'price' => $data['price']
+            ]);
+
+        } else {
+            // --- CREATE MODE ---
+            $costPrice = 0;
+            if ($barangId) {
+                // Item baru -> Potong stok
+                $costPrice = $this->processStockDeduction($barangId, $data['quantity'], $service->id, $lokasiId, $service->invoice_no, $serviceDate);
+            }
+
+            $newDetail = $service->details()->create([
+                'item_category' => $type,
+                'service_category_code' => $data['service_category_code'],
+                'service_package_name' => $data['service_package_name'],
+                'labor_cost_service' => $data['labor_cost_service'],
+                'item_code' => $data['item_code'],
+                'item_name' => $data['item_name'],
+                'quantity' => $data['quantity'],
+                'price' => $data['price'],
+                'barang_id' => $barangId,
+                'cost_price' => $costPrice,
+            ]);
+            
+            $this->processedDetailIds[] = $newDetail->id;
+        }
+    }
+
+    private function processRowDetails(Service $service, array $row)
+    {
+        $serviceCategoryCode = $this->currentServiceCategoryCode ?? $this->getVal($row, 'service_category');
         $servicePackageNameRaw = $this->getVal($row, 'package_name');
         $servicePackageNameNormalized = $this->normalizeString($servicePackageNameRaw);
-
-        $laborCostServiceValue = $this->getVal($row, 'labor_cost');
-        $cleanedLaborCostService = $this->cleanNumeric($laborCostServiceValue);
+        $laborCost = $this->cleanNumeric($this->getVal($row, 'labor_cost'));
         
         $partsNo = trim($this->getVal($row, 'parts_no') ?? '');
         $partsName = trim($this->getVal($row, 'parts_name') ?? '');
-        $partsQty = $this->getVal($row, 'parts_qty');
-        $partsPrice = $this->getVal($row, 'parts_price');
+        $partsQty = $this->cleanNumeric($this->getVal($row, 'parts_qty'));
+        $partsPrice = $this->cleanNumeric($this->getVal($row, 'parts_price'));
+
+        // VALIDASI: Hanya proses jika ada data yang valid di baris ini
+        $hasPackageData = !empty($servicePackageNameNormalized);
+        $hasLaborData = ($laborCost > 0);
+        $hasPartsData = (!empty($partsNo) && !empty($partsName));
         
-        $lokasiId = $service->lokasi_id;
-        $hasActivity = false;
+        // Jika tidak ada data apapun di baris ini, skip
+        if (!$hasPackageData && !$hasLaborData && !$hasPartsData) {
+            return;
+        }
 
-        // 1. PROSES PAKET / JASA
-        if (!empty($servicePackageNameNormalized)) {
-            
-            // CEK APAKAH PAKET INI ADA DI MASTER CONVERT
+        // 1. PAKET / JASA
+        if ($hasPackageData) {
             if (isset($this->convertMapping[$servicePackageNameNormalized])) {
-                // JIKA ADA: PROSES SEBAGAI PART (BARANG)
-                $convertData = $this->convertMapping[$servicePackageNameNormalized];
-                $barang = Barang::where('part_code', $convertData->part_code)->first();
-                $costPrice = 0;
-
-                if ($barang) {
-                    try {
-                        $costPrice = $this->processStockDeduction($barang->id, $convertData->quantity, $service->id, $lokasiId, $service->invoice_no);
-                    } catch(\Exception $e) { Log::warning($e->getMessage()); }
-                }
-
-                $service->details()->create([
-                    'item_category' => 'PART',
+                // CONVERT KE PART
+                $conv = $this->convertMapping[$servicePackageNameNormalized];
+                $this->syncServiceDetail($service, 'PART', [
                     'service_category_code' => $serviceCategoryCode,
-                    'service_package_name' => null, // Kosongkan karena sudah jadi part
+                    'service_package_name' => null,
                     'labor_cost_service' => 0,
-                    'item_code' => $convertData->part_code,
-                    'item_name' => $convertData->part_name,
-                    'quantity' => $convertData->quantity,
-                    'price' => $convertData->retail, 
-                    'barang_id' => $barang ? $barang->id : null,
-                    'cost_price' => $costPrice,
+                    'item_code' => $conv->part_code,
+                    'item_name' => $conv->part_name,
+                    'quantity' => $conv->quantity,
+                    'price' => $conv->retail
                 ]);
-                $hasActivity = true;
-
-                // STOP: JANGAN BUAT DETAIL JASA LAGI
             } else {
-                // JIKA TIDAK ADA DI CONVERT: BARU PROSES SEBAGAI JASA (PAKET)
-                $service->details()->create([
-                    'item_category' => 'JASA',
+                // JASA MURNI - item_name dikosongkan (null)
+                $this->syncServiceDetail($service, 'JASA', [
                     'service_category_code' => $serviceCategoryCode,
                     'service_package_name' => $servicePackageNameRaw,
-                    'labor_cost_service' => $cleanedLaborCostService,
+                    'labor_cost_service' => $laborCost,
                     'item_code' => null,
-                    'item_name' => $servicePackageNameRaw . ($hasActivity ? ' (Jasa)' : ''),
+                    'item_name' => null, // PERUBAHAN: Tidak isi item_name untuk JASA
                     'quantity' => 1,
-                    'price' => $cleanedLaborCostService, 
-                    'barang_id' => null,
-                    'cost_price' => 0,
+                    'price' => $laborCost
                 ]);
-                $hasActivity = true;
             }
-        }
-        // Fallback: Jika tidak ada nama paket, tapi ada biaya jasa (misal jasa manual/tambahan)
-        elseif ($cleanedLaborCostService > 0) {
-             $service->details()->create([
-                'item_category' => 'JASA',
+        } elseif ($hasLaborData) {
+            // JASA MANUAL - item_name dikosongkan (null)
+            $this->syncServiceDetail($service, 'JASA', [
                 'service_category_code' => $serviceCategoryCode,
                 'service_package_name' => $servicePackageNameRaw,
-                'labor_cost_service' => $cleanedLaborCostService,
+                'labor_cost_service' => $laborCost,
                 'item_code' => null,
-                'item_name' => $servicePackageNameRaw ?? 'Biaya Jasa',
+                'item_name' => null, // PERUBAHAN: Tidak isi item_name untuk JASA
                 'quantity' => 1,
-                'price' => $cleanedLaborCostService, 
-                'barang_id' => null,
-                'cost_price' => 0,
+                'price' => $laborCost
             ]);
-            $hasActivity = true;
         }
 
-        // 2. PROSES PART MANUAL (Tetap sama)
-        if (!empty($partsNo) && !empty($partsName)) {
-            $cleanedPartsQty = $this->cleanNumeric($partsQty);
-            $cleanedPartsPrice = $this->cleanNumeric($partsPrice);
-            $itemCategory = (stripos($partsName, 'oli') !== false || stripos($partsName, 'yamalube') !== false) ? 'OLI' : 'PART';
-
-            if ($cleanedPartsQty <= 0) $cleanedPartsQty = 1;
-
-            $barang = Barang::where('part_code', $partsNo)->first();
-            $costPrice = 0;
-
-            if ($barang) {
-                try {
-                    $costPrice = $this->processStockDeduction($barang->id, $cleanedPartsQty, $service->id, $lokasiId, $service->invoice_no);
-                } catch(\Exception $e) { Log::warning($e->getMessage()); }
-            }
-
-            $service->details()->create([
-                'item_category' => $itemCategory,
+        // 2. PART MANUAL
+        if ($hasPartsData) {
+            $cat = (stripos($partsName, 'oli') !== false || stripos($partsName, 'yamalube') !== false) ? 'OLI' : 'PART';
+            $this->syncServiceDetail($service, $cat, [
                 'service_category_code' => $serviceCategoryCode,
                 'service_package_name' => null,
                 'labor_cost_service' => 0,
                 'item_code' => $partsNo,
                 'item_name' => $partsName,
-                'quantity' => $cleanedPartsQty,
-                'price' => $cleanedPartsPrice,
-                'barang_id' => $barang ? $barang->id : null,
-                'cost_price' => $costPrice,
+                'quantity' => $partsQty ?: 1,
+                'price' => $partsPrice
             ]);
-            $hasActivity = true;
         }
     }
 
@@ -393,128 +468,138 @@ class ServiceImport implements OnEachRow, WithChunkReading
 
         if (empty(array_filter($rowArray))) return;
 
-        if (!$this->headerRowDetected) {
-            if ($this->detectHeaderRow($rowArray)) {
-                return; 
-            }
-        }
-
-        // Skip baris Total
-        $rowString = implode(' ', array_slice($rowArray, 0, 10));
-        if (str_contains(strtoupper($rowString), 'TOTAL')) return;
-
-        $invoiceNo = trim($this->getVal($rowArray, 'invoice_no') ?? '');
-        $dealerCode = trim($this->getVal($rowArray, 'dealer_code') ?? '');
-        $category = trim($this->getVal($rowArray, 'service_category') ?? '');
-        $package = trim($this->getVal($rowArray, 'package_name') ?? '');
-
-        try {
-            if (!empty($dealerCode)) {
-                if ($dealerCode !== $this->userDealerCode) {
-                    $this->skippedDealerCount++;
-                    $this->currentService = null;
-                    return;
-                }
-                if (!isset($this->lokasiMapping[$dealerCode])) {
-                    $this->skippedCount++;
-                    $this->currentService = null;
-                    $this->errorMessages[] = "Baris {$rowIndex}: Kode Dealer '{$dealerCode}' tidak dikenali.";
-                    return;
-                }
+        // WRAP TRANSACTION
+        DB::transaction(function() use ($rowArray, $rowIndex) {
+            if (!$this->headerRowDetected) {
+                if ($this->detectHeaderRow($rowArray)) return; 
             }
 
-            if (!empty($invoiceNo)) {
-                $existingService = Service::where('invoice_no', $invoiceNo)
-                                        ->where('dealer_code', $dealerCode)
-                                        ->first();
+            $rowString = implode(' ', array_slice($rowArray, 0, 10));
+            if (str_contains(strtoupper($rowString), 'TOTAL')) return;
 
-                $regDate = $this->parseDate($this->getVal($rowArray, 'reg_date'));
-                if (empty($regDate)) throw new \Exception("Tanggal registrasi invalid.");
-
-                $serviceData = [
-                    'reg_date' => $regDate,
-                    'dealer_code' => $dealerCode,
-                    'lokasi_id' => $this->lokasiMapping[$dealerCode] ?? null,
-                    'yss' => $this->getVal($rowArray, 'yss'),
-                    'point' => $this->getVal($rowArray, 'point'),
-                    'service_order' => $this->getVal($rowArray, 'service_order'),
-                    'plate_no' => $this->getVal($rowArray, 'plate_no'),
-                    'work_order_no' => $this->getVal($rowArray, 'work_order'),
-                    'work_order_status' => $this->getVal($rowArray, 'wo_status'),
-                    'technician_name' => $this->getVal($rowArray, 'technician'),
-                    'customer_name' => $this->getVal($rowArray, 'cust_name'),
-                    'customer_ktp' => $this->getVal($rowArray, 'cust_ktp'),
-                    'customer_npwp_no' => $this->getVal($rowArray, 'cust_npwp_no'),
-                    'customer_npwp_name' => $this->getVal($rowArray, 'cust_npwp_name'),
-                    'customer_phone' => $this->getVal($rowArray, 'cust_phone'),
-                    'mc_brand' => $this->getVal($rowArray, 'mc_brand'),
-                    'mc_model_name' => $this->getVal($rowArray, 'mc_model'),
-                    'mc_frame_no' => $this->getVal($rowArray, 'mc_frame'),
-                    'payment_type' => $this->getVal($rowArray, 'payment_type'),
-                    'transaction_code' => $this->getVal($rowArray, 'trans_code'),
-                    'e_payment_amount' => $this->cleanNumeric($this->getVal($rowArray, 'e_payment')),
-                    'cash_amount' => $this->cleanNumeric($this->getVal($rowArray, 'cash')),
-                    'debit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'debit')),
-                    'total_down_payment' => $this->cleanNumeric($this->getVal($rowArray, 'dp')),
-                    'total_labor' => $this->cleanNumeric($this->getVal($rowArray, 'total_labor')),
-                    'total_part_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_part')),
-                    'total_oil_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_oil')),
-                    'total_retail_parts' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_parts')),
-                    'total_retail_oil' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_oil')),
-                    'total_amount' => $this->cleanNumeric($this->getVal($rowArray, 'total_amount')),
-                    'benefit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'benefit')),
-                    'total_payment' => $this->cleanNumeric($this->getVal($rowArray, 'total_payment')),
-                    'balance' => $this->cleanNumeric($this->getVal($rowArray, 'balance')),
-                ];
-
-                if ($existingService) {
-                    // UPDATE MODE
-                    $this->rollbackStock($existingService);
-                    $existingService->update($serviceData);
-                    $existingService->details()->delete(); 
-                    $this->currentService = $existingService;
-                    $this->updatedCount++;
-                } else {
-                    // CREATE MODE
-                    $serviceData['invoice_no'] = $invoiceNo;
-                    
-                    $siblingService = Service::where('dealer_code', $dealerCode)
-                        ->where('reg_date', $regDate)
-                        ->orderBy('created_at', 'asc')
-                        ->first();
-
-                    if ($siblingService) {
-                        $serviceData['created_at'] = $siblingService->created_at;
-                        $serviceData['updated_at'] = now();
-                    }
-
-                    $this->currentService = Service::create($serviceData);
-                    $this->importedCount++;
-                }
-                
-                $this->currentServiceCategoryCode = $this->getVal($rowArray, 'service_category');
-            
-            } elseif (empty($invoiceNo) && !$this->currentService) {
+            if ($this->isRowCancelled($rowArray)) {
+                Log::info("Baris {$rowIndex}: Skipped - Status Cancelled");
                 return;
             }
 
-            if ($this->currentService) {
-                $this->createServiceDetail($this->currentService, $rowArray, $rowIndex);
+            $invoiceNo = trim($this->getVal($rowArray, 'invoice_no') ?? '');
+            $dealerCode = trim($this->getVal($rowArray, 'dealer_code') ?? '');
+
+            try {
+                if (!empty($dealerCode)) {
+                    if ($dealerCode !== $this->userDealerCode) {
+                        $this->skippedDealerCount++; $this->currentService = null; return;
+                    }
+                    if (!isset($this->lokasiMapping[$dealerCode])) {
+                        $this->skippedCount++; $this->currentService = null;
+                        $this->errorMessages[] = "Baris {$rowIndex}: Kode Dealer tidak dikenali.";
+                        return;
+                    }
+                }
+
+                if (!empty($invoiceNo)) {
+
+                    if ($this->isRowCancelled($rowArray)) {
+                        $this->currentService = null;
+                        return;
+                    }
+                    // GANTI INVOICE: Cleanup invoice sebelumnya
+                    if ($this->currentService && $this->currentService->invoice_no !== $invoiceNo) {
+                        $this->cleanupOrphanDetails($this->currentService);
+                        $this->processedDetailIds = [];
+                        // Reset service category code untuk invoice baru
+                        $this->currentServiceCategoryCode = null;
+                    }
+
+                    $existingService = Service::where('invoice_no', $invoiceNo)
+                                            ->where('dealer_code', $dealerCode)
+                                            ->lockForUpdate()
+                                            ->first();
+
+                    $regDate = $this->parseDate($this->getVal($rowArray, 'reg_date'));
+                    if (empty($regDate)) throw new \Exception("Tanggal registrasi invalid.");
+
+                    if ($this->referenceRegDate === null) $this->referenceRegDate = $regDate;
+                    $isFileToday = ($this->referenceRegDate === now()->toDateString());
+                    $shouldBackdate = !$isFileToday; 
+
+                    $serviceData = [
+                        'reg_date' => $regDate,
+                        'dealer_code' => $dealerCode,
+                        'lokasi_id' => $this->lokasiMapping[$dealerCode] ?? null,
+                        'yss' => $this->getVal($rowArray, 'yss'),
+                        'point' => $this->getVal($rowArray, 'point'),
+                        'service_order' => $this->getVal($rowArray, 'service_order'),
+                        'plate_no' => $this->getVal($rowArray, 'plate_no'),
+                        'work_order_no' => $this->getVal($rowArray, 'work_order'),
+                        'work_order_status' => $this->getVal($rowArray, 'wo_status'),
+                        'technician_name' => $this->getVal($rowArray, 'technician'),
+                        'customer_name' => $this->getVal($rowArray, 'cust_name'),
+                        'customer_ktp' => $this->getVal($rowArray, 'cust_ktp'),
+                        'customer_npwp_no' => $this->getVal($rowArray, 'cust_npwp_no'),
+                        'customer_npwp_name' => $this->getVal($rowArray, 'cust_npwp_name'),
+                        'customer_phone' => $this->getVal($rowArray, 'cust_phone'),
+                        'mc_brand' => $this->getVal($rowArray, 'mc_brand'),
+                        'mc_model_name' => $this->getVal($rowArray, 'mc_model'),
+                        'mc_frame_no' => $this->getVal($rowArray, 'mc_frame'),
+                        'payment_type' => $this->getVal($rowArray, 'payment_type'),
+                        'transaction_code' => $this->getVal($rowArray, 'trans_code'),
+                        'e_payment_amount' => $this->cleanNumeric($this->getVal($rowArray, 'e_payment')),
+                        'cash_amount' => $this->cleanNumeric($this->getVal($rowArray, 'cash')),
+                        'debit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'debit')),
+                        'total_down_payment' => $this->cleanNumeric($this->getVal($rowArray, 'dp')),
+                        'total_labor' => $this->cleanNumeric($this->getVal($rowArray, 'total_labor')),
+                        'total_part_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_part')),
+                        'total_oil_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_oil')),
+                        'total_retail_parts' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_parts')),
+                        'total_retail_oil' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_oil')),
+                        'total_amount' => $this->cleanNumeric($this->getVal($rowArray, 'total_amount')),
+                        'benefit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'benefit')),
+                        'total_payment' => $this->cleanNumeric($this->getVal($rowArray, 'total_payment')),
+                        'balance' => $this->cleanNumeric($this->getVal($rowArray, 'balance')),
+                    ];
+
+                    if ($existingService) {
+                        // UPDATE MODE: Smart Sync Header (Detail diurus processRowDetails)
+                        $existingService->update($serviceData);
+                        $this->currentService = $existingService;
+                        $this->updatedCount++;
+                    } else {
+                        // CREATE MODE
+                        $serviceData['invoice_no'] = $invoiceNo;
+                        if ($shouldBackdate) {
+                            $sibling = Service::where('dealer_code', $dealerCode)
+                                ->where('reg_date', $regDate)->orderBy('created_at', 'asc')->first();
+                            if ($sibling) {
+                                $serviceData['created_at'] = $sibling->created_at;
+                                $serviceData['updated_at'] = now();
+                            }
+                        }
+                        $this->currentService = Service::create($serviceData);
+                        $this->importedCount++;
+                    }
+                    $this->currentServiceCategoryCode = $this->getVal($rowArray, 'service_category');
+                
+                } elseif (empty($invoiceNo) && !$this->currentService) {
+                    // Tidak ada invoice di baris ini dan tidak ada service aktif sebelumnya
+                    return;
+                }
+
+                if ($this->currentService) {
+                    $this->processRowDetails($this->currentService, $rowArray);
+                }
+
+            } catch (\Exception $e) {
+                Log::error("Import Error Row {$rowIndex}: " . $e->getMessage());
+                $this->errorMessages[] = "Row {$rowIndex}: " . $e->getMessage();
+                $this->skippedCount++;
+                if (!empty($invoiceNo)) $this->currentService = null;
             }
-
-        } catch (\Exception $e) {
-            Log::error("Import Error Baris {$rowIndex}: " . $e->getMessage());
-            $this->errorMessages[] = "Baris {$rowIndex}: " . $e->getMessage();
-            $this->skippedCount++;
-            if (!empty($invoiceNo)) $this->currentService = null;
-        }
+        });
     }
-
-    public function getImportedCount(): int { return $this->importedCount; }
-    public function getUpdatedCount(): int { return $this->updatedCount; } 
-    public function getSkippedCount(): int { return $this->skippedCount; }
-    public function getSkippedDealerCount(): int { return $this->skippedDealerCount; }
-    public function getSkippedDuplicateCount(): int { return $this->skippedDuplicateCount; }
-    public function batchSize(): int { return 200; }
-    public function chunkSize(): int { return 200; }
+    private function isRowCancelled(array $row)
+    {
+        $woStatus = trim($this->getVal($row, 'wo_status') ?? '');
+        return stripos($woStatus, 'ZZ. Cancelled') !== false || stripos($woStatus, 'Cancelled') !== false;
+    }
 }

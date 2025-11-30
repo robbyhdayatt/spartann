@@ -23,6 +23,7 @@ use PhpOffice\PhpSpreadsheet\Cell\Cell;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ServiceDailyReportExport extends DefaultValueBinder implements
     FromQuery,
@@ -68,9 +69,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         return parent::bindValue($cell, $value);
     }
 
-    /**
-     * Helper Filter untuk memastikan konsistensi data antara View dan Calculation
-     */
     private function applyFilters($query) {
         if ($this->startDate && $this->endDate) {
             $start = Carbon::parse($this->startDate)->startOfDay();
@@ -202,12 +200,12 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
     }
 
     /**
-     * METODE FINAL: Hitung Pengurang KSG Berdasarkan Nama Paket
-     * Solusi untuk masalah "Item Berbayar Tersandera Kategori KSG"
+     * METODE FINAL (SUPPORT CLAIM & KSG):
+     * Menambahkan logika untuk menangani kategori 'Claim' sama seperti 'KSG'
      */
     private function calculateTotalWithoutKSG()
     {
-        // 1. Ambil Total Keseluruhan (Pasti Benar dari Database)
+        // 1. Ambil Total Keseluruhan
         $grandTotal = (clone $this->getBaseQuery())->selectRaw('
             SUM(e_payment_amount) as e_payment_amount,
             SUM(cash_amount) as cash_amount,
@@ -224,39 +222,69 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             SUM(balance) as balance
         ')->first();
 
-        // 2. Hitung Nilai KSG (Hanya Jasa yang PAKET-nya benar-benar KSG)
-        // Mengabaikan "GANTI KAMPAS REM", "OVERHAUL CVT", dll meskipun kategori-nya KSG.
-        
-        $ksgLaborSum = ServiceDetail::whereHas('service', function($q) {
-             $this->applyFilters($q); // Reuse filter yang sama persis
-        })
-        ->where(function($q) {
-            // PERBAIKAN UTAMA: Filter berdasarkan NAMA PAKET, bukan Kategori
-            $q->where('service_package_name', 'LIKE', 'KSG%')
-              ->orWhere('service_package_name', 'LIKE', 'ksg%');
-        })
-        // Menjumlahkan labor_cost_service dari detail yang lolos filter
-        ->sum('labor_cost_service');
+        // 2. Hitung Potongan (KSG + CLAIM)
+        $details = ServiceDetail::whereHas('service', function($q) {
+                $this->applyFilters($q);
+            })
+            ->where('labor_cost_service', '>', 0) 
+            ->get()
+            ->groupBy('service_id');
 
-        // 3. Lakukan Pengurangan
-        // Total Labor Ritel = Total Labor Semua - Labor Paket KSG
+        $ksgLaborSum = 0;
+
+        // Tambahkan 'CLAIM' ke daftar keyword
+        $ksgKeywords = ['KSG', 'CLAIM', 'SERVICE', 'SVC', 'CHECK', 'CEK', 'OLI', 'OIL', 'YAMALUBE', 'BUSI', 'FILTER', 'RINGAN', 'CVT', 'INJEKSI', 'INJECTOR', 'THROTTLE'];
+        $paidKeywords = ['KAMPAS', 'REM', 'BAN', 'TUBE', 'PRESS', 'OVERHAUL', 'ACCU', 'AKI', 'BOLAM', 'LAMPU', 'SEAL', 'SHOCK', 'BEARING', 'LAHER'];
+
+        foreach ($details as $serviceId => $items) {
+            // A. Cek Kategori Invoice (KSG atau CLAIM)
+            $isTargetCategory = false;
+            foreach ($items as $item) {
+                $cat = strtoupper($item->service_category_code);
+                // PERBAIKAN: Cek juga kata "CLAIM"
+                if (str_contains($cat, 'KSG') || str_contains($cat, 'CLAIM')) {
+                    $isTargetCategory = true;
+                    break; 
+                }
+            }
+
+            if (!$isTargetCategory) continue; // Skip jika bukan KSG/Claim
+
+            foreach ($items as $item) {
+                $pkgName = strtoupper($item->service_package_name ?? '');
+
+                // LOGIKA FILTER:
+                // 1. Apakah ini JELAS KSG/CLAIM?
+                if (str_contains($pkgName, 'KSG') || str_contains($pkgName, 'CLAIM')) {
+                    $ksgLaborSum += $item->labor_cost_service;
+                }
+                // 2. Cek Conflict: Apakah mengandung kata "Paid"?
+                elseif (Str::contains($pkgName, $paidKeywords)) {
+                    continue;
+                }
+                // 3. Jika mengandung kata "Maintenance"
+                elseif (Str::contains($pkgName, $ksgKeywords)) {
+                    $ksgLaborSum += $item->labor_cost_service;
+                }
+                // 4. Fallback: Jika nama paket kosong/aneh, tapi Invoice KSG/Claim dan tidak ada item lain yg jelas
+                elseif (!$items->contains(fn($i) => str_contains(strtoupper($i->service_package_name), 'KSG') || str_contains(strtoupper($i->service_package_name), 'CLAIM'))) {
+                     $ksgLaborSum += $item->labor_cost_service;
+                }
+            }
+        }
+
+        // 3. Return Object Data
         return (object) [
             'e_payment_amount' => $grandTotal->e_payment_amount ?? 0,
             'cash_amount' => $grandTotal->cash_amount ?? 0,
             'debit_amount' => $grandTotal->debit_amount ?? 0,
             'total_down_payment' => $grandTotal->total_down_payment ?? 0,
-            
-            // Labor dikurangi nilai PAKET KSG murni
             'total_labor' => ($grandTotal->total_labor ?? 0) - $ksgLaborSum,
-            
             'total_part_service' => $grandTotal->total_part_service ?? 0, 
             'total_oil_service' => $grandTotal->total_oil_service ?? 0, 
             'total_retail_parts' => $grandTotal->total_retail_parts ?? 0,
             'total_retail_oil' => $grandTotal->total_retail_oil ?? 0,
-            
-            // Total Amount dikurangi nilai PAKET KSG murni
             'total_amount' => ($grandTotal->total_amount ?? 0) - $ksgLaborSum, 
-            
             'benefit_amount' => $grandTotal->benefit_amount ?? 0,
             'total_payment' => $grandTotal->total_payment ?? 0, 
             'balance' => ($grandTotal->total_payment ?? 0) - (($grandTotal->total_amount ?? 0) - $ksgLaborSum)
@@ -269,7 +297,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet;
                 
-                // 1. Hitung Total Semua
                 $grandTotalQuery = (clone $this->getBaseQuery())->selectRaw('
                     SUM(e_payment_amount) as e_payment_amount,
                     SUM(cash_amount) as cash_amount,
@@ -286,10 +313,8 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                     SUM(balance) as balance
                 ')->first();
 
-                // 2. Hitung Total TANPA KSG (Metode Baru via Paket)
                 $nonKsgTotal = $this->calculateTotalWithoutKSG();
 
-                // Formatting Header
                 $sheet->insertNewRowBefore(1, 1);
                 $groupHeaderRow = 1;
                 $headerRow = 2;
@@ -357,7 +382,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                     ];
                     $mergeUntilCol = 'AB';
 
-                    // 1. Output Total Semua
                     $sheet->setCellValue("A{$totalRow}", 'TOTAL SEMUA');
                     $sheet->mergeCells("A{$totalRow}:{$mergeUntilCol}{$totalRow}");
                     
@@ -367,7 +391,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                         $sheet->getStyle("{$col}{$totalRow}")->getNumberFormat()->setFormatCode("Rp #,##0_);(Rp #,##0)");
                     }
 
-                    // 2. Output Total Tanpa KSG
                     $sheet->setCellValue("A{$totalNonKSGRow}", 'TOTAL (TANPA KSG)');
                     $sheet->mergeCells("A{$totalNonKSGRow}:{$mergeUntilCol}{$totalNonKSGRow}");
                     
