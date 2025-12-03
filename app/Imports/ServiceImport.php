@@ -223,6 +223,12 @@ class ServiceImport implements OnEachRow, WithChunkReading
         return ($index >= 0 && isset($row[$index])) ? $row[$index] : $default;
     }
 
+    private function isRowCancelled(array $row)
+    {
+        $woStatus = trim($this->getVal($row, 'wo_status') ?? '');
+        return stripos($woStatus, 'ZZ. Cancelled') !== false || stripos($woStatus, 'Cancelled') !== false;
+    }
+
     // --- CORE LOGIC: STOCK MANAGEMENT (SAFE) ---
     private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId, $invoiceNo, $customCreatedAt = null)
     {
@@ -332,11 +338,18 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $query->where('service_package_name', $data['service_package_name']);
         }
 
-        // Ambil detail yang belum diproses di sesi ini
-        $existingDetail = $query->whereNotIn('id', $this->processedDetailIds)->first();
+        // PERBAIKAN: Ambil SEMUA detail yang match (bukan hanya yang belum diproses)
+        $existingDetail = $query->first();
 
         if ($existingDetail) {
             // --- UPDATE MODE ---
+            
+            // PERBAIKAN: Cek apakah detail ini SUDAH diproses di sesi import ini
+            if (in_array($existingDetail->id, $this->processedDetailIds)) {
+                // Detail sudah diproses, skip untuk hindari double deduction
+                return;
+            }
+            
             $this->processedDetailIds[] = $existingDetail->id;
 
             // Cek apakah QTY berubah?
@@ -477,6 +490,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $rowString = implode(' ', array_slice($rowArray, 0, 10));
             if (str_contains(strtoupper($rowString), 'TOTAL')) return;
 
+            // Skip baris dengan status cancelled
             if ($this->isRowCancelled($rowArray)) {
                 Log::info("Baris {$rowIndex}: Skipped - Status Cancelled");
                 return;
@@ -498,11 +512,12 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 }
 
                 if (!empty($invoiceNo)) {
-
+                    // Langsung skip jika invoice baru adalah cancelled
                     if ($this->isRowCancelled($rowArray)) {
                         $this->currentService = null;
                         return;
                     }
+                    
                     // GANTI INVOICE: Cleanup invoice sebelumnya
                     if ($this->currentService && $this->currentService->invoice_no !== $invoiceNo) {
                         $this->cleanupOrphanDetails($this->currentService);
@@ -560,12 +575,16 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     ];
 
                     if ($existingService) {
-                        // UPDATE MODE: Smart Sync Header (Detail diurus processRowDetails)
+                        // UPDATE MODE: Load detail IDs yang sudah ada agar tidak double process
+                        $this->processedDetailIds = $existingService->details()->pluck('id')->toArray();
+                        
                         $existingService->update($serviceData);
                         $this->currentService = $existingService;
                         $this->updatedCount++;
                     } else {
-                        // CREATE MODE
+                        // CREATE MODE: Reset processedDetailIds untuk invoice baru
+                        $this->processedDetailIds = [];
+                        
                         $serviceData['invoice_no'] = $invoiceNo;
                         if ($shouldBackdate) {
                             $sibling = Service::where('dealer_code', $dealerCode)
@@ -596,10 +615,5 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 if (!empty($invoiceNo)) $this->currentService = null;
             }
         });
-    }
-    private function isRowCancelled(array $row)
-    {
-        $woStatus = trim($this->getVal($row, 'wo_status') ?? '');
-        return stripos($woStatus, 'ZZ. Cancelled') !== false || stripos($woStatus, 'Cancelled') !== false;
     }
 }
