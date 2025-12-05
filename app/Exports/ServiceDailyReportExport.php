@@ -200,8 +200,9 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
     }
 
     /**
-     * METODE FINAL (SUPPORT CLAIM & KSG):
-     * Menambahkan logika untuk menangani kategori 'Claim' sama seperti 'KSG'
+     * PERBAIKAN FINAL (AKURASI TINGGI):
+     * 1. Filter: Hanya hitung item KSG jika Service Balance < 0 (Artinya ada subsidi/claim).
+     * 2. Mapping: Harga dinamis berdasarkan Model Motor (MX KING & NEO).
      */
     private function calculateTotalWithoutKSG()
     {
@@ -222,53 +223,56 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             SUM(balance) as balance
         ')->first();
 
-        // 2. Hitung Potongan (KSG + CLAIM)
-        $details = ServiceDetail::whereHas('service', function($q) {
+        // 2. Ambil detail TAPI HANYA dari Service yang Balance-nya NEGATIF (< 0)
+        // Ini kunci untuk membuang baris yang nilainya 0 (tidak valid/rejected)
+        $details = ServiceDetail::with('service')
+            ->whereHas('service', function($q) {
                 $this->applyFilters($q);
-            })
-            ->where('labor_cost_service', '>', 0) 
-            ->get()
-            ->groupBy('service_id');
+                $q->where('balance', '<', 0); 
+            })->get();
 
         $ksgLaborSum = 0;
 
-        // Tambahkan 'CLAIM' ke daftar keyword
-        $ksgKeywords = ['KSG', 'CLAIM', 'SERVICE', 'SVC', 'CHECK', 'CEK', 'OLI', 'OIL', 'YAMALUBE', 'BUSI', 'FILTER', 'RINGAN', 'CVT', 'INJEKSI', 'INJECTOR', 'THROTTLE'];
-        $paidKeywords = ['KAMPAS', 'REM', 'BAN', 'TUBE', 'PRESS', 'OVERHAUL', 'ACCU', 'AKI', 'BOLAM', 'LAMPU', 'SEAL', 'SHOCK', 'BEARING', 'LAHER'];
+        foreach ($details as $item) {
+            $pkgName = strtoupper($item->service_package_name ?? '');
+            $laborCost = $item->labor_cost_service;
 
-        foreach ($details as $serviceId => $items) {
-            // A. Cek Kategori Invoice (KSG atau CLAIM)
-            $isTargetCategory = false;
-            foreach ($items as $item) {
-                $cat = strtoupper($item->service_category_code);
-                // PERBAIKAN: Cek juga kata "CLAIM"
-                if (str_contains($cat, 'KSG') || str_contains($cat, 'CLAIM')) {
-                    $isTargetCategory = true;
-                    break; 
-                }
-            }
+            // Cek apakah Item ini KSG atau CLAIM
+            if (str_contains($pkgName, 'KSG') || str_contains($pkgName, 'CLAIM')) {
+                
+                // Jika di database ada harganya, pakai itu.
+                if ($laborCost > 0) {
+                    $ksgLaborSum += $laborCost;
+                } 
+                // Jika 0, pakai Mapping Manual (Spesifik per Motor)
+                else {
+                    $modelName = strtoupper($item->service->mc_model_name ?? '');
 
-            if (!$isTargetCategory) continue; // Skip jika bukan KSG/Claim
-
-            foreach ($items as $item) {
-                $pkgName = strtoupper($item->service_package_name ?? '');
-
-                // LOGIKA FILTER:
-                // 1. Apakah ini JELAS KSG/CLAIM?
-                if (str_contains($pkgName, 'KSG') || str_contains($pkgName, 'CLAIM')) {
-                    $ksgLaborSum += $item->labor_cost_service;
-                }
-                // 2. Cek Conflict: Apakah mengandung kata "Paid"?
-                elseif (Str::contains($pkgName, $paidKeywords)) {
-                    continue;
-                }
-                // 3. Jika mengandung kata "Maintenance"
-                elseif (Str::contains($pkgName, $ksgKeywords)) {
-                    $ksgLaborSum += $item->labor_cost_service;
-                }
-                // 4. Fallback: Jika nama paket kosong/aneh, tapi Invoice KSG/Claim dan tidak ada item lain yg jelas
-                elseif (!$items->contains(fn($i) => str_contains(strtoupper($i->service_package_name), 'KSG') || str_contains(strtoupper($i->service_package_name), 'CLAIM'))) {
-                     $ksgLaborSum += $item->labor_cost_service;
+                    if (str_contains($pkgName, 'KSG1')) {
+                        // Cek Model Khusus
+                        if (str_contains($modelName, 'MX KING')) {
+                            $ksgLaborSum += 28000;
+                        } else {
+                            $ksgLaborSum += 24000;
+                        }
+                    } 
+                    elseif (str_contains($pkgName, 'KSG2')) {
+                        $ksgLaborSum += 25000;
+                    } 
+                    elseif (str_contains($pkgName, 'KSG3')) {
+                        $ksgLaborSum += 25000;
+                    } 
+                    elseif (str_contains($pkgName, 'KSG4')) {
+                        // Cek Model Khusus
+                        if (str_contains($modelName, 'NEO')) { // NMAX NEO
+                            $ksgLaborSum += 42000;
+                        } else {
+                            $ksgLaborSum += 29000;
+                        }
+                    } 
+                    elseif (str_contains($pkgName, 'CLAIM')) {
+                        $ksgLaborSum += 16000;
+                    }
                 }
             }
         }

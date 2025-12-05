@@ -28,7 +28,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
 
     // State
     private $currentService = null;
-    private $processedDetailIds = []; // Track detail yang valid agar tidak terhapus
+    private $processedDetailIds = []; 
     private $currentServiceCategoryCode = null;
     
     // Config & Cache
@@ -67,7 +67,8 @@ class ServiceImport implements OnEachRow, WithChunkReading
     private function cleanupOrphanDetails(Service $service)
     {
         // Hapus detail yang ada di DB tapi TIDAK ada di Excel import kali ini
-        // Ini menangani kasus item dihapus atau berubah tipe (Jasa -> Part)
+        // PERBAIKAN: Ini sekarang akan bekerja dengan benar karena processedDetailIds 
+        // hanya berisi item yang valid dari excel saat ini.
         $detailsToDelete = $service->details()
             ->whereNotIn('id', $this->processedDetailIds)
             ->get();
@@ -75,10 +76,9 @@ class ServiceImport implements OnEachRow, WithChunkReading
         foreach ($detailsToDelete as $detail) {
             // Jika detail yang dihapus adalah Barang, kembalikan stoknya
             if ($detail->barang_id && $detail->quantity > 0) {
-                // Pass quantity negatif untuk refund stok
                 $this->processStockDeduction(
                     $detail->barang_id, 
-                    -($detail->quantity), // Negatif = Refund
+                    -($detail->quantity), 
                     $service->id, 
                     $service->lokasi_id, 
                     $service->invoice_no, 
@@ -238,13 +238,12 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $namaBarang = $barangMaster->part_name ?? 'Unknown Item';
         $timestamp = $customCreatedAt ?? now();
 
-        // 1. JIKA QTY > 0 (PENJUALAN / POTONG STOK)
         if ($qty > 0) {
             $batches = InventoryBatch::where('barang_id', $barangId)
                 ->where('lokasi_id', $lokasiId)
                 ->where('quantity', '>', 0)
                 ->orderBy('created_at', 'asc')
-                ->lockForUpdate() // Lock agar tidak balapan
+                ->lockForUpdate()
                 ->get();
 
             $sisaQty = $qty;
@@ -259,11 +258,9 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $costPerUnit = $barangMaster->selling_out; 
                 $totalCost += ($costPerUnit * $potong);
                 
-                // Update Stok
                 $batch->quantity -= $potong;
                 $batch->save();
 
-                // Catat History
                 StockMovement::create([
                     'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $batch->rak_id,
                     'jumlah' => -$potong,
@@ -278,7 +275,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
             }
             return ($qty > 0) ? ($totalCost / $qty) : 0;
         } 
-        // 2. JIKA QTY < 0 (REFUND / KEMBALIKAN STOK)
         else {
             $qtyToRestore = abs($qty);
             
@@ -294,7 +290,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $stokAkhir = $batch->quantity;
                 $rakId = $batch->rak_id;
             } else {
-                // Create new batch if not exists
                 $stokAwal = 0;
                 $batch = InventoryBatch::create([
                     'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'quantity' => $qtyToRestore
@@ -317,13 +312,12 @@ class ServiceImport implements OnEachRow, WithChunkReading
         }
     }
 
-    // --- SMART SYNC (KUNCI PEMECAHAN MASALAH) ---
+    // --- SMART SYNC (FIXED LOGIC) ---
     private function syncServiceDetail($service, $type, $data)
     {
         $lokasiId = $service->lokasi_id;
         $serviceDate = $service->created_at;
 
-        // Cari detail yang identik (Barang sama ATAU Jasa sama)
         $query = $service->details()->where('item_category', $type);
 
         $barangId = null;
@@ -332,52 +326,60 @@ class ServiceImport implements OnEachRow, WithChunkReading
             if ($barang) {
                 $barangId = $barang->id;
                 $query->where('barang_id', $barangId);
+            } else {
+                $query->where('item_code', $data['item_code']);
+                Log::warning("Barang tidak ditemukan", [
+                    'invoice' => $service->invoice_no,
+                    'part_code' => $data['item_code'],
+                ]);
             }
         } else {
-            // Untuk JASA, cari berdasarkan service_package_name bukan item_name
             $query->where('service_package_name', $data['service_package_name']);
         }
 
-        // PERBAIKAN: Ambil SEMUA detail yang match (bukan hanya yang belum diproses)
         $existingDetail = $query->first();
 
         if ($existingDetail) {
-            // --- UPDATE MODE ---
-            
-            // PERBAIKAN: Cek apakah detail ini SUDAH diproses di sesi import ini
+            // PERBAIKAN: Cek apakah ID sudah diproses *di batch import ini*.
+            // Jika sudah ada di processedDetailIds, artinya baris ini duplikat di file excel (1 item dipecah 2 baris).
+            // Maka kita skip.
+            // TAPI, jika belum ada di processedDetailIds, kita UPDATE datanya.
             if (in_array($existingDetail->id, $this->processedDetailIds)) {
-                // Detail sudah diproses, skip untuk hindari double deduction
                 return;
             }
             
+            // Tandai sudah diproses agar tidak dihapus oleh cleanupOrphanDetails nanti
             $this->processedDetailIds[] = $existingDetail->id;
 
-            // Cek apakah QTY berubah?
-            $qtyDiff = $data['quantity'] - $existingDetail->quantity;
+            $isQtyChanged = ($data['quantity'] != $existingDetail->quantity);
+            $isPriceChanged = ($data['price'] != $existingDetail->price);
+            $isCodeChanged = ($data['item_code'] != $existingDetail->item_code);
+            
+            // PERBAIKAN TAMBAHAN: Cek juga labor cost
+            $isLaborChanged = ($data['labor_cost_service'] != $existingDetail->labor_cost_service);
 
-            if ($qtyDiff != 0 && $barangId) {
-                // Ada perubahan qty -> Koreksi stok
-                // Jika positif: Potong lagi. Jika negatif: Refund.
+            if ($isQtyChanged && $barangId) {
+                $qtyDiff = $data['quantity'] - $existingDetail->quantity;
                 $this->processStockDeduction($barangId, $qtyDiff, $service->id, $lokasiId, $service->invoice_no, $serviceDate);
             }
-            // JIKA QTY SAMA, KITA TIDAK SENTUH STOK -> HISTORY BERSIH
 
-            // Update data nominal/nama tanpa ganggu stok
-            $existingDetail->update([
-                'service_category_code' => $data['service_category_code'],
-                'service_package_name' => $data['service_package_name'],
-                'labor_cost_service' => $data['labor_cost_service'],
-                'item_code' => $data['item_code'],
-                'item_name' => $data['item_name'],
-                'quantity' => $data['quantity'],
-                'price' => $data['price']
-            ]);
+            // Lakukan Update jika ada perubahan
+            if ($isQtyChanged || $isPriceChanged || $isCodeChanged || $isLaborChanged) {
+                $existingDetail->update([
+                    'service_category_code' => $data['service_category_code'],
+                    'service_package_name' => $data['service_package_name'],
+                    'labor_cost_service' => $data['labor_cost_service'],
+                    'item_code' => $data['item_code'],
+                    'item_name' => $data['item_name'],
+                    'quantity' => $data['quantity'],
+                    'price' => $data['price']
+                ]);
+            }
 
         } else {
-            // --- CREATE MODE ---
+            // CREATE MODE
             $costPrice = 0;
             if ($barangId) {
-                // Item baru -> Potong stok
                 $costPrice = $this->processStockDeduction($barangId, $data['quantity'], $service->id, $lokasiId, $service->invoice_no, $serviceDate);
             }
 
@@ -410,20 +412,16 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $partsQty = $this->cleanNumeric($this->getVal($row, 'parts_qty'));
         $partsPrice = $this->cleanNumeric($this->getVal($row, 'parts_price'));
 
-        // VALIDASI: Hanya proses jika ada data yang valid di baris ini
         $hasPackageData = !empty($servicePackageNameNormalized);
         $hasLaborData = ($laborCost > 0);
         $hasPartsData = (!empty($partsNo) && !empty($partsName));
         
-        // Jika tidak ada data apapun di baris ini, skip
         if (!$hasPackageData && !$hasLaborData && !$hasPartsData) {
             return;
         }
 
-        // 1. PAKET / JASA
         if ($hasPackageData) {
             if (isset($this->convertMapping[$servicePackageNameNormalized])) {
-                // CONVERT KE PART
                 $conv = $this->convertMapping[$servicePackageNameNormalized];
                 $this->syncServiceDetail($service, 'PART', [
                     'service_category_code' => $serviceCategoryCode,
@@ -435,31 +433,28 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     'price' => $conv->retail
                 ]);
             } else {
-                // JASA MURNI - item_name dikosongkan (null)
                 $this->syncServiceDetail($service, 'JASA', [
                     'service_category_code' => $serviceCategoryCode,
                     'service_package_name' => $servicePackageNameRaw,
                     'labor_cost_service' => $laborCost,
                     'item_code' => null,
-                    'item_name' => null, // PERUBAHAN: Tidak isi item_name untuk JASA
+                    'item_name' => null,
                     'quantity' => 1,
                     'price' => $laborCost
                 ]);
             }
-        } elseif ($hasLaborData) {
-            // JASA MANUAL - item_name dikosongkan (null)
+        } elseif ($hasLaborData && !$hasPackageData) {
             $this->syncServiceDetail($service, 'JASA', [
                 'service_category_code' => $serviceCategoryCode,
-                'service_package_name' => $servicePackageNameRaw,
+                'service_package_name' => null,
                 'labor_cost_service' => $laborCost,
                 'item_code' => null,
-                'item_name' => null, // PERUBAHAN: Tidak isi item_name untuk JASA
+                'item_name' => null,
                 'quantity' => 1,
                 'price' => $laborCost
             ]);
         }
 
-        // 2. PART MANUAL
         if ($hasPartsData) {
             $cat = (stripos($partsName, 'oli') !== false || stripos($partsName, 'yamalube') !== false) ? 'OLI' : 'PART';
             $this->syncServiceDetail($service, $cat, [
@@ -468,7 +463,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 'labor_cost_service' => 0,
                 'item_code' => $partsNo,
                 'item_name' => $partsName,
-                'quantity' => $partsQty ?: 1,
+                'quantity' => $partsQty > 0 ? $partsQty : 1,
                 'price' => $partsPrice
             ]);
         }
@@ -481,7 +476,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
 
         if (empty(array_filter($rowArray))) return;
 
-        // WRAP TRANSACTION
         DB::transaction(function() use ($rowArray, $rowIndex) {
             if (!$this->headerRowDetected) {
                 if ($this->detectHeaderRow($rowArray)) return; 
@@ -490,9 +484,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $rowString = implode(' ', array_slice($rowArray, 0, 10));
             if (str_contains(strtoupper($rowString), 'TOTAL')) return;
 
-            // Skip baris dengan status cancelled
             if ($this->isRowCancelled($rowArray)) {
-                Log::info("Baris {$rowIndex}: Skipped - Status Cancelled");
                 return;
             }
 
@@ -512,17 +504,14 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 }
 
                 if (!empty($invoiceNo)) {
-                    // Langsung skip jika invoice baru adalah cancelled
                     if ($this->isRowCancelled($rowArray)) {
                         $this->currentService = null;
                         return;
                     }
                     
-                    // GANTI INVOICE: Cleanup invoice sebelumnya
                     if ($this->currentService && $this->currentService->invoice_no !== $invoiceNo) {
                         $this->cleanupOrphanDetails($this->currentService);
                         $this->processedDetailIds = [];
-                        // Reset service category code untuk invoice baru
                         $this->currentServiceCategoryCode = null;
                     }
 
@@ -575,14 +564,14 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     ];
 
                     if ($existingService) {
-                        // UPDATE MODE: Load detail IDs yang sudah ada agar tidak double process
-                        $this->processedDetailIds = $existingService->details()->pluck('id')->toArray();
+                        // PERBAIKAN: JANGAN preload detail IDs di sini!
+                        // Biarkan kosong agar syncServiceDetail bisa memproses update.
+                        $this->processedDetailIds = []; 
                         
                         $existingService->update($serviceData);
                         $this->currentService = $existingService;
                         $this->updatedCount++;
                     } else {
-                        // CREATE MODE: Reset processedDetailIds untuk invoice baru
                         $this->processedDetailIds = [];
                         
                         $serviceData['invoice_no'] = $invoiceNo;
@@ -600,7 +589,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     $this->currentServiceCategoryCode = $this->getVal($rowArray, 'service_category');
                 
                 } elseif (empty($invoiceNo) && !$this->currentService) {
-                    // Tidak ada invoice di baris ini dan tidak ada service aktif sebelumnya
                     return;
                 }
 

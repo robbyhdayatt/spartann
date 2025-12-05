@@ -46,7 +46,7 @@ class ServiceController extends Controller
         $endDate = $request->input('end_date', session('service.end_date', now()->toDateString()));
         // -------------------------------------------------------
 
-        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC', 'ASD']);
+        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC', 'ASD', 'ACC']);
         $selectedDealer = null;
 
         if ($canFilterByDealer) {

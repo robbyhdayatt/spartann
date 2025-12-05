@@ -107,13 +107,13 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('print-invoice-only', fn(User $user) => $user->hasRole('KSR'));
 
         // KSR sudah ada di view-service
-        Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS', 'KSR', 'ASD']));
+        Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS', 'KSR', 'ASD', 'ACC']));
         
         // ++ PERUBAHAN: Tambahkan KSR agar bisa kelola service (edit/tambah part) ++
-        Gate::define('manage-service', fn(User $user) => $user->hasRole(['CS', 'KSR']));
+        Gate::define('manage-service', fn(User $user) => $user->hasRole(['CS', 'KSR',]));
         
         // ++ PERUBAHAN: Tambahkan KSR agar bisa export laporan service ++
-        Gate::define('export-service-report', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS', 'KSR', 'ASD']));
+        Gate::define('export-service-report', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS', 'KSR', 'ASD', 'ACC']));
 
         // 7. LAPORAN
         Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'SMD', 'ACC']));
