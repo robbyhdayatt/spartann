@@ -24,7 +24,6 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
     protected $endDate;
     protected $invoiceNo;
     
-    // Variabel untuk menyimpan Grand Total
     private $totalQty = 0;
     private $totalPenjualan = 0;
     private $totalModal = 0;
@@ -40,34 +39,28 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
 
     public function startCell(): string
     {
-        return 'A3'; // Mulai data dari baris 3
+        return 'A3';
     }
 
     public function collection()
     {
         $query = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
-            ->leftJoin('barangs', 'service_details.barang_id', '=', 'barangs.id')
+            ->join('barangs', 'service_details.barang_id', '=', 'barangs.id')
+            // FILTER KETAT: Join ke converts_main
+            ->join('converts_main', 'service_details.item_code', '=', 'converts_main.part_code')
             ->select(
                 'service_details.item_code',
-                'service_details.item_name',
+                'barangs.part_name as item_name',
                 'service_details.item_category',
                 DB::raw('SUM(service_details.quantity) as total_qty'),
-                
-                // PERUBAHAN: Penjualan = Qty * Harga Retail Master Barang
                 DB::raw('SUM(service_details.quantity * COALESCE(barangs.retail, 0)) as total_penjualan'),
-                
-                // Modal (HPP) = Qty * Selling Out
                 DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_modal"),
-                
-                // Profit = (Qty * Retail) - (Qty * Selling Out)
                 DB::raw("SUM(service_details.quantity * COALESCE(barangs.retail, 0)) -
                          SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_keuntungan")
             )
             ->whereBetween('services.reg_date', [$this->startDate, $this->endDate])
-            // FILTER KHUSUS: PARTS ONLY
-            ->whereNotNull('service_details.barang_id')
-            ->groupBy('service_details.item_code', 'service_details.item_name', 'service_details.item_category')
+            ->groupBy('service_details.item_code', 'barangs.part_name', 'service_details.item_category')
             ->orderBy('total_qty', 'desc');
 
         if ($this->invoiceNo) {
@@ -76,7 +69,6 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
 
         $data = $query->get();
 
-        // Hitung Grand Total
         $this->totalQty = $data->sum('total_qty');
         $this->totalPenjualan = $data->sum('total_penjualan');
         $this->totalModal = $data->sum('total_modal');
@@ -108,7 +100,7 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
             'Nama Part',
             'Kategori',
             'Qty Terjual',
-            'Total Penjualan (Retail)', // Judul disesuaikan agar jelas
+            'Total Penjualan (Retail)',
             'Total Modal (HPP)',
             'Keuntungan (Profit)',
         ];
@@ -139,15 +131,13 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
                 $lastRow = $sheet->getHighestRow();
                 $totalRow = $lastRow + 1;
 
-                // 1. Tambahkan Judul Laporan
                 $sheet->mergeCells('A1:H1');
-                $sheet->setCellValue('A1', 'LAPORAN SERVICE SUMMARY (PARTS ONLY)');
+                $sheet->setCellValue('A1', 'LAPORAN SERVICE SUMMARY (CONVERT ITEMS ONLY)');
                 $sheet->getStyle('A1')->applyFromArray([
                     'font' => ['bold' => true, 'size' => 14],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
                 ]);
 
-                // 2. Tambahkan Periode
                 $sheet->mergeCells('A2:H2');
                 $period = "Periode: " . \Carbon\Carbon::parse($this->startDate)->format('d M Y') . " s/d " . \Carbon\Carbon::parse($this->endDate)->format('d M Y');
                 $sheet->setCellValue('A2', $period);
@@ -156,7 +146,6 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
                 ]);
 
-                // 3. Styling Header Tabel
                 $sheet->getStyle('A3:H3')->applyFromArray([
                     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
@@ -164,7 +153,6 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
                     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
                 ]);
 
-                // 4. Styling Baris Data
                 if ($lastRow >= 4) {
                     $sheet->getStyle('A4:H' . $lastRow)->applyFromArray([
                         'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
@@ -173,7 +161,6 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
                     $sheet->getStyle('D4:E' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 }
 
-                // 5. Tambahkan Baris Grand Total
                 $sheet->setCellValue('A' . $totalRow, 'GRAND TOTAL');
                 $sheet->mergeCells('A' . $totalRow . ':D' . $totalRow);
                 
@@ -182,7 +169,6 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
                 $sheet->setCellValue('G' . $totalRow, $this->totalModal);
                 $sheet->setCellValue('H' . $totalRow, $this->totalProfit);
 
-                // Style Grand Total
                 $sheet->getStyle('A' . $totalRow . ':H' . $totalRow)->applyFromArray([
                     'font' => ['bold' => true],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFD9D9D9']],

@@ -384,12 +384,11 @@ class ReportController extends Controller
         return Excel::download(new SalesSummaryExport($startDate, $endDate, $dealerId), $fileName);
     }
 
-    public function serviceSummary(Request $request)
+public function serviceSummary(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        // 1. LOGIKA STICKY FILTER
         if ($request->filled('start_date') || $request->filled('end_date')) {
             session([
                 'report.service.start_date' => $request->input('start_date'),
@@ -401,29 +400,29 @@ class ReportController extends Controller
         $endDate = $request->input('end_date', session('report.service.end_date', now()->endOfMonth()->toDateString()));
         $invoiceNo = $request->input('invoice_no');
 
+        // Ambil daftar kode part yang valid dari tabel convert
+        // Gunakan distinct agar listnya unik (tidak ada duplikat J1/J2/J3)
+        $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code');
+
         $query = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
-            ->leftJoin('barangs', 'service_details.barang_id', '=', 'barangs.id')
+            ->join('barangs', 'service_details.barang_id', '=', 'barangs.id')
+            // PERBAIKAN: Ganti JOIN dengan WHERE IN agar tidak duplikat
+            ->whereIn('service_details.item_code', $validPartCodes)
             ->select(
                 'service_details.item_code',
-                'service_details.item_name',
+                'barangs.part_name as item_name',
                 'service_details.item_category',
                 DB::raw('SUM(service_details.quantity) as total_qty'),
                 
-                // PERUBAHAN: Menggunakan Harga Retail Master Barang
+                // Perhitungan Keuangan
                 DB::raw('SUM(service_details.quantity * COALESCE(barangs.retail, 0)) as total_penjualan'),
-                
-                // Modal = Qty * Harga Beli (Selling Out)
                 DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_modal"),
-                
-                // Profit = (Qty * Retail) - (Qty * Selling Out)
                 DB::raw("SUM(service_details.quantity * COALESCE(barangs.retail, 0)) -
                          SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_keuntungan")
             )
             ->whereBetween('services.reg_date', [$startDate, $endDate])
-            // FILTER KHUSUS: HANYA BARANG
-            ->whereNotNull('service_details.barang_id')
-            ->groupBy('service_details.item_code', 'service_details.item_name', 'service_details.item_category')
+            ->groupBy('service_details.item_code', 'barangs.part_name', 'service_details.item_category')
             ->orderBy('total_qty', 'desc');
 
         if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC']) && $user->lokasi_id) {

@@ -66,15 +66,11 @@ class ServiceImport implements OnEachRow, WithChunkReading
 
     private function cleanupOrphanDetails(Service $service)
     {
-        // Hapus detail yang ada di DB tapi TIDAK ada di Excel import kali ini
-        // PERBAIKAN: Ini sekarang akan bekerja dengan benar karena processedDetailIds 
-        // hanya berisi item yang valid dari excel saat ini.
         $detailsToDelete = $service->details()
             ->whereNotIn('id', $this->processedDetailIds)
             ->get();
 
         foreach ($detailsToDelete as $detail) {
-            // Jika detail yang dihapus adalah Barang, kembalikan stoknya
             if ($detail->barang_id && $detail->quantity > 0) {
                 $this->processStockDeduction(
                     $detail->barang_id, 
@@ -312,7 +308,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
         }
     }
 
-    // --- SMART SYNC (FIXED LOGIC) ---
+    // --- SMART SYNC (FIXED: Update Barang ID) ---
     private function syncServiceDetail($service, $type, $data)
     {
         $lokasiId = $service->lokasi_id;
@@ -328,10 +324,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $query->where('barang_id', $barangId);
             } else {
                 $query->where('item_code', $data['item_code']);
-                Log::warning("Barang tidak ditemukan", [
-                    'invoice' => $service->invoice_no,
-                    'part_code' => $data['item_code'],
-                ]);
             }
         } else {
             $query->where('service_package_name', $data['service_package_name']);
@@ -340,40 +332,43 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $existingDetail = $query->first();
 
         if ($existingDetail) {
-            // PERBAIKAN: Cek apakah ID sudah diproses *di batch import ini*.
-            // Jika sudah ada di processedDetailIds, artinya baris ini duplikat di file excel (1 item dipecah 2 baris).
-            // Maka kita skip.
-            // TAPI, jika belum ada di processedDetailIds, kita UPDATE datanya.
             if (in_array($existingDetail->id, $this->processedDetailIds)) {
                 return;
             }
             
-            // Tandai sudah diproses agar tidak dihapus oleh cleanupOrphanDetails nanti
             $this->processedDetailIds[] = $existingDetail->id;
 
             $isQtyChanged = ($data['quantity'] != $existingDetail->quantity);
             $isPriceChanged = ($data['price'] != $existingDetail->price);
             $isCodeChanged = ($data['item_code'] != $existingDetail->item_code);
-            
-            // PERBAIKAN TAMBAHAN: Cek juga labor cost
             $isLaborChanged = ($data['labor_cost_service'] != $existingDetail->labor_cost_service);
+            
+            // Cek apakah ID Barang berubah (PENTING untuk fix kasus Carbon Cleaner)
+            $isBarangIdChanged = ($barangId !== $existingDetail->barang_id);
 
             if ($isQtyChanged && $barangId) {
                 $qtyDiff = $data['quantity'] - $existingDetail->quantity;
                 $this->processStockDeduction($barangId, $qtyDiff, $service->id, $lokasiId, $service->invoice_no, $serviceDate);
             }
 
-            // Lakukan Update jika ada perubahan
-            if ($isQtyChanged || $isPriceChanged || $isCodeChanged || $isLaborChanged) {
-                $existingDetail->update([
+            if ($isQtyChanged || $isPriceChanged || $isCodeChanged || $isLaborChanged || $isBarangIdChanged) {
+                $updateData = [
                     'service_category_code' => $data['service_category_code'],
                     'service_package_name' => $data['service_package_name'],
                     'labor_cost_service' => $data['labor_cost_service'],
                     'item_code' => $data['item_code'],
                     'item_name' => $data['item_name'],
                     'quantity' => $data['quantity'],
-                    'price' => $data['price']
-                ]);
+                    'price' => $data['price'],
+                    'barang_id' => $barangId, // <--- INI YANG DITAMBAHKAN
+                ];
+                
+                // Reset cost price jika item berubah jadi Non-Barang (misal: Injector -> Carbon Cleaner manual)
+                if (is_null($barangId) && $existingDetail->barang_id) {
+                    $updateData['cost_price'] = 0; 
+                }
+                
+                $existingDetail->update($updateData);
             }
 
         } else {
@@ -564,8 +559,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     ];
 
                     if ($existingService) {
-                        // PERBAIKAN: JANGAN preload detail IDs di sini!
-                        // Biarkan kosong agar syncServiceDetail bisa memproses update.
                         $this->processedDetailIds = []; 
                         
                         $existingService->update($serviceData);
