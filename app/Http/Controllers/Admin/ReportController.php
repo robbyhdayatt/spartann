@@ -376,15 +376,25 @@ class ReportController extends Controller
 
     public function exportSalesSummary(Request $request)
     {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+        
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
+        
         $dealerId = $request->input('dealer_id');
+        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'MA', 'ASD', 'ACC']) && $user->lokasi_id;
+        
+        if ($isRestrictedUser) {
+            $dealerId = $user->lokasi_id;
+        }
+
         $fileName = 'Laporan Penjualan - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
 
         return Excel::download(new SalesSummaryExport($startDate, $endDate, $dealerId), $fileName);
     }
 
-public function serviceSummary(Request $request)
+    public function serviceSummary(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
@@ -454,13 +464,24 @@ public function serviceSummary(Request $request)
 
     public function exportServiceSummary(Request $request)
     {
-        // UPDATE: Gunakan logika Session yang sama agar sinkron dengan View
+        /** @var \App\Models\User $user */
+        $user = Auth::user(); // Ambil user yang login
+
+        // Gunakan logika session/input yang sama
         $startDate = $request->input('start_date') ?? session('report.service.start_date') ?? now()->startOfMonth()->toDateString();
         $endDate = $request->input('end_date') ?? session('report.service.end_date') ?? now()->endOfMonth()->toDateString();
         $invoiceNo = $request->input('invoice_no');
 
+        // -- PERBAIKAN: Logika Filter Lokasi User --
+        $lokasiId = null;
+        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC'])) {
+            $lokasiId = $user->lokasi_id; // Paksa filter lokasi jika user terbatas
+        }
+        // ------------------------------------------
+
         $fileName = 'Laporan Service Summary (Parts) - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
 
-        return Excel::download(new ServiceSummaryExport($startDate, $endDate, $invoiceNo), $fileName);
+        // Kirim $lokasiId ke class export
+        return Excel::download(new ServiceSummaryExport($startDate, $endDate, $invoiceNo, $lokasiId), $fileName);
     }
 }

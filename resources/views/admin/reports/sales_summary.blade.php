@@ -71,7 +71,7 @@
                     <tbody>
                         @foreach($reportData as $data)
                             @php
-                                $hpp = $data->barang->selling_in ?? 0;
+                                $hpp = $data->barang->selling_out ?? 0;
                                 $total_modal = $data->qty_jual * $hpp;
                                 $profit = $data->subtotal - $total_modal;
                             @endphp

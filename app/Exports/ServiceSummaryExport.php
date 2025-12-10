@@ -8,8 +8,6 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
-use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -18,44 +16,47 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 
-class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSize, WithStyles, WithColumnFormatting, WithMapping, WithCustomStartCell, WithEvents
+class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSize, WithStyles, WithColumnFormatting, WithEvents
 {
     protected $startDate;
     protected $endDate;
     protected $invoiceNo;
-    
-    private $totalQty = 0;
-    private $totalPenjualan = 0;
-    private $totalModal = 0;
-    private $totalProfit = 0;
-    private $rowNumber = 0;
+    protected $lokasiId;
 
-    public function __construct($startDate, $endDate, $invoiceNo)
+    // Variabel untuk menampung total
+    protected $grandQty = 0;
+    protected $grandJual = 0;
+    protected $grandModal = 0;
+    protected $grandProfit = 0;
+    protected $rowCount = 0;
+
+    public function __construct($startDate, $endDate, $invoiceNo, $lokasiId = null)
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
         $this->invoiceNo = $invoiceNo;
-    }
-
-    public function startCell(): string
-    {
-        return 'A3';
+        $this->lokasiId = $lokasiId;
     }
 
     public function collection()
     {
+        // 1. Ambil daftar kode part yang valid (sama seperti di Controller)
+        $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code');
+
+        // 2. Query Utama (Copy logic dari ReportController::serviceSummary)
         $query = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
             ->join('barangs', 'service_details.barang_id', '=', 'barangs.id')
-            // FILTER KETAT: Join ke converts_main
-            ->join('converts_main', 'service_details.item_code', '=', 'converts_main.part_code')
+            ->whereIn('service_details.item_code', $validPartCodes)
             ->select(
                 'service_details.item_code',
                 'barangs.part_name as item_name',
                 'service_details.item_category',
                 DB::raw('SUM(service_details.quantity) as total_qty'),
+                
+                // Perhitungan Keuangan
                 DB::raw('SUM(service_details.quantity * COALESCE(barangs.retail, 0)) as total_penjualan'),
-                DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_modal"),
+                DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_modal"), // Pakai selling_out
                 DB::raw("SUM(service_details.quantity * COALESCE(barangs.retail, 0)) -
                          SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_keuntungan")
             )
@@ -63,63 +64,65 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
             ->groupBy('service_details.item_code', 'barangs.part_name', 'service_details.item_category')
             ->orderBy('total_qty', 'desc');
 
+        // 3. Terapkan Filter Lokasi & Invoice
+        if ($this->lokasiId) {
+            $query->where('services.lokasi_id', $this->lokasiId);
+        }
+
         if ($this->invoiceNo) {
             $query->where('services.invoice_no', 'like', '%' . $this->invoiceNo . '%');
         }
 
         $data = $query->get();
 
-        $this->totalQty = $data->sum('total_qty');
-        $this->totalPenjualan = $data->sum('total_penjualan');
-        $this->totalModal = $data->sum('total_modal');
-        $this->totalProfit = $data->sum('total_keuntungan');
+        // 4. Hitung Grand Total saat fetching data
+        $this->grandQty = $data->sum('total_qty');
+        $this->grandJual = $data->sum('total_penjualan');
+        $this->grandModal = $data->sum('total_modal');
+        $this->grandProfit = $data->sum('total_keuntungan');
+        $this->rowCount = $data->count();
 
         return $data;
-    }
-
-    public function map($row): array
-    {
-        $this->rowNumber++;
-        return [
-            $this->rowNumber,
-            $row->item_code,
-            $row->item_name,
-            (str_contains(strtoupper($row->item_category), 'OLI') ? 'OLI' : $row->item_category),
-            $row->total_qty,
-            $row->total_penjualan,
-            $row->total_modal,
-            $row->total_keuntungan
-        ];
     }
 
     public function headings(): array
     {
         return [
-            'No',
             'Kode Part',
-            'Nama Part',
+            'Nama Barang',
             'Kategori',
-            'Qty Terjual',
-            'Total Penjualan (Retail)',
+            'Total Qty',
+            'Total Penjualan',
             'Total Modal (HPP)',
-            'Keuntungan (Profit)',
+            'Total Keuntungan',
+        ];
+    }
+
+    public function styles(Worksheet $sheet)
+    {
+        // Styling Header (Baris 1)
+        return [
+            1 => [
+                'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFF']],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['argb' => '4B5563'], // Abu-abu gelap
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
+            ],
         ];
     }
 
     public function columnFormats(): array
     {
         return [
-            'E' => '#,##0',
-            'F' => '"Rp "#,##0_-',
-            'G' => '"Rp "#,##0_-',
-            'H' => '"Rp "#,##0_-',
-        ];
-    }
-
-    public function styles(Worksheet $sheet)
-    {
-        return [
-            3 => ['font' => ['bold' => true]],
+            'D' => '#,##0', // Qty
+            'E' => '#,##0', // Jual
+            'F' => '#,##0', // Modal
+            'G' => '#,##0', // Untung
         ];
     }
 
@@ -127,59 +130,49 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
-                $sheet = $event->sheet;
-                $lastRow = $sheet->getHighestRow();
+                $sheet = $event->sheet->getDelegate();
+                
+                // Menentukan baris Grand Total
+                $lastRow = $this->rowCount + 1; // Header
                 $totalRow = $lastRow + 1;
 
-                $sheet->mergeCells('A1:H1');
-                $sheet->setCellValue('A1', 'LAPORAN SERVICE SUMMARY (CONVERT ITEMS ONLY)');
-                $sheet->getStyle('A1')->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 14],
-                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-                ]);
-
-                $sheet->mergeCells('A2:H2');
-                $period = "Periode: " . \Carbon\Carbon::parse($this->startDate)->format('d M Y') . " s/d " . \Carbon\Carbon::parse($this->endDate)->format('d M Y');
-                $sheet->setCellValue('A2', $period);
-                $sheet->getStyle('A2')->applyFromArray([
-                    'font' => ['italic' => true, 'size' => 11],
-                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-                ]);
-
-                $sheet->getStyle('A3:H3')->applyFromArray([
-                    'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF4F81BD']],
-                    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
-                ]);
-
-                if ($lastRow >= 4) {
-                    $sheet->getStyle('A4:H' . $lastRow)->applyFromArray([
-                        'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
-                    ]);
-                    $sheet->getStyle('A4:B' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                    $sheet->getStyle('D4:E' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                }
-
+                // Tulis "GRAND TOTAL"
                 $sheet->setCellValue('A' . $totalRow, 'GRAND TOTAL');
-                $sheet->mergeCells('A' . $totalRow . ':D' . $totalRow);
-                
-                $sheet->setCellValue('E' . $totalRow, $this->totalQty);
-                $sheet->setCellValue('F' . $totalRow, $this->totalPenjualan);
-                $sheet->setCellValue('G' . $totalRow, $this->totalModal);
-                $sheet->setCellValue('H' . $totalRow, $this->totalProfit);
+                $sheet->mergeCells('A' . $totalRow . ':C' . $totalRow); // Merge A-C
 
-                $sheet->getStyle('A' . $totalRow . ':H' . $totalRow)->applyFromArray([
-                    'font' => ['bold' => true],
-                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFD9D9D9']],
-                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+                // Tulis Nilai Total
+                $sheet->setCellValue('D' . $totalRow, $this->grandQty);
+                $sheet->setCellValue('E' . $totalRow, $this->grandJual);
+                $sheet->setCellValue('F' . $totalRow, $this->grandModal);
+                $sheet->setCellValue('G' . $totalRow, $this->grandProfit);
+
+                // Styling Baris Total
+                $sheet->getStyle('A' . $totalRow . ':G' . $totalRow)->applyFromArray([
+                    'font' => ['bold' => true, 'size' => 11],
+                    'fill' => [
+                        'fillType' => Fill::FILL_SOLID,
+                        'startColor' => ['argb' => 'E5E7EB'], // Abu-abu muda
+                    ],
+                    'alignment' => [
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ],
                 ]);
-                
-                $sheet->getStyle('E' . $totalRow)->getNumberFormat()->setFormatCode('#,##0');
-                $sheet->getStyle('F' . $totalRow . ':H' . $totalRow)->getNumberFormat()->setFormatCode('"Rp "#,##0_-');
-                
+
+                // Alignment text "GRAND TOTAL" ke kanan
                 $sheet->getStyle('A' . $totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-                $sheet->getStyle('E' . $totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+                // Format angka baris total
+                $sheet->getStyle('D' . $totalRow . ':G' . $totalRow)->getNumberFormat()->setFormatCode('#,##0');
+
+                // Tambahkan Border ke seluruh tabel
+                $sheet->getStyle('A1:G' . $totalRow)->applyFromArray([
+                    'borders' => [
+                        'allBorders' => [
+                            'borderStyle' => Border::BORDER_THIN,
+                            'color' => ['argb' => '000000'],
+                        ],
+                    ],
+                ]);
             },
         ];
     }

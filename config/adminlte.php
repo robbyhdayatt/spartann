@@ -414,7 +414,7 @@ return [
                 ['text' => 'Kartu Stok', 'icon' => 'fas fa-fw fa-clipboard-list', 'route' => 'admin.reports.stock-card'],
                 ['text' => 'Stok Per Lokasi', 'icon' => 'fas fa-fw fa-boxes', 'route' => 'admin.reports.stock-by-warehouse'],
                 ['text' => 'Laporan Stok Total', 'icon' => 'fas fa-fw fa-archive', 'route' => 'admin.reports.stock-report', 'can'  => 'view-global-reports'],
-                ['text' => 'Jurnal Penjualan', 'icon' => 'fas fa-fw fa-book-open', 'route' => 'admin.reports.sales-journal'],
+                // ['text' => 'Jurnal Penjualan', 'icon' => 'fas fa-fw fa-book-open', 'route' => 'admin.reports.sales-journal'],
                 ['text' => 'Laporan Penjualan', 'icon' => 'fas fa-fw fa-chart-line', 'route' => 'admin.reports.sales-summary'],
                 ['text' => 'Laporan Service', 'icon' => 'fas fa-fw fa-wrench', 'route' => 'admin.reports.service-summary'],
                 ['text' => 'Jurnal Pembelian', 'icon' => 'fas fa-fw fa-book', 'route' => 'admin.reports.purchase-journal','can'  => 'view-purchase-journal'],
