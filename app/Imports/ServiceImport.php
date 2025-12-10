@@ -225,7 +225,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
         return stripos($woStatus, 'ZZ. Cancelled') !== false || stripos($woStatus, 'Cancelled') !== false;
     }
 
-    // --- CORE LOGIC: STOCK MANAGEMENT (SAFE) ---
+    // --- CORE LOGIC: STOCK MANAGEMENT (SAFE & GLOBAL STOCK FIXED) ---
     private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId, $invoiceNo, $customCreatedAt = null)
     {
         if (!$barangId || !$lokasiId || $qty == 0) return 0;
@@ -235,6 +235,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $timestamp = $customCreatedAt ?? now();
 
         if ($qty > 0) {
+            // Lock batch untuk pemotongan
             $batches = InventoryBatch::where('barang_id', $barangId)
                 ->where('lokasi_id', $lokasiId)
                 ->where('quantity', '>', 0)
@@ -242,14 +243,20 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 ->lockForUpdate()
                 ->get();
 
+            // [PERBAIKAN] Hitung Total Stok Global sebelum transaksi
+            // Kita hitung manual dari sum quantity semua batch di lokasi ini
+            $currentGlobalStock = InventoryBatch::where('barang_id', $barangId)
+                ->where('lokasi_id', $lokasiId)
+                ->sum('quantity');
+
             $sisaQty = $qty;
             $totalCost = 0;
 
             foreach ($batches as $batch) {
                 if ($sisaQty <= 0) break;
                 
-                $stokSaatIni = $batch->quantity;
-                $potong = min($stokSaatIni, $sisaQty);
+                $stokBatch = $batch->quantity;
+                $potong = min($stokBatch, $sisaQty);
                 
                 $costPerUnit = $barangMaster->selling_out; 
                 $totalCost += ($costPerUnit * $potong);
@@ -257,49 +264,61 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $batch->quantity -= $potong;
                 $batch->save();
 
+                // [PERBAIKAN] Gunakan $currentGlobalStock untuk log history
                 StockMovement::create([
-                    'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $batch->rak_id,
+                    'barang_id' => $barangId, 
+                    'lokasi_id' => $lokasiId, 
+                    'rak_id' => $batch->rak_id,
                     'jumlah' => -$potong,
-                    'stok_sebelum' => $stokSaatIni, 
-                    'stok_sesudah' => $stokSaatIni - $potong,
-                    'referensi_type' => 'App\Models\Service', 'referensi_id' => $serviceId,
+                    'stok_sebelum' => $currentGlobalStock, 
+                    'stok_sesudah' => $currentGlobalStock - $potong,
+                    'referensi_type' => 'App\Models\Service', 
+                    'referensi_id' => $serviceId,
                     'keterangan' => "Pemakaian Service #{$invoiceNo} ({$namaBarang})",
                     'user_id' => $this->userId,
-                    'created_at' => $timestamp, 'updated_at' => $timestamp,
+                    'created_at' => $timestamp, 
+                    'updated_at' => $timestamp,
                 ]);
+
+                // Kurangi tracker stok global dan sisa qty transaksi
+                $currentGlobalStock -= $potong;
                 $sisaQty -= $potong;
             }
             return ($qty > 0) ? ($totalCost / $qty) : 0;
         } 
         else {
+            // LOGIKA PENGEMBALIAN (REFUND) - JUGA PERLU UPDATE GLOBAL STOCK LOGIC
             $qtyToRestore = abs($qty);
             
+            // Lock batch terakhir
             $batch = InventoryBatch::where('barang_id', $barangId)
                 ->where('lokasi_id', $lokasiId)
                 ->orderBy('created_at', 'desc')
                 ->lockForUpdate()
                 ->first();
 
+            // [PERBAIKAN] Hitung Total Stok Global
+            $currentGlobalStock = InventoryBatch::where('barang_id', $barangId)
+                ->where('lokasi_id', $lokasiId)
+                ->sum('quantity');
+
             if ($batch) {
-                $stokAwal = $batch->quantity;
                 $batch->increment('quantity', $qtyToRestore);
-                $stokAkhir = $batch->quantity;
                 $rakId = $batch->rak_id;
             } else {
-                $stokAwal = 0;
                 $batch = InventoryBatch::create([
                     'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'quantity' => $qtyToRestore
                 ]);
-                $stokAkhir = $qtyToRestore;
                 $rakId = $batch->rak_id;
             }
 
             StockMovement::create([
                 'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $rakId,
                 'jumlah' => $qtyToRestore,
-                'stok_sebelum' => $stokAwal, 
-                'stok_sesudah' => $stokAkhir,
-                'referensi_type' => 'App\Models\Service', 'referensi_id' => $serviceId,
+                'stok_sebelum' => $currentGlobalStock,
+                'stok_sesudah' => $currentGlobalStock + $qtyToRestore,
+                'referensi_type' => 'App\Models\Service', 
+                'referensi_id' => $serviceId,
                 'keterangan' => "Koreksi/Refund Service #{$invoiceNo} ({$namaBarang})",
                 'user_id' => $this->userId,
                 'created_at' => $timestamp, 'updated_at' => $timestamp,

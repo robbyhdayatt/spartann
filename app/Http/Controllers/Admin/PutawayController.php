@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\InventoryBatch;
-use App\Models\Lokasi; // DIUBAH
+use App\Models\Lokasi; 
 use App\Models\Barang;
 use App\Models\PurchaseOrderDetail;
 use App\Models\Rak;
@@ -23,7 +23,7 @@ class PutawayController extends Controller
         $user = Auth::user();
 
         $query = Receiving::where('status', 'PENDING_PUTAWAY')
-                            ->with(['purchaseOrder.supplier', 'lokasi']); // DIUBAH
+                            ->with(['purchaseOrder.supplier', 'lokasi']); 
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('lokasi_id', $user->lokasi_id);
@@ -41,14 +41,12 @@ class PutawayController extends Controller
             return redirect()->route('admin.putaway.index')->with('error', 'Penerimaan ini tidak siap untuk proses Putaway.');
         }
 
-        // Otorisasi tambahan untuk memastikan user berada di lokasi yang benar
         if (Auth::user()->lokasi_id != $receiving->lokasi_id && !Auth::user()->hasRole(['SA', 'PIC'])) {
             return redirect()->route('admin.putaway.index')->with('error', 'Anda tidak berwenang memproses putaway untuk lokasi ini.');
         }
 
         $receiving->load('details.barang');
 
-        // Mengambil rak berdasarkan lokasi_id dari dokumen penerimaan
         $raks = Rak::where('lokasi_id', $receiving->lokasi_id)
                     ->where('is_active', true)
                     ->where('tipe_rak', 'PENYIMPANAN')
@@ -60,7 +58,7 @@ class PutawayController extends Controller
         return view('admin.putaway.form', compact('receiving', 'itemsToPutaway', 'raks'));
     }
 
-public function storePutaway(Request $request, Receiving $receiving)
+    public function storePutaway(Request $request, Receiving $receiving)
     {
         $this->authorize('perform-warehouse-ops');
         $request->validate([
@@ -71,16 +69,20 @@ public function storePutaway(Request $request, Receiving $receiving)
         DB::beginTransaction();
         try {
             foreach ($request->items as $detailId => $data) {
-                // Eager load 'barang'
-                $detail = ReceivingDetail::with('barang')->findOrFail($detailId);
-                $barang = $detail->barang;
+                // Jangan eager load 'barang' disini karena kita akan lock manual
+                $detail = ReceivingDetail::findOrFail($detailId);
+                
+                // [PERBAIKAN RACE CONDITION]
+                // Lock master Barang untuk memastikan perhitungan rata-rata harga beli (Selling In) atomic
+                $barang = Barang::where('id', $detail->barang_id)->lockForUpdate()->first();
+                
                 $jumlahMasuk = $detail->qty_lolos_qc;
 
                 if ($jumlahMasuk <= 0) continue;
 
                 // 1. Buat Inventory Batch (FIFO)
                 InventoryBatch::create([
-                    'barang_id'           => $detail->barang_id, // Ganti part_id
+                    'barang_id'           => $detail->barang_id, 
                     'rak_id'              => $data['rak_id'],
                     'lokasi_id'           => $receiving->lokasi_id,
                     'receiving_detail_id' => $detail->id,
@@ -88,20 +90,15 @@ public function storePutaway(Request $request, Receiving $receiving)
                 ]);
 
                 // 2. Kalkulasi Harga Rata-rata (Weighted Average Cost) untuk 'selling_in'
-                // Ambil harga beli dari PO
                 $poDetail = PurchaseOrderDetail::where('purchase_order_id', $receiving->purchase_order_id)
                                                ->where('barang_id', $barang->id)
                                                ->first();
 
-                // Jika tidak ada di PO (misal receiving manual), pakai selling_in lama
                 $hargaBeliBaru = $poDetail ? $poDetail->harga_beli : $barang->selling_in;
 
-                // Hitung total stok dan nilai aset LAMA (sebelum barang ini masuk)
-                // Kita pakai query manual agar tidak ikut menghitung batch yang baru saja dibuat di atas (jika ada race condition)
-                // Tapi karena ini dalam transaksi, batch di atas sudah terhitung.
-                // Cara aman:
-                $allBatches = $barang->inventoryBatches;
-                $totalStokSekarang = $allBatches->sum('quantity'); // Termasuk yang baru masuk
+                // Hitung total stok Termasuk yang baru masuk (karena masih dalam 1 transaksi)
+                $allBatches = InventoryBatch::where('barang_id', $barang->id)->get(); // Tidak perlu lock lagi, karena master barang sudah dilock
+                $totalStokSekarang = $allBatches->sum('quantity'); 
                 $stokLama = $totalStokSekarang - $jumlahMasuk;
 
                 $nilaiAsetLama = $stokLama * $barang->selling_in;

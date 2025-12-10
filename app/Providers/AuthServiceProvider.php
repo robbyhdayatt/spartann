@@ -24,7 +24,8 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('is-accounting', fn(User $user) => $user->hasRole('ACC'));
         
         Gate::define('is-pusat-staff', fn(User $user) => $user->hasRole(['KG', 'AG']));
-        Gate::define('is-dealer-staff', fn(User $user) => $user->hasRole(['KC', 'AD', 'CS', 'KSR', 'SLS']));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('is-dealer-staff', fn(User $user) => $user->hasRole(['KC', 'AD', 'PC', 'KSR', 'SLS']));
 
         // 2. MODUL PEMBELIAN (PO)
         Gate::define('create-po', function (User $user) {
@@ -48,12 +49,13 @@ class AuthServiceProvider extends ServiceProvider
             return $user->hasRole(['AG', 'PIC', 'SA']) && $user->lokasi && $user->lokasi->tipe === 'PUSAT';
         });
 
-        // 3. MODUL INBOUND
+        // 3. MODUL INBOUND (Penerimaan, QC, Putaway)
         Gate::define('perform-warehouse-ops', function (User $user) {
             if ($user->hasRole(['SA', 'PIC'])) return true;
             if (!$user->lokasi) return false;
             if ($user->lokasi->tipe === 'PUSAT') return false;
-            if ($user->hasRole(['AG', 'AD', 'KG', 'KC'])) return true;
+            // PERUBAHAN: Ganti 'CS' jadi 'PC'
+            if ($user->hasRole(['AG', 'AD', 'KG', 'KC', 'PC'])) return true;
             return false;
         });
 
@@ -80,8 +82,10 @@ class AuthServiceProvider extends ServiceProvider
              return $user->can('create-stock-adjustment') || $user->can('approve-stock-adjustment') || $user->hasRole(['SA', 'PIC', 'ACC']);
         });
         
-        Gate::define('view-mutation-receiving', fn(User $user) => $user->hasRole(['AG', 'AD', 'KG', 'KC', 'PIC', 'SA']));
-        Gate::define('receive-mutation', fn(User $user) => $user->hasRole(['AG', 'AD']));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('view-mutation-receiving', fn(User $user) => $user->hasRole(['AG', 'AD', 'KG', 'KC', 'PIC', 'SA', 'PC']));
+        Gate::define('receive-mutation', fn(User $user) => $user->hasRole(['AG', 'AD', 'PC']));
+        
         Gate::define('manage-quarantine-stock', fn(User $user) => $user->can('perform-warehouse-ops'));
         Gate::define('view-quarantine-stock', fn(User $user) => $user->can('perform-warehouse-ops'));
 
@@ -95,25 +99,25 @@ class AuthServiceProvider extends ServiceProvider
         // =================================================================
         // 6. PENJUALAN & SERVICE
         // =================================================================
-        Gate::define('access-sales-module', fn(User $user) => $user->hasRole(['SLS', 'KSR', 'CS']));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('access-sales-module', fn(User $user) => $user->hasRole(['SLS', 'KSR', 'PC']));
         
-        // KSR sudah ada di view-sales
-        Gate::define('view-sales', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'SLS', 'CS', 'KSR', 'ASD']));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('view-sales', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'SLS', 'PC', 'KSR', 'ASD']));
         
-        // ++ PERUBAHAN: Tambahkan KSR agar bisa buat penjualan ++
-        Gate::define('create-sale', fn(User $user) => $user->hasRole(['SLS', 'CS', 'KSR']));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('create-sale', fn(User $user) => $user->hasRole(['SLS', 'PC', 'KSR']));
         
-        // Gate ini mungkin tidak lagi relevan jika KSR bisa create sale, tapi dibiarkan saja tidak apa-apa
         Gate::define('print-invoice-only', fn(User $user) => $user->hasRole('KSR'));
 
-        // KSR sudah ada di view-service
-        Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS', 'KSR', 'ASD', 'ACC']));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));
         
-        // ++ PERUBAHAN: Tambahkan KSR agar bisa kelola service (edit/tambah part) ++
-        Gate::define('manage-service', fn(User $user) => $user->hasRole(['CS', 'KSR',]));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('manage-service', fn(User $user) => $user->hasRole(['PC', 'KSR',]));
         
-        // ++ PERUBAHAN: Tambahkan KSR agar bisa export laporan service ++
-        Gate::define('export-service-report', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'CS', 'KSR', 'ASD', 'ACC']));
+        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('export-service-report', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));
 
         // 7. LAPORAN
         Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'SMD', 'ACC']));

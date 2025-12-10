@@ -45,12 +45,8 @@ class PenjualanController extends Controller
              return redirect()->route('admin.home')->with('error', 'Akun Anda tidak terasosiasi dengan lokasi penjualan.');
         }
 
-        // PERUBAHAN: Tidak perlu query data konsumen lagi untuk dropdown
-        // $konsumens = Konsumen::orderBy('nama_konsumen')->get(); 
-
         $lokasi = $user->lokasi ?? Lokasi::first();
 
-        // Hapus compact('konsumens')
         return view('admin.penjualans.create', compact('lokasi'));
     }
 
@@ -60,7 +56,6 @@ class PenjualanController extends Controller
         $user = Auth::user();
 
         $validated = $request->validate([
-            // PERUBAHAN: Validasi nama (string) bukan ID
             'customer_name' => 'required|string|max:255', 
             'tanggal_jual' => 'required|date',
             'items' => 'required|array|min:1',
@@ -75,11 +70,8 @@ class PenjualanController extends Controller
 
         DB::beginTransaction();
         try {
-            // PERUBAHAN: Cari atau Buat Konsumen Baru
-            // Jika nama sudah ada, pakai ID-nya. Jika belum, buat baru.
             $konsumen = Konsumen::firstOrCreate(
                 ['nama_konsumen' => $validated['customer_name']],
-                // Isi default untuk kolom lain jika wajib (sesuaikan dengan struktur tabel Anda)
                 ['alamat' => '-', 'no_hp' => '-'] 
             );
 
@@ -88,7 +80,7 @@ class PenjualanController extends Controller
                 'nomor_faktur' => $this->generateNomorFaktur($lokasiId),
                 'tanggal_jual' => $validated['tanggal_jual'],
                 'lokasi_id'    => $lokasiId,
-                'konsumen_id'  => $konsumen->id, // Pakai ID dari hasil firstOrCreate
+                'konsumen_id'  => $konsumen->id, 
                 'sales_id'     => $user->id,
                 'created_by'   => $user->id,
                 'status'       => 'COMPLETED',
@@ -108,19 +100,20 @@ class PenjualanController extends Controller
                 $subtotalItem = $hargaJual * $qtyJual;
                 $totalSubtotal += $subtotalItem;
 
-                $stokTersedia = InventoryBatch::where('barang_id', $barang->id)
-                                              ->where('lokasi_id', $lokasiId)
-                                              ->sum('quantity');
-
-                if ($stokTersedia < $qtyJual) {
-                    throw new \Exception("Stok untuk {$barang->part_name} tidak mencukupi. Tersedia: {$stokTersedia}");
-                }
-
                 $batches = InventoryBatch::where('barang_id', $barang->id)
-                                         ->where('lokasi_id', $lokasiId)
-                                         ->where('quantity', '>', 0)
-                                         ->orderBy('created_at', 'asc')
-                                         ->get();
+                                        ->where('lokasi_id', $lokasiId)
+                                        ->where('quantity', '>', 0)
+                                        ->orderBy('created_at', 'asc')
+                                        ->lockForUpdate()
+                                        ->get();
+
+                $currentGlobalStock = InventoryBatch::where('barang_id', $barang->id)
+                                                ->where('lokasi_id', $lokasiId)
+                                                ->sum('quantity');
+
+                if ($currentGlobalStock < $qtyJual) {
+                    throw new \Exception("Stok untuk {$barang->part_name} tidak mencukupi. Tersedia: {$currentGlobalStock}");
+                }
 
                 $sisaQtyToCut = $qtyJual;
 
@@ -136,14 +129,15 @@ class PenjualanController extends Controller
                         'lokasi_id'      => $lokasiId,
                         'rak_id'         => $batch->rak_id,
                         'jumlah'         => -$potong,
-                        'stok_sebelum'   => $batch->quantity + $potong,
-                        'stok_sesudah'   => $batch->quantity,
+                        'stok_sebelum'   => $currentGlobalStock,
+                        'stok_sesudah'   => $currentGlobalStock - $potong,
                         'referensi_type' => get_class($penjualan),
                         'referensi_id'   => $penjualan->id,
                         'keterangan'     => "Penjualan Faktur #{$penjualan->nomor_faktur}",
                         'user_id'        => $user->id,
                     ]);
 
+                    $currentGlobalStock -= $potong;
                     $sisaQtyToCut -= $potong;
                 }
 

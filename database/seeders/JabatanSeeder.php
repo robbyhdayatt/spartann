@@ -33,7 +33,8 @@ class JabatanSeeder extends Seeder
             // Level Dealer
             ['nama_jabatan' => 'Kepala Cabang', 'singkatan' => 'KC'],
             ['nama_jabatan' => 'Admin Dealer', 'singkatan' => 'AD'],
-            ['nama_jabatan' => 'Counter Sales', 'singkatan' => 'CS'],
+            // PERUBAHAN: Mengganti Counter Sales (CS) menjadi Part Counter (PC)
+            ['nama_jabatan' => 'Part Counter', 'singkatan' => 'PC'],
         ];
 
         foreach ($jabatans as $jabatan) {

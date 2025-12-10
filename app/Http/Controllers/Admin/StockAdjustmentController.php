@@ -48,7 +48,7 @@ class StockAdjustmentController extends Controller
         // 1. User Level Pusat (SA, PIC, dll) -> Bisa pilih lokasi target
         if ($user->hasRole(['SA', 'PIC', 'ACC', 'SMD', 'MA'])) {
             $allLokasi = Lokasi::where('is_active', true)
-                               ->where('tipe', '!=', 'PUSAT') // ++ PERUBAHAN: Hilangkan Gudang Pusat ++
+                               ->where('tipe', '!=', 'PUSAT') 
                                ->orderBy('nama_lokasi')
                                ->get();
         }
@@ -75,7 +75,6 @@ class StockAdjustmentController extends Controller
     {
         $raks = Rak::where('lokasi_id', $lokasi->id)
                    ->where('is_active', true)
-                   // ++ PERUBAHAN: Hanya ambil tipe PENYIMPANAN (Hilangkan Karantina/Display) ++
                    ->where('tipe_rak', 'PENYIMPANAN')
                    ->get();
 
@@ -133,22 +132,24 @@ class StockAdjustmentController extends Controller
                 $jumlahToAdjust = $stockAdjustment->jumlah;
                 $tipe = $stockAdjustment->tipe;
 
-                $stokSebelum = InventoryBatch::where('barang_id', $part_id)
-                    ->where('rak_id', $rak_id)
-                    ->sum('quantity');
-
                 $stokSesudah = 0;
+                $stokSebelum = 0;
 
                 if ($tipe === 'KURANG') {
-                    if ($stokSebelum < $jumlahToAdjust) {
-                        throw new \Exception('Stok tidak mencukupi. Stok tersedia: ' . $stokSebelum . ', dibutuhkan: ' . $jumlahToAdjust);
-                    }
-
+                    // [PERBAIKAN RACE CONDITION]
+                    // Lock batch saat ingin mengurangi stok agar validasi stok akurat
                     $batches = InventoryBatch::where('barang_id', $part_id)
                         ->where('rak_id', $rak_id)
                         ->where('quantity', '>', 0)
                         ->orderBy('created_at', 'asc')
+                        ->lockForUpdate() // <--- LOCKING
                         ->get();
+
+                    $stokSebelum = $batches->sum('quantity');
+
+                    if ($stokSebelum < $jumlahToAdjust) {
+                        throw new \Exception('Stok tidak mencukupi. Stok tersedia: ' . $stokSebelum . ', dibutuhkan: ' . $jumlahToAdjust);
+                    }
 
                     $remainingQtyToReduce = $jumlahToAdjust;
 
@@ -173,6 +174,13 @@ class StockAdjustmentController extends Controller
                     $stokSesudah = $stokSebelum - $jumlahToAdjust;
 
                 } else { // Tipe 'TAMBAH'
+                    // Untuk penambahan, kita hanya perlu snapshot stok saat ini untuk log history
+                    // Menggunakan lockForUpdate() opsional, tapi disarankan untuk konsistensi data
+                    $stokSebelum = InventoryBatch::where('barang_id', $part_id)
+                        ->where('rak_id', $rak_id)
+                        ->lockForUpdate()
+                        ->sum('quantity');
+
                     InventoryBatch::create([
                         'barang_id' => $part_id,
                         'rak_id' => $rak_id,

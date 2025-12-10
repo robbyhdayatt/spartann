@@ -6,10 +6,10 @@ use Illuminate\Database\Seeder;
 use App\Models\User;
 use App\Models\Jabatan;
 use App\Models\Lokasi;
-use App\Models\Dealer; // Pastikan model Dealer ada dan benar
+use App\Models\Dealer; 
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str; // Import Str facade
+use Illuminate\Support\Str; 
 
 class UserSeeder extends Seeder
 {
@@ -25,7 +25,10 @@ class UserSeeder extends Seeder
         User::query()->truncate();
         Schema::enableForeignKeyConstraints();
 
+        // Ambil ID Jabatan berdasarkan singkatan
+        // Pastikan JabatanSeeder sudah dijalankan sehingga 'PC' sudah ada
         $jabatans = Jabatan::pluck('id', 'singkatan');
+        
         $gudangPusat = Lokasi::where('tipe', 'PUSAT')->first();
         $dealerLokasi = Lokasi::where('tipe', 'DEALER')
                               ->with(['dealer' => function ($query) {
@@ -39,7 +42,7 @@ class UserSeeder extends Seeder
         User::create([
             'nik' => 'SA-001', 'username' => 'superadmin', 'nama' => 'Super Admin',
             'jabatan_id' => $jabatans['SA'], 'password' => Hash::make('password'), 'is_active' => true,
-            'lokasi_id' => null, // Eksplisit set null jika tidak terikat lokasi
+            'lokasi_id' => null, 
         ]);
 
         User::create([
@@ -57,11 +60,11 @@ class UserSeeder extends Seeder
         User::create([
             'nik' => 'ASD-001',
             'username' => 'asd',
-            'nama' => 'Area Service Development', // Menggunakan nama lengkap
-            'jabatan_id' => $jabatans['ASD'],   // Menggunakan jabatan ASD baru
+            'nama' => 'Area Service Development',
+            'jabatan_id' => $jabatans['ASD'],   
             'password' => Hash::make('password'),
             'is_active' => true,
-            'lokasi_id' => null, // Tidak terikat lokasi
+            'lokasi_id' => null, 
         ]);
 
         User::create([
@@ -71,7 +74,7 @@ class UserSeeder extends Seeder
             'jabatan_id' => $jabatans['SMD'],
             'password' => Hash::make('password'),
             'is_active' => true,
-            'lokasi_id' => null, // Level Pusat
+            'lokasi_id' => null, 
         ]);
 
         User::create([
@@ -81,18 +84,15 @@ class UserSeeder extends Seeder
             'jabatan_id' => $jabatans['ACC'],
             'password' => Hash::make('password'),
             'is_active' => true,
-            'lokasi_id' => null, // Level Pusat / Global
+            'lokasi_id' => null, 
         ]);
 
         // =================================================================
         // PENGGUNA LEVEL GUDANG PUSAT
         // =================================================================
         if ($gudangPusat) {
-            // Gudang pusat mungkin tidak punya 'singkatan' di tabel dealers,
-            // jadi kita gunakan kode_lokasi saja atau tentukan singkatan khusus
-            $kodeLokasiPusat = Str::lower($gudangPusat->kode_lokasi); // contoh: 'gsp'
-            $namaLokasiPusat = $gudangPusat->kode_lokasi; // contoh: 'GSP'
-
+            $kodeLokasiPusat = Str::lower($gudangPusat->kode_lokasi); 
+            
             User::create([
                 'nik' => "KG-{$gudangPusat->kode_lokasi}-001", 'username' => "kg_{$kodeLokasiPusat}", 'nama' => "Kepala Gudang Pusat",
                 'jabatan_id' => $jabatans['KG'], 'lokasi_id' => $gudangPusat->id, 'password' => Hash::make('password'), 'is_active' => true,
@@ -118,23 +118,20 @@ class UserSeeder extends Seeder
         // === PENGGUNA LEVEL DEALER (LOOPING UNTUK SETIAP DEALER LOKASI) ===
         // =================================================================
         foreach ($dealerLokasi as $lokasi) {
-            // Ambil info dealer dari relasi yang sudah di-load
-            $dealerInfo = $lokasi->dealer; // Asumsi relasi bernama 'dealer' di model Lokasi
-
-            // Tentukan singkatan, gunakan kode_lokasi jika data dealer/singkatan tidak ada
+            $dealerInfo = $lokasi->dealer; 
             $singkatan = $dealerInfo ? $dealerInfo->singkatan : $lokasi->kode_lokasi;
-            $usernameSuffix = Str::lower($singkatan); // Lowercase untuk username
-            $namaSuffix = $singkatan; // Case asli untuk nama
+            $usernameSuffix = Str::lower($singkatan); 
+            $namaSuffix = $singkatan; 
 
             // Kepala Cabang
             User::create([
-                'nik' => "KC-{$lokasi->kode_lokasi}-001", // NIK tetap pakai kode lokasi
-                'username' => "kc_{$usernameSuffix}", // Username pakai singkatan lowercase
-                'nama' => "Kepala Cabang {$namaSuffix}", // Nama pakai singkatan
+                'nik' => "KC-{$lokasi->kode_lokasi}-001",
+                'username' => "kc_{$usernameSuffix}",
+                'nama' => "Kepala Cabang {$namaSuffix}",
                 'jabatan_id' => $jabatans['KC'],
-                'lokasi_id' => $lokasi->id, // Kolom foreign key baru
+                'lokasi_id' => $lokasi->id,
                 'password' => Hash::make('password'),
-                'is_active' => $lokasi->is_active, // Sesuaikan status user dengan status lokasi
+                'is_active' => $lokasi->is_active, 
             ]);
 
             // Admin Dealer
@@ -143,7 +140,7 @@ class UserSeeder extends Seeder
                 'username' => "admin_{$usernameSuffix}",
                 'nama' => "Admin Dealer {$namaSuffix}",
                 'jabatan_id' => $jabatans['AD'],
-                'lokasi_id' => $lokasi->id, // Kolom foreign key baru
+                'lokasi_id' => $lokasi->id, 
                 'password' => Hash::make('password'),
                 'is_active' => $lokasi->is_active,
             ]);
@@ -154,18 +151,18 @@ class UserSeeder extends Seeder
                 'username' => "sales_{$usernameSuffix}",
                 'nama' => "Sales {$namaSuffix}",
                 'jabatan_id' => $jabatans['SLS'],
-                'lokasi_id' => $lokasi->id, // Kolom foreign key baru
+                'lokasi_id' => $lokasi->id, 
                 'password' => Hash::make('password'),
                 'is_active' => $lokasi->is_active,
             ]);
 
-            // Counter Service Dealer
+            // PERUBAHAN: Part Counter (PC) - Menggantikan CS
             User::create([
-                'nik' => "CS-{$lokasi->kode_lokasi}-001",
-                'username' => "counter_{$usernameSuffix}",
-                'nama' => "Counter Service {$namaSuffix}",
-                'jabatan_id' => $jabatans['CS'],
-                'lokasi_id' => $lokasi->id, // Kolom foreign key baru
+                'nik' => "PC-{$lokasi->kode_lokasi}-001", // NIK diubah jadi PC
+                'username' => "partcounter_{$usernameSuffix}", // Username diubah
+                'nama' => "Part Counter {$namaSuffix}", // Nama diubah
+                'jabatan_id' => $jabatans['PC'], // ID Jabatan PC
+                'lokasi_id' => $lokasi->id, 
                 'password' => Hash::make('password'),
                 'is_active' => $lokasi->is_active,
             ]);
@@ -176,7 +173,7 @@ class UserSeeder extends Seeder
                 'username' => "kasir_{$usernameSuffix}",
                 'nama' => "Kasir {$namaSuffix}",
                 'jabatan_id' => $jabatans['KSR'],
-                'lokasi_id' => $lokasi->id, // Kolom foreign key baru
+                'lokasi_id' => $lokasi->id, 
                 'password' => Hash::make('password'),
                 'is_active' => $lokasi->is_active,
             ]);

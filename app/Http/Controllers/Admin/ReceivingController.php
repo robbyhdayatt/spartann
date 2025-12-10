@@ -51,7 +51,7 @@ class ReceivingController extends Controller
         return view('admin.receivings.create', compact('purchaseOrders'));
     }
 
-    public function store(Request $request)
+public function store(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
@@ -62,16 +62,27 @@ class ReceivingController extends Controller
             'tanggal_terima' => 'required|date',
             'catatan' => 'nullable|string',
             'items' => 'required|array|min:1',
-            // PERUBAHAN: Validasi barang_id (bukan part_id)
             'items.*.barang_id' => 'required|exists:barangs,id',
             'items.*.qty_terima' => 'required|integer|min:0',
         ]);
+
+        // --- PERBAIKAN LOGIKA DISINI ---
+        // 1. Hitung total qty yang diinput user
+        $totalQtyReceived = collect($request->items)->sum('qty_terima');
+
+        // 2. Jika totalnya 0, tolak proses (jangan buat receiving)
+        if ($totalQtyReceived <= 0) {
+            return back()
+                ->with('error', 'Gagal memproses: Anda belum menginput jumlah diterima pada barang manapun (Total Qty 0).')
+                ->withInput();
+        }
+        // --------------------------------
 
         DB::beginTransaction();
         try {
             $po = PurchaseOrder::with('details')->findOrFail($request->purchase_order_id);
 
-            // Validasi Lokasi: Pastikan user menerima PO yang ditujukan ke lokasinya
+            // Validasi Lokasi
             if ($user->lokasi_id != $po->lokasi_id && !$user->hasRole(['SA', 'PIC'])) {
                 return back()->with('error', 'Anda tidak berwenang menerima barang untuk lokasi PO ini.')->withInput();
             }
@@ -81,24 +92,24 @@ class ReceivingController extends Controller
                 'lokasi_id' => $po->lokasi_id,
                 'nomor_penerimaan' => Receiving::generateReceivingNumber(),
                 'tanggal_terima' => $request->tanggal_terima,
-                'status' => 'PENDING_QC', // Masuk QC dulu
+                'status' => 'PENDING_QC', 
                 'catatan' => $request->catatan,
                 'received_by' => $user->id,
             ]);
 
             foreach ($request->items as $barangId => $itemData) {
                 $qtyTerima = (int)$itemData['qty_terima'];
+                
+                // Hanya proses item yang ada isinya (> 0)
                 if ($qtyTerima > 0) {
-                    // PERUBAHAN: Cari berdasarkan barang_id
                     $poDetail = $po->details->firstWhere('barang_id', $barangId);
 
                     if ($poDetail) {
                         $poDetail->increment('qty_diterima', $qtyTerima);
                     }
 
-                    // Simpan Detail Receiving
                     $receiving->details()->create([
-                        'barang_id' => $barangId, // Ganti part_id
+                        'barang_id' => $barangId,
                         'qty_terima' => $qtyTerima,
                         'qty_pesan_referensi' => $poDetail ? $poDetail->qty_pesan : 0
                     ]);
@@ -106,9 +117,9 @@ class ReceivingController extends Controller
             }
 
             $po->refresh();
-            // Cek apakah semua item sudah diterima penuh
+            
+            // Cek status PO
             $fullyReceived = $po->details->every(fn($detail) => $detail->qty_diterima >= $detail->qty_pesan);
-
             $po->status = $fullyReceived ? 'FULLY_RECEIVED' : 'PARTIALLY_RECEIVED';
             $po->save();
 

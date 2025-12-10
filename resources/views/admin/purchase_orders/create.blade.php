@@ -95,7 +95,8 @@
                 <option value="">Pilih Barang</option>
                 @foreach($barangs as $barang)
                     <option value="{{ $barang->id }}">
-                        {{ $barang->part_name }} ({{ $barang->part_code }}) - Stok: {{ $barang->selling_out }}
+                        {{ $barang->part_name }} ({{ $barang->part_code }}) 
+                        {{-- - Stok: {{ $barang->selling_out }} --}}
                     </option>
                 @endforeach
             </select>
