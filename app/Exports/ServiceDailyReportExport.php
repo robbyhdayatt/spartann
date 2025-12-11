@@ -70,6 +70,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
     }
 
     private function applyFilters($query) {
+        // Filter berdasarkan created_at (waktu import)
         if ($this->startDate && $this->endDate) {
             $start = Carbon::parse($this->startDate)->startOfDay();
             $end = Carbon::parse($this->endDate)->endOfDay();
@@ -79,9 +80,12 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             $query->where('created_at', '>=', $start);
         }
 
-        if ($this->dealerCode && $this->dealerCode !== 'all') {
+        // PERBAIKAN KRUSIAL: Filter dealer dengan pengecekan ketat
+        // Hanya skip filter jika explicitly 'all', bukan null/empty
+        if ($this->dealerCode !== 'all' && $this->dealerCode !== null && $this->dealerCode !== '') {
             $query->where('dealer_code', $this->dealerCode);
         }
+        
         return $query;
     }
 
@@ -93,11 +97,20 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
 
     public function query(): Builder
     {
+        // DEBUGGING - Cek nilai dealerCode
+        \Log::info("ServiceDailyReportExport - Dealer Code: '{$this->dealerCode}', Start: {$this->startDate}, End: {$this->endDate}");
+        
         $query = $this->getBaseQuery()
                  ->with(['lokasi', 'details'])
-                 ->orderBy('created_at', 'desc');
+                 ->orderBy('created_at', 'desc')
+                 ->orderBy('id', 'desc');
 
         $this->totalRows = (clone $query)->count();
+        
+        // DEBUGGING - Cek SQL yang dihasilkan
+        \Log::info("Export SQL: " . $query->toSql());
+        \Log::info("Export Bindings: " . json_encode($query->getBindings()));
+        
         return $query;
     }
 
@@ -199,14 +212,8 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         ];
     }
 
-    /**
-     * PERBAIKAN FINAL (AKURASI TINGGI):
-     * 1. Filter: Hanya hitung item KSG jika Service Balance < 0 (Artinya ada subsidi/claim).
-     * 2. Mapping: Harga dinamis berdasarkan Model Motor (MX KING & NEO).
-     */
     private function calculateTotalWithoutKSG()
     {
-        // 1. Ambil Total Keseluruhan
         $grandTotal = (clone $this->getBaseQuery())->selectRaw('
             SUM(e_payment_amount) as e_payment_amount,
             SUM(cash_amount) as cash_amount,
@@ -223,8 +230,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             SUM(balance) as balance
         ')->first();
 
-        // 2. Ambil detail TAPI HANYA dari Service yang Balance-nya NEGATIF (< 0)
-        // Ini kunci untuk membuang baris yang nilainya 0 (tidak valid/rejected)
         $details = ServiceDetail::with('service')
             ->whereHas('service', function($q) {
                 $this->applyFilters($q);
@@ -237,19 +242,15 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             $pkgName = strtoupper($item->service_package_name ?? '');
             $laborCost = $item->labor_cost_service;
 
-            // Cek apakah Item ini KSG atau CLAIM
             if (str_contains($pkgName, 'KSG') || str_contains($pkgName, 'CLAIM')) {
                 
-                // Jika di database ada harganya, pakai itu.
                 if ($laborCost > 0) {
                     $ksgLaborSum += $laborCost;
                 } 
-                // Jika 0, pakai Mapping Manual (Spesifik per Motor)
                 else {
                     $modelName = strtoupper($item->service->mc_model_name ?? '');
 
                     if (str_contains($pkgName, 'KSG1')) {
-                        // Cek Model Khusus
                         if (str_contains($modelName, 'MX KING')) {
                             $ksgLaborSum += 28000;
                         } else {
@@ -263,8 +264,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                         $ksgLaborSum += 25000;
                     } 
                     elseif (str_contains($pkgName, 'KSG4')) {
-                        // Cek Model Khusus
-                        if (str_contains($modelName, 'NEO')) { // NMAX NEO
+                        if (str_contains($modelName, 'NEO')) {
                             $ksgLaborSum += 42000;
                         } else {
                             $ksgLaborSum += 29000;
@@ -277,7 +277,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             }
         }
 
-        // 3. Return Object Data
         return (object) [
             'e_payment_amount' => $grandTotal->e_payment_amount ?? 0,
             'cash_amount' => $grandTotal->cash_amount ?? 0,

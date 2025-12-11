@@ -142,10 +142,31 @@ class ServiceController extends Controller
     {
         $this->authorize('export-service-report');
         
+        $user = Auth::user();
+        
+        // Ambil parameter filter
         $startDate = $request->input('start_date') ?? session('service.start_date') ?? now()->toDateString();
         $endDate = $request->input('end_date') ?? session('service.end_date') ?? now()->toDateString();
         $selectedDealer = $request->input('dealer_code') ?? session('service.dealer_code');
 
+        // PERBAIKAN KRUSIAL: Tentukan dealer berdasarkan role user
+        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC', 'ASD', 'ACC']);
+        
+        if (!$canFilterByDealer) {
+            // User biasa: paksa gunakan dealer mereka sendiri
+            if ($user->lokasi && $user->lokasi->kode_lokasi) {
+                $selectedDealer = $user->lokasi->kode_lokasi;
+            } else {
+                return redirect()->back()->with('error', 'Akun Anda tidak memiliki dealer yang terkait.');
+            }
+        } else {
+            // Super Admin/PIC: Jika tidak pilih dealer, default ke 'all'
+            if (empty($selectedDealer)) {
+                $selectedDealer = 'all';
+            }
+        }
+
+        // Validasi format tanggal
         try {
             $validStartDate = Carbon::createFromFormat('Y-m-d', $startDate)->format('Y-m-d');
             $validEndDate = Carbon::createFromFormat('Y-m-d', $endDate)->format('Y-m-d');
@@ -153,7 +174,13 @@ class ServiceController extends Controller
             return redirect()->back()->with('error', 'Format tanggal export tidak valid.');
         }
 
-        return Excel::download(new ServiceDailyReportExport($selectedDealer, $validStartDate, $validEndDate), 'Laporan_Service.xlsx');
+        // DEBUGGING - Hapus setelah fix
+        \Log::info("Export Request - Dealer: {$selectedDealer}, Start: {$validStartDate}, End: {$validEndDate}");
+
+        return Excel::download(
+            new ServiceDailyReportExport($selectedDealer, $validStartDate, $validEndDate), 
+            'Laporan_Service_' . $selectedDealer . '_' . $validStartDate . '.xlsx'
+        );
     }
 
     public function show(Service $service)

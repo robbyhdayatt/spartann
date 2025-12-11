@@ -225,7 +225,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
         return stripos($woStatus, 'ZZ. Cancelled') !== false || stripos($woStatus, 'Cancelled') !== false;
     }
 
-    // --- CORE LOGIC: STOCK MANAGEMENT (SAFE & GLOBAL STOCK FIXED) ---
+    // --- CORE LOGIC: STOCK MANAGEMENT ---
     private function processStockDeduction($barangId, $qty, $serviceId, $lokasiId, $invoiceNo, $customCreatedAt = null)
     {
         if (!$barangId || !$lokasiId || $qty == 0) return 0;
@@ -235,7 +235,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $timestamp = $customCreatedAt ?? now();
 
         if ($qty > 0) {
-            // Lock batch untuk pemotongan
             $batches = InventoryBatch::where('barang_id', $barangId)
                 ->where('lokasi_id', $lokasiId)
                 ->where('quantity', '>', 0)
@@ -243,8 +242,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 ->lockForUpdate()
                 ->get();
 
-            // [PERBAIKAN] Hitung Total Stok Global sebelum transaksi
-            // Kita hitung manual dari sum quantity semua batch di lokasi ini
             $currentGlobalStock = InventoryBatch::where('barang_id', $barangId)
                 ->where('lokasi_id', $lokasiId)
                 ->sum('quantity');
@@ -264,7 +261,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $batch->quantity -= $potong;
                 $batch->save();
 
-                // [PERBAIKAN] Gunakan $currentGlobalStock untuk log history
                 StockMovement::create([
                     'barang_id' => $barangId, 
                     'lokasi_id' => $lokasiId, 
@@ -280,24 +276,20 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     'updated_at' => $timestamp,
                 ]);
 
-                // Kurangi tracker stok global dan sisa qty transaksi
                 $currentGlobalStock -= $potong;
                 $sisaQty -= $potong;
             }
             return ($qty > 0) ? ($totalCost / $qty) : 0;
         } 
         else {
-            // LOGIKA PENGEMBALIAN (REFUND) - JUGA PERLU UPDATE GLOBAL STOCK LOGIC
             $qtyToRestore = abs($qty);
             
-            // Lock batch terakhir
             $batch = InventoryBatch::where('barang_id', $barangId)
                 ->where('lokasi_id', $lokasiId)
                 ->orderBy('created_at', 'desc')
                 ->lockForUpdate()
                 ->first();
 
-            // [PERBAIKAN] Hitung Total Stok Global
             $currentGlobalStock = InventoryBatch::where('barang_id', $barangId)
                 ->where('lokasi_id', $lokasiId)
                 ->sum('quantity');
@@ -327,7 +319,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
         }
     }
 
-    // --- SMART SYNC (FIXED: Update Barang ID) ---
+    // --- SMART SYNC ---
     private function syncServiceDetail($service, $type, $data)
     {
         $lokasiId = $service->lokasi_id;
@@ -361,8 +353,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $isPriceChanged = ($data['price'] != $existingDetail->price);
             $isCodeChanged = ($data['item_code'] != $existingDetail->item_code);
             $isLaborChanged = ($data['labor_cost_service'] != $existingDetail->labor_cost_service);
-            
-            // Cek apakah ID Barang berubah (PENTING untuk fix kasus Carbon Cleaner)
             $isBarangIdChanged = ($barangId !== $existingDetail->barang_id);
 
             if ($isQtyChanged && $barangId) {
@@ -379,10 +369,9 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     'item_name' => $data['item_name'],
                     'quantity' => $data['quantity'],
                     'price' => $data['price'],
-                    'barang_id' => $barangId, // <--- INI YANG DITAMBAHKAN
+                    'barang_id' => $barangId,
                 ];
                 
-                // Reset cost price jika item berubah jadi Non-Barang (misal: Injector -> Carbon Cleaner manual)
                 if (is_null($barangId) && $existingDetail->barang_id) {
                     $updateData['cost_price'] = 0; 
                 }
@@ -391,7 +380,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
             }
 
         } else {
-            // CREATE MODE
             $costPrice = 0;
             if ($barangId) {
                 $costPrice = $this->processStockDeduction($barangId, $data['quantity'], $service->id, $lokasiId, $service->invoice_no, $serviceDate);
@@ -506,36 +494,46 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $dealerCode = trim($this->getVal($rowArray, 'dealer_code') ?? '');
 
             try {
+                // VALIDASI DEALER CODE
                 if (!empty($dealerCode)) {
                     if ($dealerCode !== $this->userDealerCode) {
-                        $this->skippedDealerCount++; $this->currentService = null; return;
+                        $this->skippedDealerCount++; 
+                        $this->currentService = null; 
+                        return;
                     }
                     if (!isset($this->lokasiMapping[$dealerCode])) {
-                        $this->skippedCount++; $this->currentService = null;
-                        $this->errorMessages[] = "Baris {$rowIndex}: Kode Dealer tidak dikenali.";
+                        $this->skippedCount++; 
+                        $this->currentService = null;
+                        $this->errorMessages[] = "Baris {$rowIndex}: Kode Dealer '{$dealerCode}' tidak dikenali.";
                         return;
                     }
                 }
 
+                // PROSES BARIS DENGAN INVOICE NO
                 if (!empty($invoiceNo)) {
+                    // Skip cancelled row
                     if ($this->isRowCancelled($rowArray)) {
                         $this->currentService = null;
                         return;
                     }
                     
+                    // Cleanup previous service jika beda invoice
                     if ($this->currentService && $this->currentService->invoice_no !== $invoiceNo) {
                         $this->cleanupOrphanDetails($this->currentService);
                         $this->processedDetailIds = [];
                         $this->currentServiceCategoryCode = null;
                     }
 
+                    // CEK EXISTING SERVICE (FIX UTAMA)
                     $existingService = Service::where('invoice_no', $invoiceNo)
-                                            ->where('dealer_code', $dealerCode)
-                                            ->lockForUpdate()
-                                            ->first();
+                                        ->where('dealer_code', $dealerCode)
+                                        ->lockForUpdate()
+                                        ->first();
 
                     $regDate = $this->parseDate($this->getVal($rowArray, 'reg_date'));
-                    if (empty($regDate)) throw new \Exception("Tanggal registrasi invalid.");
+                    if (empty($regDate)) {
+                        throw new \Exception("Tanggal registrasi invalid pada baris {$rowIndex}.");
+                    }
 
                     if ($this->referenceRegDate === null) $this->referenceRegDate = $regDate;
                     $isFileToday = ($this->referenceRegDate === now()->toDateString());
@@ -578,32 +576,41 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     ];
 
                     if ($existingService) {
+                        // UPDATE MODE
                         $this->processedDetailIds = []; 
                         
                         $existingService->update($serviceData);
                         $this->currentService = $existingService;
                         $this->updatedCount++;
                     } else {
+                        // CREATE MODE
                         $this->processedDetailIds = [];
                         
                         $serviceData['invoice_no'] = $invoiceNo;
+                        
                         if ($shouldBackdate) {
                             $sibling = Service::where('dealer_code', $dealerCode)
-                                ->where('reg_date', $regDate)->orderBy('created_at', 'asc')->first();
+                                ->where('reg_date', $regDate)
+                                ->orderBy('created_at', 'asc')
+                                ->first();
                             if ($sibling) {
                                 $serviceData['created_at'] = $sibling->created_at;
                                 $serviceData['updated_at'] = now();
                             }
                         }
+                        
                         $this->currentService = Service::create($serviceData);
                         $this->importedCount++;
                     }
+                    
                     $this->currentServiceCategoryCode = $this->getVal($rowArray, 'service_category');
                 
                 } elseif (empty($invoiceNo) && !$this->currentService) {
+                    // Baris tanpa invoice & tidak ada service aktif = skip
                     return;
                 }
 
+                // PROSES DETAIL ROWS
                 if ($this->currentService) {
                     $this->processRowDetails($this->currentService, $rowArray);
                 }
