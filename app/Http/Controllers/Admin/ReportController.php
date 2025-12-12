@@ -70,6 +70,7 @@ class ReportController extends Controller
     public function stockByWarehouse(Request $request)
     {
         /** @var \App\Models\User $user */
+        $this->authorize('view-stock-by-warehouse');
         $user = Auth::user();
         $inventoryItems = collect();
         $lokasis = collect();

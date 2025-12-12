@@ -46,7 +46,7 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         Gate::define('manage-purchase-returns', function(User $user) {
-            return $user->hasRole(['AG', 'PIC', 'SA']) && $user->lokasi && $user->lokasi->tipe === 'PUSAT';
+            return $user->hasRole([ 'PIC', 'SA']) && $user->lokasi && $user->lokasi->tipe === 'PUSAT';
         });
 
         // 3. MODUL INBOUND (Penerimaan, QC, Putaway)
@@ -83,7 +83,7 @@ class AuthServiceProvider extends ServiceProvider
         });
         
         // PERUBAHAN: Ganti 'CS' jadi 'PC'
-        Gate::define('view-mutation-receiving', fn(User $user) => $user->hasRole(['AG', 'AD', 'KG', 'KC', 'PIC', 'SA', 'PC']));
+        Gate::define('view-mutation-receiving', fn(User $user) => $user->hasRole(['AD', 'KG', 'KC', 'PIC', 'SA', 'PC']));
         Gate::define('receive-mutation', fn(User $user) => $user->hasRole(['AG', 'AD', 'PC']));
         
         Gate::define('manage-quarantine-stock', fn(User $user) => $user->can('perform-warehouse-ops'));
@@ -92,7 +92,7 @@ class AuthServiceProvider extends ServiceProvider
         // 5. MASTER DATA & SETTINGS
         Gate::define('manage-users', fn(User $user) => $user->hasRole('SA'));
         Gate::define('manage-locations', fn(User $user) => $user->hasRole(['SA', 'PIC']));
-        Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'SMD']));
+        Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
         Gate::define('manage-barangs', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD', 'SMD']));
         Gate::define('manage-converts', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
 

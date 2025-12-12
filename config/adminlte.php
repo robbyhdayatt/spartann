@@ -231,7 +231,7 @@ return [
         [
             'text'    => 'Master Data',
             'icon'    => 'fas fa-fw fa-database',
-            'can'     => ['view-master-data', 'manage-converts', 'manage-barangs'],
+            'can'     => ['view-master-data', 'manage-converts', 'manage-barangs',],
             'submenu' => [
                 ['text' => 'Brand', 'icon' => 'far fa-fw fa-copyright', 'route' => 'admin.brands.index', 'can' => 'view-master-data'],
                 ['text' => 'Kategori', 'icon' => 'far fa-fw fa-folder-open', 'route' => 'admin.categories.index', 'can' => 'view-master-data'],
@@ -412,7 +412,7 @@ return [
             'can'     => 'view-reports',
             'submenu' => [
                 ['text' => 'Kartu Stok', 'icon' => 'fas fa-fw fa-clipboard-list', 'route' => 'admin.reports.stock-card'],
-                ['text' => 'Stok Per Lokasi', 'icon' => 'fas fa-fw fa-boxes', 'route' => 'admin.reports.stock-by-warehouse'],
+                ['text' => 'Stok Per Lokasi', 'icon' => 'fas fa-fw fa-boxes', 'route' => 'admin.reports.stock-by-warehouse', 'can'  => 'view-stock-by-warehouse'],
                 ['text' => 'Laporan Stok Total', 'icon' => 'fas fa-fw fa-archive', 'route' => 'admin.reports.stock-report', 'can'  => 'view-global-reports'],
                 // ['text' => 'Jurnal Penjualan', 'icon' => 'fas fa-fw fa-book-open', 'route' => 'admin.reports.sales-journal'],
                 ['text' => 'Laporan Penjualan', 'icon' => 'fas fa-fw fa-chart-line', 'route' => 'admin.reports.sales-summary'],
