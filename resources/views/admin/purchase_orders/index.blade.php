@@ -1,69 +1,78 @@
 @extends('adminlte::page')
 
-@section('title', 'Daftar Purchase Order')
+@section('title', 'Daftar Transaksi PO')
 
 @section('content_header')
-    <h1>Daftar Purchase Order</h1>
+    <h1>Daftar Transaksi PO</h1>
 @stop
 
 @section('content')
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">Data Purchase Order</h3>
-        <div class="card-tools">
-            @can('create-po')
-            <a href="{{ route('admin.purchase-orders.create') }}" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Buat PO Baru</a>
-            @endcan
-        </div>
+<div class="card card-primary card-outline card-tabs">
+    <div class="card-header p-0 pt-1 border-bottom-0">
+        <ul class="nav nav-tabs">
+            {{-- TAB 1: DEALER REQUEST --}}
+            {{-- HIDE KHUSUS UNTUK KEPALA GUDANG (KG) --}}
+            @if(!auth()->user()->hasRole('KG'))
+            <li class="nav-item">
+                <a class="nav-link {{ $type == 'dealer_request' ? 'active' : '' }}" href="{{ route('admin.purchase-orders.index', ['type' => 'dealer_request']) }}">
+                    <i class="fas fa-store"></i> Request Dealer (Masuk)
+                </a>
+            </li>
+            @endif
+
+            {{-- TAB 2: SUPPLIER PO --}}
+            {{-- TAMPIL UNTUK: AG, KG, SA --}}
+            @if(!auth()->user()->hasRole(['SMD', 'SA', 'PIC', 'DEALER']))
+            <li class="nav-item">
+                <a class="nav-link {{ $type == 'supplier_po' ? 'active' : '' }}" href="{{ route('admin.purchase-orders.index', ['type' => 'supplier_po']) }}">
+                    <i class="fas fa-truck"></i> Order ke Supplier (Keluar)
+                </a>
+            </li>
+            @endif
+        </ul>
     </div>
     <div class="card-body">
+        
+        {{-- TOMBOL BUAT BARU --}}
+        @can('create-po')
+            {{-- LOGIKA: Sembunyikan tombol jika User adalah Orang Gudang (AG/KG) TAPI sedang melihat Tab Request Dealer (Masuk) --}}
+            {{-- Karena di tab ini, orang gudang tugasnya hanya Approve, bukan buat baru --}}
+            @if( ! (auth()->user()->hasRole(['AG', 'KG']) && $type == 'dealer_request') )
+                <div class="mb-2 text-right">
+                    <a href="{{ route('admin.purchase-orders.create') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus"></i> Buat Transaksi Baru
+                    </a>
+                </div>
+            @endif
+        @endcan
+        
         <table id="po-table" class="table table-bordered table-striped">
             <thead>
                 <tr>
                     <th>Nomor PO</th>
-                    <th>Sumber / Supplier</th> {{-- Judul Kolom Disesuaikan --}}
-                    <th class="text-right">Total</th>
-                    <th class="text-center">Status</th>
-                    <th>Dibuat Oleh</th>
-                    <th class="text-center">Aksi</th>
+                    <th>Tanggal</th>
+                    <th>{{ $type == 'supplier_po' ? 'Supplier' : 'Dealer Pengaju' }}</th>
+                    <th>Total Item</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($purchaseOrders as $po)
                 <tr>
+                    <td>{{ $po->nomor_po }}</td>
+                    <td>{{ $po->tanggal_po->format('d/m/Y') }}</td>
                     <td>
-                        <strong>{{ $po->nomor_po }}</strong><br>
-                        <small class="text-muted">{{ $po->tanggal_po->format('d M Y') }}</small>
-                        @if($po->request_group_id)
-                             <br><span class="badge badge-light text-xs">{{ $po->request_group_id }}</span>
-                        @endif
-                    </td>
-
-                    {{-- PERBAIKAN DISINI: Cek Supplier vs Internal --}}
-                    <td>
-                        @if($po->supplier)
-                            <i class="fas fa-truck text-primary"></i> {{ $po->supplier->nama_supplier }}
-                        @elseif($po->sumberLokasi)
-                            <i class="fas fa-warehouse text-success"></i> {{ $po->sumberLokasi->nama_lokasi }} <br>
-                            <small class="text-muted">(Internal Transfer)</small>
+                        @if($po->po_type == 'supplier_po')
+                            {{ $po->supplier->nama_supplier ?? '-' }}
                         @else
-                            <span class="text-danger">Unknown Source</span>
+                            {{ $po->lokasi->nama_lokasi ?? 'Dealer' }}
                         @endif
                     </td>
-                    {{-- ------------------------------------------ --}}
-
-                    <td class="text-right">{{ 'Rp ' . number_format($po->total_amount, 0, ',', '.') }}</td>
-                    <td class="text-center">
-                        <span class="badge {{ $po->status_class }}">{{ $po->status_badge }}</span>
-                    </td>
+                    <td>{{ $po->details->count() }}</td>
+                    <td><span class="badge {{ $po->status_class }}">{{ $po->status }}</span></td>
                     <td>
-                        {{ $po->createdBy->nama ?? 'N/A' }}<br>
-                        <small class="text-muted">Tujuan: {{ $po->lokasi->nama_lokasi ?? '' }}</small>
-                    </td>
-                    <td class="text-center">
-                        <a href="{{ route('admin.purchase-orders.show', $po) }}" class="btn btn-info btn-xs">
-                            <i class="fas fa-eye"></i> Detail
-                        </a>
+                        <a href="{{ route('admin.purchase-orders.show', $po->id) }}" class="btn btn-xs btn-info">Detail</a>
                     </td>
                 </tr>
                 @endforeach
@@ -74,15 +83,11 @@
 @stop
 
 @section('js')
-    <script>
-        $(function () {
-            $("#po-table").DataTable({
-                "responsive": true,
-                "lengthChange": false,
-                "autoWidth": false,
-                "order": [[0, "desc"]],
-                "buttons": ["copy", "csv", "excel", "pdf", "print"]
-            }).buttons().container().appendTo('#po-table_wrapper .col-md-6:eq(0)');
+<script>
+    $(document).ready(function() {
+        $('#po-table').DataTable({
+            "order": [[ 0, "desc" ]]
         });
-    script>
+    });
+</script>
 @stop

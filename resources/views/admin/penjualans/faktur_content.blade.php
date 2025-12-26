@@ -174,7 +174,7 @@ html, body {
         <tr>
             <td><strong>Telepon</strong></td>
             <td>: {{ $penjualan->konsumen->telepon ?? '-' }}</td>
-            <td><strong>Sales</strong></td>
+            <td><strong>Karyawan</strong></td>
             <td>: {{ $penjualan->sales->nama ?? '-' }}</td>
         </tr>
     </table>
@@ -236,7 +236,7 @@ html, body {
     {{-- Signature --}}
     <table class="signature-box" style="width: 100%;">
         <tr>
-            <td class="text-center" style="width: 33%;">Sales,</td>
+            <td class="text-center" style="width: 33%;">Counter Part,</td>
             <td class="text-center" style="width: 33%;">Konsumen,</td>
             <td class="text-center" style="width: 34%;">Kasir,</td>
         </tr>

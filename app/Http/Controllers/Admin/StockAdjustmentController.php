@@ -58,13 +58,13 @@ class StockAdjustmentController extends Controller
 
             if (!$userLokasi) {
                  return redirect()->route('admin.stock-adjustments.index')
-                     ->with('error', 'Lokasi Anda tidak aktif atau tidak ditemukan.');
+                      ->with('error', 'Lokasi Anda tidak aktif atau tidak ditemukan.');
             }
         }
         // 3. Fallback
         else {
              return redirect()->route('admin.stock-adjustments.index')
-                 ->with('error', 'Akun Anda tidak terhubung ke lokasi manapun.');
+                  ->with('error', 'Akun Anda tidak terhubung ke lokasi manapun.');
         }
 
         return view('admin.stock_adjustments.create', compact('userLokasi', 'allLokasi', 'barangs'));
@@ -142,7 +142,7 @@ class StockAdjustmentController extends Controller
                         ->where('rak_id', $rak_id)
                         ->where('quantity', '>', 0)
                         ->orderBy('created_at', 'asc')
-                        ->lockForUpdate() // <--- LOCKING
+                        ->lockForUpdate() // <--- LOCKING PENTING
                         ->get();
 
                     $stokSebelum = $batches->sum('quantity');

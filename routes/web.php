@@ -153,6 +153,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::get('api/lokasi/{lokasi}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
         Route::get('/api/receivings/{receiving}/failed-items', [PurchaseReturnController::class, 'getFailedItems'])->name('api.receivings.failed-items');
         Route::get('/api/penjualans/{penjualan}/returnable-items', [SalesReturnController::class, 'getReturnableItems'])->name('penjualans.returnable-items');
+        Route::get('api/penjualan/items', [PenjualanController::class, 'getBarangItems']) ->name('api.penjualan.items');
         Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
         Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
         Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');

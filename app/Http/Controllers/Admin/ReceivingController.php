@@ -40,7 +40,6 @@ class ReceivingController extends Controller
             // Super admin bisa lihat semua
         } else {
             // Dealer/Pusat hanya bisa melihat PO yang TUJUANNYA adalah lokasi mereka
-            // (lokasi_id di tabel PO adalah lokasi tujuan/pemesan)
             $query->where('lokasi_id', $user->lokasi_id);
         }
 
@@ -51,7 +50,7 @@ class ReceivingController extends Controller
         return view('admin.receivings.create', compact('purchaseOrders'));
     }
 
-public function store(Request $request)
+    public function store(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
@@ -66,17 +65,13 @@ public function store(Request $request)
             'items.*.qty_terima' => 'required|integer|min:0',
         ]);
 
-        // --- PERBAIKAN LOGIKA DISINI ---
-        // 1. Hitung total qty yang diinput user
         $totalQtyReceived = collect($request->items)->sum('qty_terima');
 
-        // 2. Jika totalnya 0, tolak proses (jangan buat receiving)
         if ($totalQtyReceived <= 0) {
             return back()
                 ->with('error', 'Gagal memproses: Anda belum menginput jumlah diterima pada barang manapun (Total Qty 0).')
                 ->withInput();
         }
-        // --------------------------------
 
         DB::beginTransaction();
         try {
@@ -87,31 +82,51 @@ public function store(Request $request)
                 return back()->with('error', 'Anda tidak berwenang menerima barang untuk lokasi PO ini.')->withInput();
             }
 
+            // --- LOGIKA BYPASS QC UNTUK DEALER ---
+            // Cek apakah user adalah staff dealer (bukan pusat)
+            $isDealer = $user->hasRole(['KC', 'PC', 'AD', 'KSR', 'SLS']); // Gunakan definisi dealer staff yang konsisten
+            
+            // Jika Dealer, status langsung ke PUTAWAY. Jika Pusat, masuk ke QC dulu.
+            $initialStatus = $isDealer ? 'PENDING_PUTAWAY' : 'PENDING_QC';
+            
+            // Jika Bypass QC, anggap user ini juga yang melakukan QC secara otomatis
+            $qcBy = $isDealer ? $user->id : null;
+            $qcAt = $isDealer ? now() : null;
+
             $receiving = Receiving::create([
                 'purchase_order_id' => $po->id,
                 'lokasi_id' => $po->lokasi_id,
                 'nomor_penerimaan' => Receiving::generateReceivingNumber(),
                 'tanggal_terima' => $request->tanggal_terima,
-                'status' => 'PENDING_QC', 
+                'status' => $initialStatus, 
                 'catatan' => $request->catatan,
                 'received_by' => $user->id,
+                // Isi kolom QC jika bypass
+                'qc_by' => $qcBy,
+                'qc_at' => $qcAt,
             ]);
 
             foreach ($request->items as $barangId => $itemData) {
                 $qtyTerima = (int)$itemData['qty_terima'];
                 
-                // Hanya proses item yang ada isinya (> 0)
                 if ($qtyTerima > 0) {
                     $poDetail = $po->details->firstWhere('barang_id', $barangId);
 
                     if ($poDetail) {
                         $poDetail->increment('qty_diterima', $qtyTerima);
                     }
+                    
+                    // --- AUTO FILL QTY QC JIKA DEALER ---
+                    $qtyLolos = $isDealer ? $qtyTerima : 0;
+                    $qtyGagal = 0; // Dealer diasumsikan tidak ada retur/gagal QC di tahap ini (langsung terima)
 
                     $receiving->details()->create([
                         'barang_id' => $barangId,
                         'qty_terima' => $qtyTerima,
-                        'qty_pesan_referensi' => $poDetail ? $poDetail->qty_pesan : 0
+                        'qty_pesan_referensi' => $poDetail ? $poDetail->qty_pesan : 0,
+                        // Isi hasil QC otomatis
+                        'qty_lolos_qc' => $qtyLolos,
+                        'qty_gagal_qc' => $qtyGagal
                     ]);
                 }
             }
@@ -124,7 +139,13 @@ public function store(Request $request)
             $po->save();
 
             DB::commit();
-            return redirect()->route('admin.receivings.index')->with('success', 'Data penerimaan barang berhasil disimpan. Silakan lanjut ke proses QC.');
+
+            // Pesan sukses berbeda tergantung role
+            if ($isDealer) {
+                return redirect()->route('admin.putaway.index')->with('success', 'Barang diterima. QC dilewati (Auto Pass). Silakan lanjut ke proses Putaway.');
+            } else {
+                return redirect()->route('admin.receivings.index')->with('success', 'Data penerimaan barang berhasil disimpan. Silakan lanjut ke proses QC.');
+            }
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -134,10 +155,9 @@ public function store(Request $request)
 
     public function show(Receiving $receiving)
     {
-        // PERUBAHAN: Load relasi barang, bukan part
         $receiving->load([
             'purchaseOrder.supplier',
-            'purchaseOrder.sumberLokasi', // Load sumber internal
+            'purchaseOrder.sumberLokasi', 
             'details.barang',
             'createdBy',
             'receivedBy',
@@ -146,7 +166,6 @@ public function store(Request $request)
             'lokasi'
         ]);
 
-        // Load history pergerakan stok
         $stockMovements = $receiving->stockMovements()->with(['rak', 'user', 'barang'])->get();
 
         return view('admin.receivings.show', compact('receiving', 'stockMovements'));
@@ -156,10 +175,8 @@ public function store(Request $request)
     {
         $this->authorize('perform-warehouse-ops');
 
-        // PERUBAHAN: Load relasi barang
         $purchaseOrder->load('details.barang');
 
-        // Filter: Hanya item yang belum lunas qty-nya
         $itemsToReceive = $purchaseOrder->details->filter(function ($detail) {
             return $detail->qty_pesan > $detail->qty_diterima;
         });

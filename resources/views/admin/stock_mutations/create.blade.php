@@ -4,244 +4,286 @@
 @section('plugins.Select2', true)
 
 @section('content_header')
-    <h1>Buat Permintaan Mutasi Stok</h1>
+    <div class="d-flex justify-content-between align-items-center">
+        <h1><i class="fas fa-exchange-alt text-primary mr-2"></i> Buat Permintaan Mutasi</h1>
+    </div>
 @stop
 
 @section('content')
-<div class="card">
-    <form action="{{ route('admin.stock-mutations.store') }}" method="POST">
-        @csrf
-        <div class="card-body">
-            @if(session('error'))
-                <div class="alert alert-danger">{{ session('error') }}</div>
-            @endif
-            @if ($errors->any())
-                <div class="alert alert-danger">
-                    <ul class="mb-0">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
-
-            <div class="row">
-                {{-- 1. Pilih Lokasi Asal --}}
-                <div class="col-md-4 form-group">
-                    <label>Lokasi Asal</label>
-                    @php
-                        // Cek apakah user punya > 1 lokasi asal atau user adalah SA/PIC
-                        $canSelectLokasiAsal = auth()->user()->hasRole(['SA', 'PIC']) || $lokasiAsal->count() > 1;
-                    @endphp
-
-                    @if($canSelectLokasiAsal)
-                        <select name="lokasi_asal_id" id="lokasi_asal_id" class="form-control select2 @error('lokasi_asal_id') is-invalid @enderror" required>
-                            <option value="" selected>Pilih Lokasi Asal</option>
-                            @foreach ($lokasiAsal as $lokasi)
-                                <option value="{{ $lokasi->id }}" {{ old('lokasi_asal_id') == $lokasi->id ? 'selected' : '' }}>
-                                    {{ $lokasi->nama_lokasi }} ({{$lokasi->kode_lokasi}})
-                                </option>
-                            @endforeach
-                        </select>
-                    @else
-                        {{-- Jika user hanya punya 1 lokasi, otomatis terpilih --}}
-                        <input type="text" class="form-control" value="{{ $lokasiAsal->first()->nama_lokasi }} ({{$lokasiAsal->first()->kode_lokasi}})" readonly>
-                        <input type="hidden" id="lokasi_asal_id" name="lokasi_asal_id" value="{{ $lokasiAsal->first()->id }}">
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card card-outline card-primary shadow-sm">
+            <form action="{{ route('admin.stock-mutations.store') }}" method="POST">
+                @csrf
+                <div class="card-body">
+                    {{-- Alert Info --}}
+                    @if(session('error'))
+                        <div class="alert alert-danger alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert">×</button>
+                            <i class="icon fas fa-ban"></i> {{ session('error') }}
+                        </div>
                     @endif
-                    @error('lokasi_asal_id') <span class="invalid-feedback">{{ $message }}</span> @enderror
-                </div>
+                    @if ($errors->any())
+                        <div class="alert alert-danger alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert">×</button>
+                            <ul class="mb-0 pl-3">
+                                @foreach ($errors->all() as $error) <li>{{ $error }}</li> @endforeach
+                            </ul>
+                        </div>
+                    @endif
 
-                {{-- 2. Pilih Item / Barang (Dulu Part) --}}
-                <div class="col-md-4 form-group">
-                    <label>Part</label>
-                    <select name="barang_id" id="barang_id" class="form-control select2 @error('barang_id') is-invalid @enderror" required disabled>
-                        <option value="">Pilih Lokasi Asal Dahulu</option>
-                    </select>
-                    @error('barang_id') <span class="invalid-feedback">{{ $message }}</span> @enderror
-                </div>
+                    <div class="alert alert-light border-left-primary" role="alert">
+                        <i class="fas fa-info-circle text-primary mr-1"></i>
+                        Pastikan sisa stok setelah mutasi tidak kurang dari <strong>Batas Minimum</strong>.
+                    </div>
 
-                {{-- 3. Input Jumlah --}}
-                <div class="col-md-4 form-group">
-                    <label>Jumlah</label>
-                    <input type="number" id="jumlah" name="jumlah" class="form-control @error('jumlah') is-invalid @enderror" placeholder="Jumlah Mutasi" required min="1" value="{{ old('jumlah') }}">
-                    <small id="stock-info" class="form-text text-muted font-weight-bold text-primary"></small>
-                    @error('jumlah') <span class="invalid-feedback">{{ $message }}</span> @enderror
-                </div>
-            </div>
+                    <div class="row">
+                        {{-- 1. Lokasi Asal --}}
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label><i class="fas fa-warehouse mr-1 text-muted"></i> Lokasi Asal (Sumber)</label>
+                                @php
+                                    $canSelectLokasiAsal = auth()->user()->hasRole(['SA', 'PIC']) || $lokasiAsal->count() > 1;
+                                @endphp
 
-            <div class="row">
-                {{-- 4. Pilih Lokasi Tujuan --}}
-                <div class="col-md-4 form-group">
-                    <label>Lokasi Tujuan</label>
-                    <select name="lokasi_tujuan_id" id="lokasi_tujuan_id" class="form-control select2 @error('lokasi_tujuan_id') is-invalid @enderror" required>
-                        <option value="">Pilih Lokasi Tujuan</option>
-                        @foreach ($lokasiTujuan as $lokasi)
-                            <option value="{{ $lokasi->id }}" {{ old('lokasi_tujuan_id') == $lokasi->id ? 'selected' : '' }}>
-                                {{ $lokasi->nama_lokasi }} ({{$lokasi->kode_lokasi}})
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('lokasi_tujuan_id') <span class="invalid-feedback">{{ $message }}</span> @enderror
-                </div>
+                                @if($canSelectLokasiAsal)
+                                    <select name="lokasi_asal_id" id="lokasi_asal_id" class="form-control select2" required>
+                                        <option value="" selected disabled>-- Pilih Lokasi Asal --</option>
+                                        @foreach ($lokasiAsal as $lokasi)
+                                            <option value="{{ $lokasi->id }}" {{ old('lokasi_asal_id') == $lokasi->id ? 'selected' : '' }}>
+                                                {{ $lokasi->nama_lokasi }} ({{$lokasi->kode_lokasi}})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                @else
+                                    <div class="input-group">
+                                        <div class="input-group-prepend">
+                                            <span class="input-group-text bg-light"><i class="fas fa-map-marker-alt text-danger"></i></span>
+                                        </div>
+                                        <input type="text" class="form-control bg-light" value="{{ $lokasiAsal->first()->nama_lokasi }}" readonly>
+                                        <input type="hidden" id="lokasi_asal_id" name="lokasi_asal_id" value="{{ $lokasiAsal->first()->id }}">
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
 
-                {{-- 5. Keterangan --}}
-                <div class="col-md-8 form-group">
-                    <label>Keterangan</label>
-                    <input type="text" name="keterangan" class="form-control @error('keterangan') is-invalid @enderror" placeholder="Keterangan (opsional)" value="{{ old('keterangan') }}">
-                    @error('keterangan') <span class="invalid-feedback">{{ $message }}</span> @enderror
+                        {{-- 2. Lokasi Tujuan --}}
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label><i class="fas fa-truck-moving mr-1 text-muted"></i> Lokasi Tujuan</label>
+                                <select name="lokasi_tujuan_id" id="lokasi_tujuan_id" class="form-control select2" required>
+                                    <option value="" selected disabled>-- Pilih Lokasi Tujuan --</option>
+                                    @foreach ($lokasiTujuan as $lokasi)
+                                        <option value="{{ $lokasi->id }}" {{ old('lokasi_tujuan_id') == $lokasi->id ? 'selected' : '' }}>
+                                            {{ $lokasi->nama_lokasi }} ({{$lokasi->kode_lokasi}})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        {{-- 3. Pilih Barang --}}
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label><i class="fas fa-box mr-1 text-muted"></i> Barang / Part</label>
+                                <select name="barang_id" id="barang_id" class="form-control select2" required disabled>
+                                    <option value="">Pilih Lokasi Asal Dahulu</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {{-- 4. Input Jumlah --}}
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Jumlah Mutasi</label>
+                                <div class="input-group">
+                                    <input type="number" id="jumlah" name="jumlah" class="form-control" placeholder="0" required min="1" value="{{ old('jumlah') }}">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">Pcs</span>
+                                    </div>
+                                </div>
+                                {{-- Feedback Stok --}}
+                                <div class="mt-2 d-flex justify-content-between">
+                                    <small id="stock-info" class="text-muted font-weight-bold"></small>
+                                    <small id="min-stock-info" class="text-danger font-weight-bold d-none"></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- 5. Keterangan --}}
+                    <div class="form-group">
+                        <label>Keterangan / Alasan Mutasi</label>
+                        <textarea name="keterangan" class="form-control" rows="2" placeholder="Contoh: Permintaan stok darurat dari cabang B...">{{ old('keterangan') }}</textarea>
+                    </div>
+
                 </div>
-            </div>
+                <div class="card-footer bg-light d-flex justify-content-between">
+                    <a href="{{ route('admin.stock-mutations.index') }}" class="btn btn-default shadow-sm">
+                        <i class="fas fa-arrow-left mr-1"></i> Batal
+                    </a>
+                    <button type="submit" id="btn-submit" class="btn btn-primary shadow-sm px-4">
+                        <i class="fas fa-paper-plane mr-1"></i> Kirim Permintaan
+                    </button>
+                </div>
+            </form>
         </div>
-        <div class="card-footer">
-            <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Buat Permintaan</button>
-            <a href="{{ route('admin.stock-mutations.index') }}" class="btn btn-secondary">Batal</a>
-        </div>
-    </form>
+    </div>
 </div>
 @stop
+
+@push('css')
+<style>
+    .border-left-primary { border-left: 4px solid #007bff; }
+    .select2-container .select2-selection--single { height: 38px !important; }
+    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 28px !important; }
+    .select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px !important; }
+</style>
+@endpush
 
 @push('js')
 <script>
 $(document).ready(function() {
-    // Inisialisasi Select2 dengan tema Bootstrap 4
     $('.select2').select2({ theme: 'bootstrap4' });
 
     const lokasiAsalSelect = $('#lokasi_asal_id');
     const lokasiTujuanSelect = $('#lokasi_tujuan_id');
-    const barangSelect = $('#barang_id'); // ID element select barang
+    const barangSelect = $('#barang_id');
     const jumlahInput = $('#jumlah');
     const stockInfo = $('#stock-info');
+    const minStockInfo = $('#min-stock-info');
+    const btnSubmit = $('#btn-submit');
 
-    /**
-     * Fungsi untuk memfilter lokasi tujuan agar tidak sama dengan lokasi asal
-     */
+    let currentTotalStock = 0;
+    let currentMinStock = 0;
+
+    // --- 1. FILTER LOKASI TUJUAN ---
     function filterLokasiTujuan() {
         const selectedAsalId = lokasiAsalSelect.val();
         const currentTujuanVal = lokasiTujuanSelect.val();
 
         lokasiTujuanSelect.find('option').each(function() {
-            const option = $(this);
-            const optionVal = option.val();
-
-            if (optionVal) {
-                // Enable dulu semua opsi
-                option.prop('disabled', false);
-            }
-
-            // Disable jika sama dengan lokasi asal
-            if (selectedAsalId && optionVal === selectedAsalId) {
-                option.prop('disabled', true);
+            if ($(this).val() === selectedAsalId) {
+                $(this).prop('disabled', true);
+            } else {
+                $(this).prop('disabled', false);
             }
         });
 
-        // Reset jika pilihan saat ini konflik
         if (selectedAsalId && currentTujuanVal === selectedAsalId) {
             lokasiTujuanSelect.val('').trigger('change');
         } else {
-            // Refresh tampilan select2
-            lokasiTujuanSelect.trigger('change.select2');
+            lokasiTujuanSelect.trigger('change.select2'); // Refresh UI
         }
     }
 
-    /**
-     * Mengambil daftar barang yang memiliki stok di lokasi asal
-     */
+    // --- 2. LOAD BARANG (YANG ADA STOK) ---
     function fetchBarangs() {
         const lokasiId = lokasiAsalSelect.val();
-
-        // Reset dropdown barang
+        
         barangSelect.prop('disabled', true).html('<option value="">Loading...</option>');
         stockInfo.text('');
-        jumlahInput.removeAttr('max');
-
-        // Filter tujuan setiap kali asal berubah
+        minStockInfo.addClass('d-none');
+        jumlahInput.val('');
+        
         filterLokasiTujuan();
 
         if (!lokasiId) {
             barangSelect.html('<option value="">Pilih Lokasi Asal Dahulu</option>');
-            // Reset filter tujuan
-            lokasiTujuanSelect.find('option').prop('disabled', false);
-            lokasiTujuanSelect.trigger('change.select2');
             return;
         }
 
-        // URL API (Pastikan route di web.php sesuai)
         const url = "{{ url('admin/api/lokasi') }}/" + lokasiId + "/parts-with-stock";
 
         $.getJSON(url, function(items) {
-            barangSelect.prop('disabled', false).html('<option value="">Pilih Item</option>');
-
+            barangSelect.prop('disabled', false).html('<option value="" selected disabled>-- Pilih Item --</option>');
+            
             if (items && items.length > 0) {
                 let oldBarangId = "{{ old('barang_id') }}";
-
                 items.forEach(item => {
                     let text = `${item.part_name} (${item.part_code})`;
-                    if(item.merk) text += ` - ${item.merk}`;
-
                     let option = new Option(text, item.id);
-
-                    if (oldBarangId && item.id == oldBarangId) {
-                        option.selected = true;
-                    }
+                    if (oldBarangId && item.id == oldBarangId) option.selected = true;
                     barangSelect.append(option);
                 });
-
-                // Trigger change untuk load stok jika ada old input
-                if (oldBarangId) {
-                    barangSelect.trigger('change');
-                }
+                if (oldBarangId) barangSelect.trigger('change');
             } else {
                 barangSelect.html('<option value="">Tidak ada stok tersedia</option>');
             }
-        }).fail(function() {
-            alert('Gagal memuat data item. Pastikan koneksi aman.');
-            barangSelect.html('<option value="">Error memuat item</option>');
+        }).fail(() => {
+            alert('Gagal memuat data item.');
+            barangSelect.html('<option value="">Error</option>');
         });
     }
 
-    /**
-     * Mengambil detail stok spesifik untuk barang terpilih
-     */
+    // --- 3. LOAD STOK DETAIL ---
     function fetchStock() {
         const barangId = barangSelect.val();
         const lokasiId = lokasiAsalSelect.val();
 
         stockInfo.text('');
-        jumlahInput.removeAttr('max');
-        // Jangan reset val() agar user tidak perlu mengetik ulang jika hanya ganti barang
-
+        minStockInfo.addClass('d-none');
+        jumlahInput.removeClass('is-invalid is-valid');
+        
         if (!barangId || !lokasiId) return;
 
-        // URL API Detail Stok
         const url = `{{ route('admin.api.part.stock-details') }}?lokasi_id=${lokasiId}&barang_id=${barangId}`;
 
         $.getJSON(url, function(data) {
-            const totalStock = parseInt(data.total_stock) || 0;
+            currentTotalStock = parseInt(data.total_stock) || 0;
+            currentMinStock = parseInt(data.stok_minimum) || 0;
 
-            stockInfo.text(`Stok tersedia: ${totalStock} unit`);
-
-            if (totalStock > 0) {
-                jumlahInput.attr('max', totalStock);
+            stockInfo.html(`Tersedia: <strong>${currentTotalStock}</strong> unit`);
+            
+            if (currentTotalStock > 0) {
+                jumlahInput.prop('disabled', false);
             } else {
-                jumlahInput.attr('max', 0);
-                // Opsional: beri peringatan jika stok 0 tapi lolos filter list
+                jumlahInput.prop('disabled', true);
             }
-        }).fail(() => stockInfo.text('Gagal memuat info stok.'));
+            validateInput(); // Validasi ulang jika jumlah sudah terisi
+        });
     }
 
-    // --- Event Listeners ---
+    // --- 4. VALIDASI INPUT REAL-TIME ---
+    function validateInput() {
+        const qty = parseInt(jumlahInput.val()) || 0;
+        const sisa = currentTotalStock - qty;
 
-    // Saat lokasi asal berubah
+        btnSubmit.prop('disabled', false);
+        jumlahInput.removeClass('is-invalid is-valid');
+        minStockInfo.addClass('d-none');
+
+        if (qty <= 0) {
+            // Belum input valid
+            return;
+        }
+
+        if (qty > currentTotalStock) {
+            jumlahInput.addClass('is-invalid');
+            minStockInfo.removeClass('d-none').text(`Stok tidak cukup! (Maks: ${currentTotalStock})`);
+            btnSubmit.prop('disabled', true);
+        } 
+        else if (sisa < currentMinStock) {
+            // Peringatan Batas Minimum
+            jumlahInput.addClass('is-invalid'); // Merah
+            minStockInfo.removeClass('d-none').text(`Melewati Batas Minimum! (Min: ${currentMinStock}, Sisa: ${sisa})`);
+            btnSubmit.prop('disabled', true); // Blokir submit
+        } 
+        else {
+            jumlahInput.addClass('is-valid'); // Hijau
+        }
+    }
+
+    // Events
     lokasiAsalSelect.on('change', fetchBarangs);
-
-    // Saat barang berubah
     barangSelect.on('change', fetchStock);
+    jumlahInput.on('input change', validateInput);
 
-    // Initial Load (Saat halaman dimuat pertama kali atau setelah error validasi)
+    // Init
     filterLokasiTujuan();
-    if (lokasiAsalSelect.val()) {
-        fetchBarangs();
-    }
+    if (lokasiAsalSelect.val()) fetchBarangs();
 });
 </script>
 @endpush

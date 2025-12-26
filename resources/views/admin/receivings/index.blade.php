@@ -37,11 +37,10 @@
                     <td>{{ \Carbon\Carbon::parse($receiving->tanggal_terima)->format('d-m-Y') }}</td>
                     <td>{{ $receiving->lokasi->nama_lokasi ?? 'N/A' }}</td>
                     <td>
-                        @if($receiving->status == 'PENDING_QC') <span class="badge badge-warning">PENDING QC</span>
-                        @elseif($receiving->status == 'PENDING_PUTAWAY') <span class="badge badge-info">PENDING PUTAWAY</span>
-                        @elseif($receiving->status == 'COMPLETED') <span class="badge badge-success">COMPLETED</span>
-                        @else {{ $receiving->status }}
-                        @endif
+                        {{-- Menggunakan Accessor Badge Baru --}}
+                        <span class="badge {{ $receiving->status_class }}">
+                            {{ $receiving->status_badge }}
+                        </span>
                     </td>
                     <td>
                         <a href="{{ route('admin.receivings.show', $receiving->id) }}" class="btn btn-info btn-xs">Lihat</a>

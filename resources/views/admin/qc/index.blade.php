@@ -14,32 +14,26 @@
     </div>
     <div class="card-body">
 
-        {{-- ++ TAMBAHKAN BLOK INI UNTUK MENAMPILKAN FLASH MESSAGE ++ --}}
         @if(session('success'))
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <div class="alert alert-success alert-dismissible fade show">
                 {{ session('success') }}
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
             </div>
         @endif
         @if(session('error'))
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <div class="alert alert-danger alert-dismissible fade show">
                 {{ session('error') }}
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
             </div>
         @endif
-        {{-- ++ AKHIR BLOK FLASH MESSAGE ++ --}}
 
         <table id="qc-table" class="table table-bordered table-striped">
             <thead>
                 <tr>
                     <th>No. Penerimaan</th>
                     <th>No. PO</th>
-                    <th>Supplier</th>
-                    <th>Lokasi</th> {{-- Diubah --}}
+                    <th>Sumber (Supplier / Internal)</th>
+                    <th>Lokasi Penerima</th>
                     <th>Tanggal Terima</th>
                     <th style="width: 150px">Aksi</th>
                 </tr>
@@ -48,10 +42,24 @@
                 @forelse($receivings as $receiving)
                 <tr>
                     <td>{{ $receiving->nomor_penerimaan }}</td>
-                    <td>{{ $receiving->purchaseOrder->nomor_po ?? 'N/A' }}</td> {{-- Tambah null check --}}
-                    <td>{{ $receiving->purchaseOrder->sumberLokasi->nama_lokasi ?? 'N/A' }}</td> {{-- Tambah null check --}}
-                    {{-- ++ PERBAIKAN: Gunakan nama_lokasi ++ --}}
-                    <td>{{ $receiving->lokasi->nama_lokasi ?? 'N/A' }}</td> {{-- Tambah null check --}}
+                    <td>{{ $receiving->purchaseOrder->nomor_po ?? '-' }}</td>
+                    
+                    {{-- PERBAIKAN KOLOM SUPPLIER --}}
+                    <td>
+                        @if($receiving->purchaseOrder)
+                            @if($receiving->purchaseOrder->po_type == 'supplier_po')
+                                <span class="badge badge-warning">SUPPLIER</span> 
+                                {{ $receiving->purchaseOrder->supplier->nama_supplier ?? 'Unknown' }}
+                            @else
+                                <span class="badge badge-info">INTERNAL</span> 
+                                {{ $receiving->purchaseOrder->sumberLokasi->nama_lokasi ?? 'Pusat' }}
+                            @endif
+                        @else
+                            -
+                        @endif
+                    </td>
+
+                    <td>{{ $receiving->lokasi->nama_lokasi ?? '-' }}</td>
                     <td>{{ \Carbon\Carbon::parse($receiving->tanggal_terima)->format('d-m-Y') }}</td>
                     <td>
                         <a href="{{ route('admin.qc.form', $receiving->id) }}" class="btn btn-primary btn-xs">
@@ -75,15 +83,12 @@
     $(document).ready(function() {
         $('#qc-table').DataTable({
             "responsive": true,
-            "order": [[ 4, "asc" ]] // Urutkan berdasarkan tanggal
+            "order": [[ 4, "asc" ]] 
         });
 
-        // Optional: Auto-close alert after a few seconds
         window.setTimeout(function() {
-            $(".alert").fadeTo(500, 0).slideUp(500, function(){
-                $(this).remove();
-            });
-        }, 5000); // 5 detik
+            $(".alert").fadeTo(500, 0).slideUp(500, function(){ $(this).remove(); });
+        }, 5000);
     });
 </script>
 @stop

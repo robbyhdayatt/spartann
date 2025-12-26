@@ -9,36 +9,34 @@ class PurchaseReturnDetail extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     * Use $guarded = [] or explicitly list fillable fields.
-     * Since you added 'receiving_detail_id', ensure it's fillable.
-     * Using $guarded = ['id'] already makes all other fields fillable.
-     */
     protected $guarded = ['id'];
 
     /**
-     * Get the part associated with the return detail.
+     * Relasi ke Barang (Pengganti Part)
+     * Pastikan kolom di database purchase_return_details adalah 'barang_id'.
+     * Jika masih 'part_id', ubah parameter kedua menjadi 'part_id'.
      */
-    public function part()
+    public function barang()
     {
-        return $this->belongsTo(Part::class);
+        return $this->belongsTo(Barang::class, 'barang_id');
     }
 
     /**
-     * Get the purchase return document associated with this detail.
+     * Deprecated: Relasi lama (bisa dihapus jika sudah tidak dipakai)
+     * Saya arahkan ke Barang juga untuk safety.
      */
+    public function part()
+    {
+        return $this->belongsTo(Barang::class, 'barang_id');
+    }
+
     public function purchaseReturn()
     {
         return $this->belongsTo(PurchaseReturn::class);
     }
 
-    /**
-     * Get the receiving detail from which this return originated.
-     */
     public function receivingDetail()
     {
-        // Assumes you added the foreign key 'receiving_detail_id'
         return $this->belongsTo(ReceivingDetail::class, 'receiving_detail_id');
     }
 }

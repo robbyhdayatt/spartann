@@ -13,116 +13,119 @@ class AuthServiceProvider extends ServiceProvider
     public function boot()
     {
         $this->registerPolicies();
-
         Gate::before(fn(User $user) => $user->hasRole('SA') ? true : null);
 
-        // 1. DEFINISI PERAN
+        // --- DEFINISI PERAN ---
         Gate::define('is-super-admin', fn(User $user) => $user->hasRole('SA'));
         Gate::define('is-pic', fn(User $user) => $user->hasRole('PIC'));
         Gate::define('is-manager', fn(User $user) => $user->hasRole('MA'));
-        Gate::define('is-service-md', fn(User $user) => $user->hasRole('SMD'));
-        Gate::define('is-accounting', fn(User $user) => $user->hasRole('ACC'));
-        
         Gate::define('is-pusat-staff', fn(User $user) => $user->hasRole(['KG', 'AG']));
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
-        Gate::define('is-dealer-staff', fn(User $user) => $user->hasRole(['KC', 'AD', 'PC', 'KSR', 'SLS']));
+        Gate::define('is-dealer-staff', fn(User $user) => $user->hasRole(['KC', 'PC', 'KSR'])); 
+        Gate::define('is-asd', fn(User $user) => $user->hasRole('ASD'));
 
-        // 2. MODUL PEMBELIAN (PO)
-        Gate::define('create-po', function (User $user) {
-            if ($user->hasRole(['SA', 'PIC', 'SMD'])) return true;
-            if (!$user->lokasi) return false;
-            if ($user->lokasi->tipe === 'PUSAT') return false;
-            return false; 
-        });
-
-        Gate::define('approve-po', function (User $user, $po = null) {
-            if ($user->hasRole(['SA', 'PIC'])) return true;
-            if ($user->hasRole('AG') && $user->lokasi && $user->lokasi->tipe === 'PUSAT') return true;
-            return false;
-        });
-
-        Gate::define('view-po-module', function ($user) {
-             return $user->can('create-po') || $user->can('approve-po') || $user->hasRole(['SA', 'PIC', 'MA', 'SMD', 'ACC', 'AG']);
-        });
-
-        Gate::define('manage-purchase-returns', function(User $user) {
-            return $user->hasRole([ 'PIC', 'SA']) && $user->lokasi && $user->lokasi->tipe === 'PUSAT';
-        });
-
-        // 3. MODUL INBOUND (Penerimaan, QC, Putaway)
+        // =================================================================
+        // 1. MODUL INBOUND (PENERIMAAN)
+        // =================================================================
+        
+        // Gate Umum (Induk Menu): PC HARUS ADA agar menu induk "Penerimaan" muncul
         Gate::define('perform-warehouse-ops', function (User $user) {
             if ($user->hasRole(['SA', 'PIC'])) return true;
-            if (!$user->lokasi) return false;
-            if ($user->lokasi->tipe === 'PUSAT') return false;
-            // PERUBAHAN: Ganti 'CS' jadi 'PC'
-            if ($user->hasRole(['AG', 'AD', 'KG', 'KC', 'PC'])) return true;
+            return $user->hasRole(['AG', 'KG', 'PC']); 
+        });
+
+        // Gate Menu Sidebar (KG Hidden)
+        Gate::define('perform-warehouse-ops-exclude-kg', function (User $user) {
+            if ($user->hasRole(['SA', 'PIC'])) return true;
+            return $user->hasRole(['AG', 'PC']); 
+        });
+
+        // ++ GATE BARU: KHUSUS MENU QC (PC DIHAPUS DARI SINI) ++
+        // Hanya Pusat (AG) yang butuh menu QC. Dealer (PC) bypass QC.
+        Gate::define('view-qc-menu', function (User $user) {
+            return $user->hasRole(['SA', 'PIC', 'AG', 'KG']); 
+        });
+
+        // ++ REVISI: STOK KARANTINA (PC DIHAPUS DARI SINI) ++
+        // Dealer tidak ada retur/karantina
+        Gate::define('manage-quarantine-stock', function(User $user) {
+             return $user->hasRole(['SA', 'PIC', 'AG', 'KG']);
+        });
+
+        Gate::define('view-mutation-receiving', fn(User $user) => $user->hasRole(['KG', 'KC', 'PIC', 'SA', 'PC', 'AG']));
+        Gate::define('receive-mutation', fn(User $user) => $user->hasRole(['AG', 'PC']));
+
+
+        // =================================================================
+        // 2. MODUL TRANSAKSI STOK (MUTASI & ADJUSTMENT)
+        // =================================================================
+        
+        // --- Mutasi Stok ---
+        // ++ REVISI: PASTIKAN PC ADA DISINI AGAR MENU MUNCUL ++
+        Gate::define('view-stock-mutations-menu', function(User $user) {
+            return $user->hasRole(['SA', 'PIC', 'ASD', 'PC']);
+        });
+        
+        Gate::define('create-stock-transaction', fn(User $user) => $user->hasRole(['SA', 'PIC', 'PC']));
+        Gate::define('approve-stock-transaction', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
+
+
+        // --- Adjustment ---
+        Gate::define('view-stock-adjustments-menu', function (User $user) {
+             return $user->hasRole(['SA', 'PIC', 'ACC', 'AG', 'KG', 'KC']);
+        });
+        Gate::define('create-stock-adjustment', function (User $user) {
+            return $user->hasRole(['SA', 'PIC', 'AG', 'KC']);
+        });
+        Gate::define('approve-stock-adjustment', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KG', 'KC', 'ASD']));
+
+
+        // =================================================================
+        // 3. MODUL PEMBELIAN (PO)
+        // =================================================================
+        Gate::define('create-po', function (User $user) {
+            return $user->hasRole(['SA', 'PIC', 'AG', 'SMD']); 
+        });
+        Gate::define('approve-po', function (User $user, $po = null) {
+            if ($user->hasRole(['SA', 'PIC'])) return true;
+            if ($po) {
+                if ($po->po_type == 'dealer_request') return $user->hasRole('AG');
+                if ($po->po_type == 'supplier_po') return $user->hasRole(['KG', 'MA']);
+            } else {
+                return $user->hasRole(['AG', 'KG', 'MA']);
+            }
             return false;
         });
-
-        // 4. MODUL TRANSAKSI STOK
-        Gate::define('create-stock-transaction', function (User $user) {
-            if ($user->hasRole(['SA', 'PIC', 'ACC'])) return true;
-            if (!$user->lokasi || $user->lokasi->tipe === 'PUSAT') return false;
-            return $user->hasRole(['AG', 'KG', 'KC']); 
+        Gate::define('view-po-module', function ($user) {
+             return $user->can('create-po') || $user->can('approve-po') || $user->hasRole(['SA', 'PIC', 'MA', 'SMD', 'ACC', 'AG', 'KG']);
+        });
+        Gate::define('manage-purchase-returns', function(User $user) {
+            return $user->hasRole(['PIC', 'SA', 'AG']) && $user->lokasi && $user->lokasi->tipe === 'PUSAT';
         });
 
-        Gate::define('create-stock-adjustment', function (User $user) {
-            if ($user->hasRole(['SA', 'PIC', 'ACC'])) return true;
-            if (!$user->lokasi || $user->lokasi->tipe === 'PUSAT') return false;
-            return $user->hasRole(['AG', 'KG', 'KC']);
-        });
-
-        Gate::define('approve-stock-transaction', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KG', 'KC']));
-        Gate::define('approve-stock-adjustment', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KG', 'KC']));
-
-        Gate::define('view-stock-mutations-menu', function ($user) {
-             return $user->can('create-stock-transaction') || $user->can('approve-stock-transaction') || $user->hasRole(['SA', 'PIC', 'ACC']);
-        });
-        Gate::define('view-stock-adjustments-menu', function ($user) {
-             return $user->can('create-stock-adjustment') || $user->can('approve-stock-adjustment') || $user->hasRole(['SA', 'PIC', 'ACC']);
-        });
-        
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
-        Gate::define('view-mutation-receiving', fn(User $user) => $user->hasRole(['AD', 'KG', 'KC', 'PIC', 'SA', 'PC']));
-        Gate::define('receive-mutation', fn(User $user) => $user->hasRole(['AG', 'AD', 'PC']));
-        
-        Gate::define('manage-quarantine-stock', fn(User $user) => $user->can('perform-warehouse-ops'));
-        Gate::define('view-quarantine-stock', fn(User $user) => $user->can('perform-warehouse-ops'));
-
-        // 5. MASTER DATA & SETTINGS
+        // =================================================================
+        // 4. LAINNYA (TETAP SAMA)
+        // =================================================================
         Gate::define('manage-users', fn(User $user) => $user->hasRole('SA'));
-        Gate::define('manage-locations', fn(User $user) => $user->hasRole(['SA', 'PIC']));
+        Gate::define('manage-locations-sa-only', fn(User $user) => $user->hasRole('SA'));
+        Gate::define('manage-locations', fn(User $user) => $user->hasRole(['SA', 'PIC', 'AG']));
         Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
         Gate::define('manage-barangs', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD', 'SMD']));
         Gate::define('manage-converts', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
-
-        // =================================================================
-        // 6. PENJUALAN & SERVICE
-        // =================================================================
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
         Gate::define('access-sales-module', fn(User $user) => $user->hasRole(['SLS', 'KSR', 'PC']));
-        
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
         Gate::define('view-sales', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'SLS', 'PC', 'KSR', 'ASD']));
-        
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
         Gate::define('create-sale', fn(User $user) => $user->hasRole(['SLS', 'PC', 'KSR']));
-        
         Gate::define('print-invoice-only', fn(User $user) => $user->hasRole('KSR'));
-
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
         Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));
-        
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
-        Gate::define('manage-service', fn(User $user) => $user->hasRole(['PC', 'KSR',]));
-        
-        // PERUBAHAN: Ganti 'CS' jadi 'PC'
+        Gate::define('manage-service', fn(User $user) => $user->hasRole(['PC', 'KSR']));
         Gate::define('export-service-report', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));
-
-        // 7. LAPORAN
-        Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'SMD', 'ACC']));
-        Gate::define('view-global-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'SMD', 'ACC']));
-        Gate::define('view-purchase-journal', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'SMD', 'ACC']));
         Gate::define('manage-marketing', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
+        Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'SMD', 'ACC', 'AG', 'PC']));
+        Gate::define('view-stock-card', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'AG', 'KG', 'KC', 'PC'])); 
+        Gate::define('view-stock-by-warehouse', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'AG', 'PC']));
+        Gate::define('view-stock-report-global', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'AG', 'SMD']));
+        Gate::define('view-sales-summary', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'ACC', 'SLS', 'PC'])); 
+        Gate::define('view-service-summary', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'ACC', 'PC'])); 
+        Gate::define('view-purchase-journal', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'ACC'])); 
+        Gate::define('view-inventory-value', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'ACC'])); 
     }
 }

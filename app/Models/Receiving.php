@@ -64,4 +64,21 @@ class Receiving extends Model
         $sequence = str_pad($latest + 1, 4, '0', STR_PAD_LEFT);
         return "RCV/{$date}/{$sequence}";
     }
+
+    // --- AKSESOR STATUS BARU ---
+    public function getStatusClassAttribute()
+    {
+        switch ($this->status) {
+            case 'PENDING_QC': return 'badge-warning';
+            case 'PENDING_PUTAWAY': return 'badge-info';
+            case 'COMPLETED': return 'badge-success';
+            case 'PARTIAL_CLOSED': return 'badge-secondary'; // Status baru (Warna Abu/Biru Tua)
+            default: return 'badge-secondary';
+        }
+    }
+
+    public function getStatusBadgeAttribute()
+    {
+        return ucwords(str_replace('_', ' ', strtolower($this->status)));
+    }
 }

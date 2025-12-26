@@ -11,71 +11,82 @@ class RakSeeder extends Seeder
 {
     public function run()
     {
-        // Bersihkan data lama agar tidak duplikat saat seeding ulang
         Schema::disableForeignKeyConstraints();
         Rak::truncate();
         Schema::enableForeignKeyConstraints();
 
-        // Ambil data lokasi
+        // Ambil Gudang Pusat
         $pusat = Lokasi::where('tipe', 'PUSAT')->first();
+        // Ambil Dealer
         $dealers = Lokasi::where('tipe', 'DEALER')->get();
 
-        // 1. Buat Rak untuk GUDANG PUSAT (Lebih banyak)
+        // 1. SEED RAK GUDANG PUSAT (Format Lengkap)
         if ($pusat) {
-            // Buat 10 Rak Penyimpanan untuk Pusat
-            $this->createStorageRaks($pusat, 10);
-
-            // Rak Karantina Pusat
+            // Buat Zona A, Rak 01-03, Level 1-3, Bin 01-05
+            $this->generateRaks($pusat, 'A', 3, 3, 5, 'PENYIMPANAN');
+            
+            // Rak Karantina Pusat (Simpel)
             Rak::create([
                 'lokasi_id' => $pusat->id,
-                'kode_rak'  => 'KARANTINA-PST',
-                'nama_rak'  => 'Area Karantina Pusat',
+                'zona'      => 'K',   // K = Karantina
+                'nomor_rak' => '00',
+                'level'     => '00',
+                'bin'       => '00',
                 'tipe_rak'  => 'KARANTINA',
                 'is_active' => true,
             ]);
         }
 
-        // 2. Buat Rak untuk SETIAP DEALER
+        // 2. SEED RAK DEALER
         foreach ($dealers as $dealer) {
-            // ++ SESUAI REQUEST: Tambahkan 3 Rak Penyimpanan ++
-            $this->createStorageRaks($dealer, 3);
+            // Dealer biasanya lebih kecil: Zona D (Display), Zona S (Stock)
+            
+            // Rak Stock: Zona S, 1 Rak, 2 Level, 3 Bin
+            $this->generateRaks($dealer, 'S', 1, 2, 3, 'PENYIMPANAN');
 
-            // Tambahkan 1 Rak Display (Untuk pajangan toko)
+            // Rak Display
             Rak::create([
                 'lokasi_id' => $dealer->id,
-                'kode_rak'  => 'DISPLAY-01',
-                'nama_rak'  => 'Rak Display Toko',
-                'tipe_rak'  => 'DISPLAY',
+                'zona'      => 'D', // Display
+                'nomor_rak' => '01',
+                'level'     => '01',
+                'bin'       => '01',
+                'tipe_rak'  => 'DISPLAY', // Pastikan enum di database mendukung atau pakai PENYIMPANAN
                 'is_active' => true,
             ]);
 
-            // Tambahkan 1 Rak Karantina (Wajib ada untuk retur/barang rusak)
+            // Rak Karantina Dealer
             Rak::create([
                 'lokasi_id' => $dealer->id,
-                'kode_rak'  => 'KARANTINA-01',
-                'nama_rak'  => 'Rak Barang Rusak/Retur',
+                'zona'      => 'K',
+                'nomor_rak' => '00',
+                'level'     => '00',
+                'bin'       => '01',
                 'tipe_rak'  => 'KARANTINA',
                 'is_active' => true,
             ]);
         }
     }
 
-    /**
-     * Helper untuk membuat rak penyimpanan dalam jumlah banyak
-     */
-    private function createStorageRaks($lokasi, $jumlah)
+    private function generateRaks($lokasi, $zona, $maxRak, $maxLevel, $maxBin, $tipe)
     {
-        for ($i = 1; $i <= $jumlah; $i++) {
-            // Format kode: RAK-01, RAK-02, dst.
-            $nomor = str_pad($i, 2, '0', STR_PAD_LEFT);
+        for ($r = 1; $r <= $maxRak; $r++) {
+            for ($l = 1; $l <= $maxLevel; $l++) {
+                for ($b = 1; $b <= $maxBin; $b++) {
+                    
+                    Rak::create([
+                        'lokasi_id' => $lokasi->id,
+                        'zona'      => $zona,
+                        'nomor_rak' => 'R' . str_pad($r, 2, '0', STR_PAD_LEFT), // R01
+                        'level'     => 'L' . $l, // L1
+                        'bin'       => 'B' . str_pad($b, 2, '0', STR_PAD_LEFT), // B01
+                        'tipe_rak'  => $tipe,
+                        'is_active' => true,
+                        // kode_rak & nama_rak akan digenerate otomatis oleh Model Boot() yang saya buat sebelumnya
+                    ]);
 
-            Rak::create([
-                'lokasi_id' => $lokasi->id,
-                'kode_rak'  => 'RAK-' . $nomor,
-                'nama_rak'  => 'Rak Penyimpanan ' . $i,
-                'tipe_rak'  => 'PENYIMPANAN',
-                'is_active' => true,
-            ]);
+                }
+            }
         }
     }
 }
