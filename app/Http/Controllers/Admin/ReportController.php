@@ -417,34 +417,53 @@ class ReportController extends Controller
         $endDate = $request->input('end_date', session('report.service.end_date', now()->endOfMonth()->toDateString()));
         $invoiceNo = $request->input('invoice_no');
 
-        // Gunakan distinct agar listnya unik
+        // Ambil daftar kode part convert
         $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code');
 
-        $query = DB::table('service_details')
-            ->join('services', 'service_details.service_id', '=', 'services.id')
-            ->join('barangs', 'service_details.barang_id', '=', 'barangs.id')
-            ->whereIn('service_details.item_code', $validPartCodes)
-            ->select(
-                'service_details.item_code',
-                'barangs.part_name as item_name',
-                'service_details.item_category',
-                DB::raw('SUM(service_details.quantity) as total_qty'),
-                DB::raw('SUM(service_details.quantity * COALESCE(barangs.retail, 0)) as total_penjualan'),
-                DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_modal"),
-                DB::raw("SUM(service_details.quantity * COALESCE(barangs.retail, 0)) -
-                         SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_keuntungan")
-            )
-            ->whereBetween('services.reg_date', [$startDate, $endDate])
-            ->groupBy('service_details.item_code', 'barangs.part_name', 'service_details.item_category')
-            ->orderBy('total_qty', 'desc');
+        // --- QUERY UTAMA (MENGGUNAKAN STOCK MOVEMENT AGAR AKURAT DENGAN DASHBOARD) ---
+        // Logika: Kita menjumlahkan 'jumlah' dari stock_movement.
+        // Barang Keluar = Negatif (-), Retur = Positif (+).
+        // Contoh: Keluar 2 (-2), Retur 1 (+1) = Total -1. ABS(-1) = 1 Terjual. 
+        // Ini menangani kasus Partial Refund dengan sempurna.
 
+        $query = DB::table('stock_movements')
+            ->join('barangs', 'stock_movements.barang_id', '=', 'barangs.id')
+            ->join('services', 'stock_movements.referensi_id', '=', 'services.id') // Join ke Header Service
+            ->where('stock_movements.referensi_type', 'like', '%Service%') // Filter hanya transaksi Service
+            ->whereIn('barangs.part_code', $validPartCodes) // Hanya barang Convert
+            ->select(
+                'barangs.part_code as item_code',
+                'barangs.part_name as item_name',
+                DB::raw("'Sparepart' as item_category"), // Kategori default atau ambil dari barangs.kategori
+                
+                // HITUNG QTY NET (Keluar - Retur)
+                DB::raw('ABS(SUM(stock_movements.jumlah)) as total_qty'),
+                
+                // HITUNG KEUANGAN (Berdasarkan Harga Master Barang saat ini)
+                // Menggunakan MAX() karena kita grouping, dan asumsi harga master tunggal per periode
+                DB::raw('ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.retail, 0)) as total_penjualan'),
+                DB::raw('ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.selling_out, 0)) as total_modal'),
+                DB::raw('(ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.retail, 0))) - 
+                         (ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.selling_out, 0))) as total_keuntungan')
+            )
+            // Filter Tanggal berdasarkan Tanggal Service (bukan tanggal mutasi stok, agar sesuai laporan harian)
+            ->whereBetween('services.reg_date', [$startDate, $endDate])
+            ->groupBy('barangs.id', 'barangs.part_code', 'barangs.part_name');
+
+        // Filter Lokasi
         if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC']) && $user->lokasi_id) {
             $query->where('services.lokasi_id', $user->lokasi_id);
         }
 
+        // Filter No Invoice
         if ($invoiceNo) {
             $query->where('services.invoice_no', 'like', '%' . $invoiceNo . '%');
         }
+
+        // Filter Tambahan: Hanya tampilkan yang Qty Net > 0
+        // (Barang yang keluar lalu diretur full (Net 0) tidak perlu muncul)
+        $query->having('total_qty', '>', 0);
+        $query->orderBy('total_qty', 'desc');
 
         $reportData = $query->get();
 
@@ -481,6 +500,8 @@ class ReportController extends Controller
 
         $fileName = 'Laporan Service Summary (Parts) - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
 
+        // Pastikan Anda juga mengupdate logic di file app/Exports/ServiceSummaryExport.php 
+        // agar menggunakan Query StockMovement yang sama seperti di atas.
         return Excel::download(new ServiceSummaryExport($startDate, $endDate, $invoiceNo, $lokasiId), $fileName);
     }
 
