@@ -16,7 +16,6 @@ use Illuminate\Support\Facades\DB;
 
 class PenjualanController extends Controller
 {
-    // ... (Index & Show methods tetap sama) ...
 
     public function index()
     {
@@ -45,7 +44,6 @@ class PenjualanController extends Controller
         }
 
         $lokasi = $user->lokasi ?? Lokasi::first();
-        // Kirim tanggal hari ini
         $today = now()->format('Y-m-d');
 
         return view('admin.penjualans.create', compact('lokasi', 'today'));
@@ -56,14 +54,12 @@ class PenjualanController extends Controller
         $this->authorize('create-sale');
         $user = Auth::user();
 
-        // 1. Validasi Input Tambahan
+        // Validasi
         $validated = $request->validate([
             'customer_name' => 'required|string|max:255',
-            // Field Baru
             'tipe_konsumen' => 'required|in:BENGKEL,RETAIL',
             'alamat'        => 'nullable|string|max:500',
             'telepon'       => 'nullable|string|max:20',
-            
             'tanggal_jual'  => 'required|date',
             'items'         => 'required|array|min:1',
             'items.*.barang_id' => 'required|exists:barangs,id',
@@ -74,43 +70,38 @@ class PenjualanController extends Controller
         ]);
 
         $lokasiId = $user->lokasi_id;
-        if (!$lokasiId && $user->hasRole(['SA', 'PIC'])) {
+        // Fallback jika user pusat (untuk testing)
+        if (!$lokasiId && $user->hasRole(['SA', 'PIC', 'IT', 'ASD'])) {
              $lokasiId = Lokasi::where('tipe', 'PUSAT')->first()->id;
         }
 
         DB::beginTransaction();
         try {
-            // [UPDATE] Logika Konsumen
-            // Cari konsumen berdasarkan nama (Case Insensitive biasanya tergantung collation DB)
+            // 1. Handle Konsumen (Create or Find)
             $konsumen = Konsumen::where('nama_konsumen', $validated['customer_name'])->first();
-
             if (!$konsumen) {
-                // Buat Konsumen Baru dengan Data Lengkap
                 $kodeKonsumen = 'CST' . now()->format('ymdHis') . rand(100, 999);
-                
                 $konsumen = Konsumen::create([
                     'nama_konsumen' => $validated['customer_name'],
                     'kode_konsumen' => $kodeKonsumen,
-                    'tipe_konsumen' => $validated['tipe_konsumen'], // <-- SIMPAN TIPE
-                    'alamat'        => $validated['alamat'] ?? '-', // <-- SIMPAN ALAMAT
-                    'telepon'         => $validated['telepon'] ?? '-', // <-- SIMPAN TELEPON
+                    'tipe_konsumen' => $validated['tipe_konsumen'],
+                    'alamat'        => $validated['alamat'] ?? '-',
+                    'no_hp'         => $validated['telepon'] ?? '-',
                 ]);
             } else {
-                // Opsional: Update data konsumen jika diperlukan (Misal alamat berubah)
-                // Untuk POS biasanya kita update jika ada info baru
                 $konsumen->update([
                     'tipe_konsumen' => $validated['tipe_konsumen'],
                     'alamat'        => $validated['alamat'] ?? $konsumen->alamat,
-                    'telepon'         => $validated['telepon'] ?? $konsumen->telepon,
+                    'no_hp'         => $validated['telepon'] ?? $konsumen->no_hp,
                 ]);
             }
 
-            // Persiapan Data Keuangan
+            // Persiapan Data Header
             $subtotalGlobal = 0;
             $diskon = $request->input('nilai_diskon', 0);
             $isPpn = $request->has('ppn_check');
 
-            // 1. Buat Header Penjualan
+            // 2. Buat Header Penjualan Dulu
             $penjualan = Penjualan::create([
                 'nomor_faktur' => $this->generateNomorFaktur($lokasiId),
                 'tanggal_jual' => $validated['tanggal_jual'],
@@ -122,20 +113,22 @@ class PenjualanController extends Controller
                 'keterangan_diskon' => $request->nama_diskon,
                 'diskon'       => $diskon, 
                 'total_diskon' => $diskon,
-                'subtotal'     => 0,
-                'pajak'        => 0,
-                'total_harga'  => 0,
+                'subtotal'     => 0, // Nanti diupdate
+                'pajak'        => 0, // Nanti diupdate
+                'total_harga'  => 0, // Nanti diupdate
             ]);
 
-            // 2. Loop Item & Kurangi Stok (FIFO + Locking)
+            // 3. Loop Item & Kurangi Stok (FIFO + SPLIT RAK)
             foreach ($validated['items'] as $item) {
                 $barang = Barang::find($item['barang_id']);
-                $qtyJual = $item['qty'];
+                $qtyDiminta = $item['qty'];
                 $hargaJual = $barang->retail; 
-                $subtotalItem = $hargaJual * $qtyJual;
-                
-                $subtotalGlobal += $subtotalItem;
 
+                // Hitung total harga item ini (untuk menambah subtotal global)
+                $subtotalItemGlobal = $hargaJual * $qtyDiminta;
+                $subtotalGlobal += $subtotalItemGlobal;
+
+                // Ambil Batch Stok (FIFO)
                 $batches = InventoryBatch::where('barang_id', $barang->id)
                                          ->where('lokasi_id', $lokasiId)
                                          ->where('quantity', '>', 0)
@@ -145,44 +138,53 @@ class PenjualanController extends Controller
 
                 $currentGlobalStock = $batches->sum('quantity');
 
-                if ($currentGlobalStock < $qtyJual) {
-                    throw new \Exception("Stok {$barang->part_name} tidak cukup. Sisa: {$currentGlobalStock}");
+                if ($currentGlobalStock < $qtyDiminta) {
+                    throw new \Exception("Stok {$barang->part_name} tidak cukup. Diminta: {$qtyDiminta}, Ada: {$currentGlobalStock}");
                 }
 
-                $sisaQtyToCut = $qtyJual;
+                $sisaQtyToCut = $qtyDiminta;
 
+                // [MODIFIKASI PENTING] Loop Batch & Create Detail Per Batch
                 foreach ($batches as $batch) {
                     if ($sisaQtyToCut <= 0) break;
+
+                    // Tentukan berapa yang diambil dari batch/rak ini
                     $potong = min($batch->quantity, $sisaQtyToCut);
                     
+                    // 1. Kurangi Fisik Stok
                     $stokSebelum = $batch->quantity;
                     $batch->decrement('quantity', $potong);
 
+                    // 2. Catat Log Pergerakan (Stock Movement)
                     StockMovement::create([
                         'barang_id'      => $barang->id,
                         'lokasi_id'      => $lokasiId,
-                        'rak_id'         => $batch->rak_id,
+                        'rak_id'         => $batch->rak_id, 
                         'jumlah'         => -$potong,
                         'stok_sebelum'   => $stokSebelum,
                         'stok_sesudah'   => $stokSebelum - $potong,
                         'referensi_type' => get_class($penjualan),
                         'referensi_id'   => $penjualan->id,
-                        'keterangan'     => "Faktur #{$penjualan->nomor_faktur}",
+                        'keterangan'     => "Penjualan Faktur #{$penjualan->nomor_faktur}",
                         'user_id'        => $user->id,
+                    ]);
+
+                    // 3. [PERBAIKAN UTAMA] Buat Penjualan Detail disini!
+                    // Kita simpan detail SESUAI dengan Rak/Batch yang diambil.
+                    // Jika ambil dari 2 rak, maka akan create 2 baris detail.
+                    $penjualan->details()->create([
+                        'barang_id'  => $barang->id,
+                        'rak_id'     => $batch->rak_id, // <-- Rak ID Akurat sesuai batch
+                        'qty_jual'   => $potong,        // <-- Qty parsial dari rak ini
+                        'harga_jual' => $hargaJual,
+                        'subtotal'   => $potong * $hargaJual,
                     ]);
 
                     $sisaQtyToCut -= $potong;
                 }
-
-                $penjualan->details()->create([
-                    'barang_id'  => $barang->id,
-                    'qty_jual'   => $qtyJual,
-                    'harga_jual' => $hargaJual,
-                    'subtotal'   => $subtotalItem,
-                ]);
             }
 
-            // 3. Hitung Final (Diskon & PPN)
+            // 4. Hitung Final (Diskon & PPN)
             $dpp = $subtotalGlobal - $diskon; 
             if ($dpp < 0) $dpp = 0; 
 
@@ -193,7 +195,7 @@ class PenjualanController extends Controller
 
             $grandTotal = $dpp + $nilaiPajak;
 
-            // 4. Update Header Penjualan
+            // 5. Update Header Penjualan dengan Angka Final
             $penjualan->update([
                 'subtotal'    => $subtotalGlobal,
                 'diskon'      => $diskon,

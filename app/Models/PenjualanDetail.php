@@ -13,19 +13,19 @@ class PenjualanDetail extends Model
 
     protected $fillable = [
         'penjualan_id',
-        'barang_id',    // PENTING: Referensi utama barang sekarang
+        'barang_id',
+        'rak_id',      // <-- Pastikan ini ada
         'qty_jual',
         'harga_jual',
-        'subtotal',     // Kolom Baru
-        
-        // Kolom Legacy (Tetap didaftarkan agar tidak error jika ada kode lama yang pakai)
-        'convert_id', 
-        'part_id',
-        'rak_id',
+        'subtotal',
         'qty_diretur'
     ];
 
-    // --- RELASI ---
+    // Relasi ke Rak (Agar nama rak bisa muncul di laporan)
+    public function rak()
+    {
+        return $this->belongsTo(Rak::class, 'rak_id');
+    }
 
     public function barang()
     {

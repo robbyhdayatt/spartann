@@ -9,10 +9,27 @@ $alamatDealer = ($penjualan->lokasi->alamat && $penjualan->lokasi->alamat !== '\
     : 'Alamat Tidak Tersedia';
 $npwpDealer = 'NPWP No.: ' . ($penjualan->lokasi->npwp ?? $penjualan->customer_npwp_no ?? '-');
 
+// === [LOGIKA BARU] GROUPING ITEM ===
+// Menggabungkan item yang sama (meski beda rak/batch di database) agar tampil 1 baris di faktur
+$groupedDetails = $penjualan->details->groupBy('barang_id')->map(function ($row) {
+    $firstItem = $row->first();
+    return (object) [
+        'barang' => $firstItem->barang,
+        'qty_jual' => $row->sum('qty_jual'), // Jumlahkan Qty dari semua batch
+        'harga_satuan' => $firstItem->barang->retail ?? 0, // Ambil harga master
+        // Hitung total berdasarkan akumulasi qty
+        'total_price' => $row->sum('qty_jual') * ($firstItem->barang->retail ?? 0) 
+    ];
+});
+
+// Sortir berdasarkan harga tertinggi (sesuai logika tampilan sebelumnya)
+$sortedDetails = $groupedDetails->sortByDesc('harga_satuan');
+
 // === Dynamic Font Scaling ===
-$totalDetailsCount = $penjualan->details->count();
+// Hitung jumlah baris berdasarkan item yang sudah digroup
+$totalDetailsCount = $sortedDetails->count(); 
 $maxItemsPerPage = 28;
-$baseFontSize = 20; // diperbesar
+$baseFontSize = 20; 
 $lineHeight = 1.4;
 $rowPadding = 6;
 $signaturePaddingTop = 70;
@@ -177,6 +194,15 @@ html, body {
             <td><strong>Karyawan</strong></td>
             <td>: {{ $penjualan->sales->nama ?? '-' }}</td>
         </tr>
+        {{-- Tampilkan Info Kendaraan Jika Ada (Opsional) --}}
+        @if($penjualan->no_polisi || $penjualan->merk)
+        <tr>
+            <td><strong>No. Polisi</strong></td>
+            <td>: {{ $penjualan->no_polisi ?? '-' }}</td>
+            <td><strong>Kendaraan</strong></td>
+            <td>: {{ $penjualan->merk ?? '-' }}</td>
+        </tr>
+        @endif
     </table>
 
     {{-- Item Table --}}
@@ -193,15 +219,15 @@ html, body {
         </thead>
         <tbody>
             @php $itemNumber = 1; @endphp
-            @forelse ($penjualan->details->sortByDesc(function($d){ return $d->retail; }) as $detail)
-                @php $totalItem = ($detail->qty_jual ?? 0) * ($detail->barang->retail ?? 0); @endphp
+            {{-- Loop menggunakan data yang sudah di-group --}}
+            @forelse ($sortedDetails as $detail)
                 <tr>
                     <td class="text-center">{{ $itemNumber++ }}</td>
                     <td>{{ $detail->barang->part_code ?? '-' }}</td>
                     <td>{{ $detail->barang->part_name ?? '-' }}</td>
-                    <td class="text-right">{{ number_format($detail->barang->retail ?? 0, 0, ',', '.') }}</td>
-                    <td class="text-center">{{ $detail->qty_jual ?? 0 }}</td>
-                    <td class="text-right">{{ number_format($totalItem, 0, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format($detail->harga_satuan, 0, ',', '.') }}</td>
+                    <td class="text-center">{{ $detail->qty_jual }}</td>
+                    <td class="text-right">{{ number_format($detail->total_price, 0, ',', '.') }}</td>
                 </tr>
             @empty
                 <tr><td colspan="6" class="text-center">Tidak ada item detail.</td></tr>
@@ -214,6 +240,9 @@ html, body {
         <tr>
             <td style="width: 60%; vertical-align: bottom;">
                 <div><strong>Harga sudah termasuk PPN 11%</strong></div>
+                @if($penjualan->keterangan_diskon)
+                    <div style="font-size: 0.9em; color: #555;">Catatan Diskon: {{ $penjualan->keterangan_diskon }}</div>
+                @endif
                 <div><strong>Terbilang:</strong>
                     <div class="terbilang-box">
                         # {{ trim(NumberHelper::terbilang($penjualan->total_harga ?? 0)) }} Rupiah #
@@ -222,6 +251,19 @@ html, body {
             </td>
             <td style="width: 40%; vertical-align: top;">
                 <table style="width: 100%;">
+                    {{-- Tampilkan Subtotal & Diskon hanya jika ada diskon --}}
+                    @if(($penjualan->diskon ?? 0) > 0)
+                        <tr>
+                            <td>Subtotal:</td>
+                            <td class="text-right">Rp {{ number_format($penjualan->subtotal, 0, ',', '.') }}</td>
+                        </tr>
+                        <tr>
+                            <td>Diskon:</td>
+                            <td class="text-right text-danger">- Rp {{ number_format($penjualan->diskon, 0, ',', '.') }}</td>
+                        </tr>
+                        <tr><td colspan="2"><hr style="margin: 2px 0;"></td></tr>
+                    @endif
+                    
                     <tr>
                         <td><strong>Grand Total:</strong></td>
                         <td class="text-right">
@@ -241,9 +283,9 @@ html, body {
             <td class="text-center" style="width: 34%;">Kasir,</td>
         </tr>
         <tr>
-            <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
-            <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
-            <td class="text-center" style="padding-top: {{$signaturePaddingTop}};">(__________________)</td>
+            <td class="text-center" style="padding-top: {{$signaturePaddingTop}}px;">(__________________)</td>
+            <td class="text-center" style="padding-top: {{$signaturePaddingTop}}px;">(__________________)</td>
+            <td class="text-center" style="padding-top: {{$signaturePaddingTop}}px;">(__________________)</td>
         </tr>
     </table>
 

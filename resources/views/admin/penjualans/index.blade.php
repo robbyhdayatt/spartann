@@ -33,7 +33,7 @@
                         <th>Dealer</th>
                         <th>Tanggal</th>
                         <th>Konsumen</th>
-                        <th>Sales</th>
+                        <th>Karyawan</th>
                         <th class="text-right">Total</th>
                         <th style="width: 100px;" class="text-center">Aksi</th>
                     </tr>
