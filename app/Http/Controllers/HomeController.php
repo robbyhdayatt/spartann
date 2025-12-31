@@ -13,6 +13,7 @@ use App\Models\StockMutation;
 use App\Models\StockMovement;
 use App\Models\InventoryBatch;
 use App\Models\User;
+use App\Models\Service;
 
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -39,9 +40,13 @@ class HomeController extends Controller
                 $data = $this->getSuperAdminData();
                 break;
 
+            case 'ASD': // [UBAH DISINI] ASD Punya Dashboard Sendiri
+                $viewName = 'dashboards._asd'; 
+                $data = $this->getAsdData($user);
+                break;
+
             case 'SMD':
-            case 'ASD': 
-                $viewName = 'dashboards._sales'; 
+                $viewName = 'dashboards._smd'; 
                 $data = $this->getServiceMdData($user);
                 break;
 
@@ -394,6 +399,78 @@ class HomeController extends Controller
         $totalStokCount = DB::table('inventory_batches')->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id')->where('lokasi.tipe', '!=', 'PUSAT')->sum('quantity');
 
         return ['targetAmount' => 0, 'achievedAmount' => 0, 'achievementPercentage' => 0, 'jumlahInsentif' => 0, 'recentSales' => collect([]), 'myRequests' => $myRequests, 'totalStokCount' => $totalStokCount, 'stockData' => $stockData, 'isSMD' => true];
+    }
+
+    private function getAsdData($user)
+    {
+        $lokasiId = $user->lokasi_id;
+        
+        // 1. DATA PENDING APPROVAL MUTASI (Tetap)
+        $pendingMutations = StockMutation::with(['lokasiAsal', 'lokasiTujuan'])
+            ->where('status', 'PENDING_APPROVAL')
+            ->latest()
+            ->limit(10)
+            ->get();
+
+        $countPendingMutations = StockMutation::where('status', 'PENDING_APPROVAL')->count();
+
+        // 2. MASTER DATA OVERVIEW (Tetap)
+        $totalItems = Barang::count();
+        $totalConvertItems = 0;
+        try {
+             $totalConvertItems = DB::table('converts_main')->count(); 
+        } catch (\Exception $e) {}
+
+        // 3. TRANSAKSI HARI INI (Tetap)
+        $servicesToday = DB::table('services')
+            ->where('lokasi_id', $lokasiId)
+            ->whereDate('created_at', today())
+            ->count();
+            
+        $salesToday = Penjualan::where('lokasi_id', $lokasiId)
+            ->whereDate('tanggal_jual', today())
+            ->count();
+
+        // 4. [UBAH DISINI] MONITORING STOK JARINGAN DEALER (Sama seperti Service MD)
+        // Mengambil data stok dari seluruh lokasi tipe DEALER (bukan PUSAT)
+        $stockData = DB::table('inventory_batches')
+            ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
+            ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id') 
+            ->where('lokasi.tipe', '!=', 'PUSAT') // Filter hanya Dealer
+            ->select(
+                'lokasi.nama_lokasi', 
+                'barangs.part_name',
+                'barangs.part_code',
+                'barangs.stok_minimum',
+                DB::raw('SUM(inventory_batches.quantity) as total_qty')
+            )
+            ->groupBy(
+                'lokasi.id', 'lokasi.nama_lokasi', 
+                'barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum'
+            )
+            // Urutkan: Yang KRITIS (kurang dari min) paling atas, lalu nama dealer
+            ->orderByRaw('(SUM(inventory_batches.quantity) < barangs.stok_minimum) DESC')
+            ->orderBy('lokasi.nama_lokasi')
+            ->limit(20) // Batasi 20 record
+            ->get();
+
+        // 5. RECENT SERVICE ACTIVITY (Tetap)
+        $recentServices = DB::table('services')
+            ->where('lokasi_id', $lokasiId)
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get();
+
+        return compact(
+            'pendingMutations', 
+            'countPendingMutations', 
+            'totalItems', 
+            'totalConvertItems',
+            'servicesToday',
+            'salesToday',
+            'stockData', // Variable baru pengganti lowStockItems
+            'recentServices'
+        );
     }
 
     private function getApproverData($user)

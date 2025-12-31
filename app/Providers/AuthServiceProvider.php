@@ -119,12 +119,12 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-service', fn(User $user) => $user->hasRole(['PC', 'KSR']));
         Gate::define('export-service-report', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));
         Gate::define('manage-marketing', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA']));
-        Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'SMD', 'ACC', 'AG', 'PC']));
+        Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'SMD', 'ACC', 'AG', 'PC', 'ASD']));
         Gate::define('view-stock-card', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'AG', 'KG', 'KC', 'PC'])); 
-        Gate::define('view-stock-by-warehouse', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'AG', 'PC']));
-        Gate::define('view-stock-report-global', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'AG', 'SMD']));
-        Gate::define('view-sales-summary', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'ACC', 'SLS', 'PC'])); 
-        Gate::define('view-service-summary', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'ACC', 'PC'])); 
+        Gate::define('view-stock-by-warehouse', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KG', 'KC', 'AG', 'PC', 'ASD']));
+        Gate::define('view-stock-report-global', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'AG', 'SMD', 'ASD']));
+        Gate::define('view-sales-summary', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'ACC', 'SLS', 'PC', 'ASD'])); 
+        Gate::define('view-service-summary', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'ACC', 'PC', 'ASD'])); 
         Gate::define('view-purchase-journal', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'ACC'])); 
         Gate::define('view-inventory-value', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'ACC'])); 
     }
