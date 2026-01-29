@@ -6,7 +6,6 @@
 </div>
 
 <div class="row">
-    {{-- ... (Kode Admin Pusat & Dealer Widget Lama Tetap Sama) ... --}}
     
     {{-- ==================== ADMIN DEALER / PART COUNTER ==================== --}}
     @if(!$data['isPusat'])
@@ -56,7 +55,6 @@
     @endif
 </div>
 
-{{-- [BARU] WIDGET TOTAL ITEM TERJUAL BULAN INI (KHUSUS PC/DEALER) --}}
 @if(!$data['isPusat'])
 <div class="row">
     <div class="col-12">

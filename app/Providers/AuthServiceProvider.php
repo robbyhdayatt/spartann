@@ -59,16 +59,18 @@ class AuthServiceProvider extends ServiceProvider
         // 2. MODUL TRANSAKSI STOK (MUTASI & ADJUSTMENT)
         // =================================================================
         
-        // --- Mutasi Stok ---
-        // ++ REVISI: PASTIKAN PC ADA DISINI AGAR MENU MUNCUL ++
-        Gate::define('view-stock-mutations-menu', function(User $user) {
-            return $user->hasRole(['SA', 'PIC', 'ASD', 'PC']);
-        });
+
         
         Gate::define('create-stock-transaction', fn(User $user) => $user->hasRole(['SA', 'PIC', 'PC']));
         Gate::define('approve-stock-transaction', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
 
-
+        // --- Mutasi Stok ---
+        Gate::define('view-stock-mutations-menu', function(User $user) {
+            return $user->hasRole(['SA', 'PIC', 'PC']);
+        });
+        Gate::define('create-stock-mutation', function (User $user) {
+            return $user->hasRole(['SA', 'PIC', 'PC']);
+        });
         // --- Adjustment ---
         Gate::define('view-stock-adjustments-menu', function (User $user) {
              return $user->hasRole(['SA', 'PIC', 'ACC', 'AG', 'KG', 'KC']);
@@ -103,7 +105,7 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         // =================================================================
-        // 4. LAINNYA (TETAP SAMA)
+        // 4. LAINNYA
         // =================================================================
         Gate::define('manage-users', fn(User $user) => $user->hasRole('SA'));
         Gate::define('manage-locations-sa-only', fn(User $user) => $user->hasRole('SA'));
@@ -112,7 +114,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-barangs', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD', 'SMD']));
         Gate::define('manage-converts', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
         Gate::define('access-sales-module', fn(User $user) => $user->hasRole(['SLS', 'KSR', 'PC']));
-        Gate::define('view-sales', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'SLS', 'PC', 'KSR', 'ASD']));
+        Gate::define('view-sales', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'SLS', 'PC', 'KSR', 'ASD', 'ACC']));
         Gate::define('create-sale', fn(User $user) => $user->hasRole(['SLS', 'PC', 'KSR']));
         Gate::define('print-invoice-only', fn(User $user) => $user->hasRole('KSR'));
         Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));

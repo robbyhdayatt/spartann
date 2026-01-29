@@ -35,18 +35,18 @@ class HomeController extends Controller
         $data = [];
 
         switch ($role) {
-            case 'SA': 
+            case 'SA':
                 $viewName = 'dashboards._superadmin';
                 $data = $this->getSuperAdminData();
                 break;
 
-            case 'ASD': // [UBAH DISINI] ASD Punya Dashboard Sendiri
-                $viewName = 'dashboards._asd'; 
+            case 'ASD':
+                $viewName = 'dashboards._asd';
                 $data = $this->getAsdData($user);
                 break;
 
             case 'SMD':
-                $viewName = 'dashboards._smd'; 
+                $viewName = 'dashboards._smd';
                 $data = $this->getServiceMdData($user);
                 break;
 
@@ -56,7 +56,7 @@ class HomeController extends Controller
                 break;
 
             case 'PIC':
-            case 'MA': 
+            case 'MA':
                 $viewName = 'dashboards._pic';
                 $data = $this->getPicData();
                 break;
@@ -68,12 +68,16 @@ class HomeController extends Controller
                 break;
 
             case 'AG':
-            case 'PC': 
+                $viewName = 'dashboards._admin_gudang';
+                $data = $this->getAdminGudangData($user);
+                break;
+
+            case 'PC':
                 $viewName = 'dashboards._operator';
                 $data = $this->getOperatorData($user);
                 break;
 
-            case 'KSR': 
+            case 'KSR':
                 $viewName = 'dashboards._kasir';
                 $data = $this->getKasirData($user);
                 break;
@@ -353,6 +357,61 @@ class HomeController extends Controller
         $lokasi = $lokasiId ? Lokasi::find($lokasiId) : (object)['nama_lokasi' => 'Global/Pusat'];
 
         return compact('taskCounts', 'lokasi', 'isPusat', 'stockData', 'totalItemsSoldMonth');
+    }
+
+    private function getAdminGudangData($user)
+    {
+        $lokasiId = $user->lokasi_id;
+
+        // 1. Widget Counters
+        $pendingApprovalPO = PurchaseOrder::where('status', 'PENDING_APPROVAL')
+            ->where('created_by', $user->id) // PO yang dia request sendiri
+            ->count();
+
+        // PO yang masuk ke lokasi dia dan sudah approve (siap di-receive)
+        $readyToReceivePO = PurchaseOrder::where('lokasi_id', $lokasiId)
+            ->whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])
+            ->count();
+
+        $pendingQC = Receiving::where('lokasi_id', $lokasiId)
+            ->where('status', 'PENDING_QC')
+            ->count();
+
+        // Menghitung yang siap putaway (Lolos QC atau Bypass QC)
+        $pendingPutaway = Receiving::where('lokasi_id', $lokasiId)
+            ->whereIn('status', ['QC_PASSED', 'PENDING_PUTAWAY'])
+            ->count();
+
+        // 2. Stok Kritis (Hanya di gudang ini)
+        $stockAlerts = DB::table('inventory_batches')
+            ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
+            ->where('inventory_batches.lokasi_id', $lokasiId)
+            ->select(
+                'barangs.part_name',
+                'barangs.part_code',
+                'barangs.stok_minimum',
+                DB::raw('SUM(inventory_batches.quantity) as total_qty')
+            )
+            ->groupBy('barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
+            ->havingRaw('SUM(inventory_batches.quantity) <= barangs.stok_minimum')
+            ->limit(5)
+            ->get();
+
+        // 3. Aktivitas Penerimaan Terakhir
+        $recentReceivings = Receiving::with(['purchaseOrder.supplier', 'purchaseOrder.sumberLokasi'])
+            ->where('lokasi_id', $lokasiId)
+            ->latest()
+            ->limit(5)
+            ->get();
+
+        return compact(
+            'pendingApprovalPO',
+            'readyToReceivePO',
+            'pendingQC',
+            'pendingPutaway',
+            'stockAlerts',
+            'recentReceivings'
+        );
     }
 
     // --- KASIR ---

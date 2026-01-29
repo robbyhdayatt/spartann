@@ -24,17 +24,16 @@ class JabatanSeeder extends Seeder
             ['nama_jabatan' => 'Service MD', 'singkatan' => 'SMD'],
             ['nama_jabatan' => 'Accounting MD', 'singkatan' => 'ACC'],
 
-            // Level Gudang Pusat
+            // Level Gudang
             ['nama_jabatan' => 'Kepala Gudang', 'singkatan' => 'KG'],
             ['nama_jabatan' => 'Admin Gudang', 'singkatan' => 'AG'],
             ['nama_jabatan' => 'Sales', 'singkatan' => 'SLS'],
-            ['nama_jabatan' => 'Kasir', 'singkatan' => 'KSR'],
 
             // Level Dealer
             ['nama_jabatan' => 'Kepala Cabang', 'singkatan' => 'KC'],
             ['nama_jabatan' => 'Admin Dealer', 'singkatan' => 'AD'],
-            // PERUBAHAN: Mengganti Counter Sales (CS) menjadi Part Counter (PC)
             ['nama_jabatan' => 'Part Counter', 'singkatan' => 'PC'],
+            ['nama_jabatan' => 'Kasir', 'singkatan' => 'KSR'],
         ];
 
         foreach ($jabatans as $jabatan) {

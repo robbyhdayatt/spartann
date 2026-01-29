@@ -106,9 +106,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     // === SERVICE ===
     Route::get('services', [ServiceController::class, 'index'])->name('services.index');
     Route::post('services/import', [ServiceController::class, 'import'])->name('services.import');
-    // Pindahkan Export Excel SEBELUM route dengan parameter
     Route::get('services/export-excel', [App\Http\Controllers\Admin\ServiceController::class, 'exportExcel'])->name('services.export.excel');
-    // Route dengan parameter setelahnya
     Route::get('services/{service}', [ServiceController::class, 'show'])->name('services.show');
     Route::get('services/{id}/pdf', [ServiceController::class, 'downloadPDF'])->name('services.pdf');
 
@@ -132,33 +130,25 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('reports/service-summary/export', [ReportController::class, 'exportServiceSummary'])->name('reports.service-summary.export');
 
     // === CONVERT ===
-    // Hapus: Route::resource('converts', ConvertController::class)->except(['show']);
-
-    // ++ TAMBAHKAN ROUTE MANUAL UNTUK CONVERTS ++
     Route::get('converts', [ConvertController::class, 'index'])->name('converts.index');
     Route::post('converts', [ConvertController::class, 'store'])->name('converts.store');
-    // Rute 'editData' (Show) menggunakan route model binding ke model Convert (VIEW)
     Route::get('converts/{convert}/data', [ConvertController::class, 'getEditData'])->name('converts.editData');
-    // Rute Update dan Destroy menggunakan {id} (bukan {convert}) agar tidak binding ke VIEW
     Route::put('converts/{id}', [ConvertController::class, 'update'])->name('converts.update');
     Route::delete('converts/{id}', [ConvertController::class, 'destroy'])->name('converts.destroy');
-    // ++ AKHIR ROUTE CONVERTS ++
 
-        // === API (untuk AJAX) ===
-        Route::get('/api/purchase-orders/{purchaseOrder}/details', [ReceivingController::class, 'getPurchaseOrderDetails'])->name('api.po.details');
-        Route::get('api/lokasi/{lokasi}/parts-with-stock', [StockMutationController::class, 'getPartsWithStock'])->name('api.lokasi.parts-with-stock');
-        // Route::get('/api/lokasi/{lokasi}/parts', [PenjualanController::class, 'getPartsByLokasi'])->name('api.lokasi.parts');
-        Route::get('api/parts/{part}/stock', [PenjualanController::class, 'getPartStockDetails'])->name('api.part.stock');
-        Route::get('/api/lokasi/{lokasi}/raks', [StockAdjustmentController::class, 'getRaksByLokasi'])->name('api.lokasi.raks');
-        Route::get('api/lokasi/{lokasi}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
-        Route::get('/api/receivings/{receiving}/failed-items', [PurchaseReturnController::class, 'getFailedItems'])->name('api.receivings.failed-items');
-        Route::get('/api/penjualans/{penjualan}/returnable-items', [SalesReturnController::class, 'getReturnableItems'])->name('penjualans.returnable-items');
-        Route::get('api/penjualan/items', [PenjualanController::class, 'getBarangItems']) ->name('api.penjualan.items');
-        Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
-        Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
-        Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
-        // Route::get('api/get-fifo-batches', [PenjualanController::class, 'getFifoBatches'])->name('api.get-fifo-batches');
-        Route::get('/parts/search', [PartController::class, 'search'])->name('parts.search');
-        Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
+    // === API (untuk AJAX) ===
+    Route::get('/api/purchase-orders/{purchaseOrder}/details', [ReceivingController::class, 'getPurchaseOrderDetails'])->name('api.po.details');
+    Route::get('api/lokasi/{lokasi}/parts-with-stock', [StockMutationController::class, 'getPartsWithStock'])->name('api.lokasi.parts-with-stock');
+    Route::get('api/parts/{part}/stock', [PenjualanController::class, 'getPartStockDetails'])->name('api.part.stock');
+    Route::get('/api/lokasi/{lokasi}/raks', [StockAdjustmentController::class, 'getRaksByLokasi'])->name('api.lokasi.raks');
+    Route::get('api/lokasi/{lokasi}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
+    Route::get('/api/receivings/{receiving}/failed-items', [PurchaseReturnController::class, 'getFailedItems'])->name('api.receivings.failed-items');
+    Route::get('/api/penjualans/{penjualan}/returnable-items', [SalesReturnController::class, 'getReturnableItems'])->name('penjualans.returnable-items');
+    Route::get('api/penjualan/items', [PenjualanController::class, 'getBarangItems']) ->name('api.penjualan.items');
+    Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
+    Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
+    Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
+    Route::get('/parts/search', [PartController::class, 'search'])->name('parts.search');
+    Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
     });
 
