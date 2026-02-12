@@ -1,7 +1,7 @@
 {{-- HEADER DASHBOARD --}}
 <div class="row mb-3">
     <div class="col-12">
-        <h4><i class="fas fa-tachometer-alt"></i> Dashboard {{ $data['isSMD'] ? 'Service MD (Monitoring Area)' : 'Sales Counter' }}</h4>
+        <h4><i class="fas fa-tachometer-alt"></i> Dashboard {{ $data['isSMD'] ? 'Inventory MD Shop (Monitoring Area)' : 'Sales Counter' }}</h4>
     </div>
 </div>
 

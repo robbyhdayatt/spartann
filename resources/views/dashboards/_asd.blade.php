@@ -1,6 +1,6 @@
 <div class="row mb-3">
     <div class="col-12">
-        <h4 class="text-dark"><i class="fas fa-cogs mr-2"></i> Dashboard Admin Service Dealer (ASD)</h4>
+        <h4 class="text-dark"><i class="fas fa-cogs mr-2"></i> Dashboard Area Service Development (ASD)</h4>
         <p class="text-muted">Halo, <strong>{{ Auth::user()->nama }}</strong>! Kelola stok, persetujuan mutasi, dan master data di sini.</p>
     </div>
 </div>

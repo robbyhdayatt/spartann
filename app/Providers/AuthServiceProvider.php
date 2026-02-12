@@ -73,10 +73,10 @@ class AuthServiceProvider extends ServiceProvider
         });
         // --- Adjustment ---
         Gate::define('view-stock-adjustments-menu', function (User $user) {
-             return $user->hasRole(['SA', 'PIC', 'ACC', 'AG', 'KG', 'KC']);
+             return $user->hasRole(['SA', 'PIC', 'ACC', 'AG', 'KG', 'KC', 'SMD']);
         });
         Gate::define('create-stock-adjustment', function (User $user) {
-            return $user->hasRole(['SA', 'PIC', 'AG', 'KC']);
+            return $user->hasRole(['SA', 'PIC', 'AG', 'KC', 'SMD']);
         });
         Gate::define('approve-stock-adjustment', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KG', 'KC', 'ASD']));
 
@@ -115,7 +115,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-converts', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
         Gate::define('access-sales-module', fn(User $user) => $user->hasRole(['SLS', 'KSR', 'PC']));
         Gate::define('view-sales', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'SLS', 'PC', 'KSR', 'ASD', 'ACC']));
-        Gate::define('create-sale', fn(User $user) => $user->hasRole(['SLS', 'PC', 'KSR']));
+        Gate::define('create-sale', fn(User $user) => $user->hasRole(['SLS', 'PC']));
         Gate::define('print-invoice-only', fn(User $user) => $user->hasRole('KSR'));
         Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'MA', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));
         Gate::define('manage-service', fn(User $user) => $user->hasRole(['PC', 'KSR']));

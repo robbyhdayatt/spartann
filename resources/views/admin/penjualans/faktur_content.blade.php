@@ -9,7 +9,6 @@ $alamatDealer = ($penjualan->lokasi->alamat && $penjualan->lokasi->alamat !== '\
     : 'Alamat Tidak Tersedia';
 $npwpDealer = 'NPWP No.: ' . ($penjualan->lokasi->npwp ?? $penjualan->customer_npwp_no ?? '-');
 
-// === [LOGIKA BARU] GROUPING ITEM ===
 // Menggabungkan item yang sama (meski beda rak/batch di database) agar tampil 1 baris di faktur
 $groupedDetails = $penjualan->details->groupBy('barang_id')->map(function ($row) {
     $firstItem = $row->first();
