@@ -2,14 +2,10 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
-use App\Http\Controllers\Admin\BrandController;
-use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\LokasiController;
 use App\Http\Controllers\Admin\RakController;
 use App\Http\Controllers\Admin\SupplierController;
-use App\Http\Controllers\Admin\KonsumenController;
 use App\Http\Controllers\Admin\UserController;
-use App\Http\Controllers\Admin\PartController;
 use App\Http\Controllers\Admin\PurchaseOrderController;
 use App\Http\Controllers\Admin\ReceivingController;
 use App\Http\Controllers\Admin\QcController;
@@ -28,7 +24,6 @@ use App\Http\Controllers\Admin\QuarantineStockController;
 use App\Http\Controllers\Admin\MutationReceivingController;
 use App\Http\Controllers\Admin\CustomerDiscountCategoryController;
 use App\Http\Controllers\Admin\ServiceController;
-use App\Http\Controllers\Admin\DealerController;
 use App\Http\Controllers\Admin\PdfController;
 use App\Http\Controllers\Admin\ConvertController;
 use App\Http\Controllers\Admin\BarangController;
@@ -43,17 +38,10 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
 
     // === MASTER DATA & PENGATURAN ===
-    Route::resource('brands', BrandController::class);
-    Route::resource('categories', CategoryController::class);
     Route::resource('lokasi', LokasiController::class)->except(['show']);
-    Route::resource('dealers', DealerController::class)->except(['show']);
     Route::resource('raks', RakController::class);
     Route::resource('suppliers', SupplierController::class);
-    Route::resource('konsumens', KonsumenController::class);
     Route::resource('users', UserController::class);
-    Route::get('parts/search', [PartController::class, 'search'])->name('parts.search');
-    Route::resource('parts', PartController::class);
-    Route::post('parts/import', [PartController::class, 'import'])->name('parts.import');
     Route::resource('barangs', BarangController::class)->except(['create', 'edit']);
 
     // === TRANSAKSI GUDANG & DEALER ===
@@ -148,7 +136,5 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
     Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
     Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
-    Route::get('/parts/search', [PartController::class, 'search'])->name('parts.search');
     Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
-    });
-
+});

@@ -9,87 +9,83 @@ use Illuminate\Support\Facades\Schema;
 
 class LokasiSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     *
-     * @return void
-     */
     public function run()
     {
         Schema::disableForeignKeyConstraints();
         DB::table('lokasi')->truncate();
         Schema::enableForeignKeyConstraints();
 
-        // 1. Buat Gudang Pusat
-        Lokasi::create([
-            'tipe' => 'PUSAT',
-            'kode_lokasi' => 'GSP',
-            'nama_lokasi' => 'Gudang Pusat (Sentral)',
-            'alamat' => 'Jl. Ikan Tenggiri No. 24, Bandar Lampung',
-            'is_active' => 1,
-        ]);
-
-        // 2. Data Dealer dari sumber yang Anda berikan
-        $dealers = [
-            ['kode_lks' => '9HL001', 'subyek' => 'LTI TANJUNG BINTANG', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL002', 'subyek' => 'LTI LIWA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL002A', 'subyek' => 'LTI KRUI', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL002B', 'subyek' => 'LTI SUMBER JAYA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL003', 'subyek' => 'LTI KEDATON', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL003B', 'subyek' => 'LTI PRAMUKA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL004', 'subyek' => 'LTI PURBOLINGGO', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL004A', 'subyek' => 'LTI SEKAMPUNG', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL006', 'subyek' => 'LTI MANDALA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL007', 'subyek' => 'LTI TIRTAYASA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL007A', 'subyek' => 'LTI BINA KARYA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL008', 'subyek' => 'LTI KOTA AGUNG', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => '9HL009', 'subyek' => 'LTI SIMPANG PEMATANG', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UA22001A', 'subyek' => 'LTI KEMILING', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UA22001', 'subyek' => 'LTI SENTRAL YAMAHA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UA22002', 'subyek' => 'LTI PAHOMAN', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UA22003', 'subyek' => 'LTI KARANG ANYAR', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UA22003A', 'subyek' => 'LTI NATAR', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UB22001', 'subyek' => 'LTI METRO', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UB22001A', 'subyek' => 'LTI PEKALONGAN', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UB22001B', 'subyek' => 'LTI IMOPURO', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UC22001', 'subyek' => 'LTI KALIANDA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UC22001A', 'subyek' => 'LTI PATOK', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UC22002', 'subyek' => 'LTI PEMATANG PASIR', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UCUB001', 'subyek' => 'LTI GEDUNG TATAAN', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UCUB001A', 'subyek' => 'LTI WIYONO', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UD00003', 'subyek' => 'LTI RAWAJITU', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UDUA001', 'subyek' => 'LTI UNIT DUA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UDUA001A', 'subyek' => 'LTI GUNUNG TERANG', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UDUA002', 'subyek' => 'LTI MENGGALA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UDUA002A', 'subyek' => 'LTI DAYA MURNI', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UDUB001A', 'subyek' => 'LTI BRABASAN', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UDUB002', 'subyek' => 'LTI BANJAR AGUNG', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UE22001', 'subyek' => 'LTI BANDAR JAYA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UE22002', 'subyek' => 'LTI KOTA GAJAH', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UE22002A', 'subyek' => 'LTI PUNGGUR', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UE22003', 'subyek' => 'LTI RUMBIA', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UE22003A', 'subyek' => 'LTI GAYA BARU', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UFUA001', 'subyek' => 'LTI KOTABUMI', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UFUA001B', 'subyek' => 'LTI BUNGA MAYANG', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UFUA001C', 'subyek' => 'LTI PAKUAN RATU', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UHUB001', 'subyek' => 'LTI SRIBHAWONO', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UHUB001A', 'subyek' => 'LTI TRIDATU', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UHUE002', 'subyek' => 'LTI MARGATIGA', 'grup' => 'LT', 'nonaktif' => 1],
-            ['kode_lks' => 'UIUB001', 'subyek' => 'LTI PRINGSEWU', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UIUB002', 'subyek' => 'LTI KALIREJO', 'grup' => 'LT', 'nonaktif' => 0],
-            ['kode_lks' => 'UKUA001', 'subyek' => 'LTI BLAMBANGAN UMPU', 'grup' => 'LT', 'nonaktif' => 0],
+        $data = [
+            // GUDANG PUSAT / MAIN DEALER
+            [
+                'kode_lokasi' => 'GUDANG PART',
+                'nama_lokasi' => 'MAIN DEALER PART',
+                'singkatan'   => 'MDP',
+                'tipe'        => 'PUSAT',
+                'is_active'   => 1,
+                // Data hierarki kosong untuk pusat sesuai tabel
+                'koadmin' => null, 'asd' => null, 'aom' => null, 'asm' => null, 'gm' => null
+            ],
+            [
+                'kode_lokasi' => 'KANTOR PUSAT',
+                'nama_lokasi' => 'MAIN DEALER',
+                'singkatan'   => 'MD',
+                'tipe'        => 'PUSAT',
+                'is_active'   => 1,
+                'koadmin' => null, 'asd' => null, 'aom' => null, 'asm' => null, 'gm' => null
+            ],
+            // DEALER CABANG
+            ['kode_lokasi' => 'UE22001', 'nama_lokasi' => 'LTI BANDAR JAYA', 'singkatan' => 'BDJ', 'koadmin' => 'koadmin12', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UKUA001', 'nama_lokasi' => 'LTI BLAMBANGAN UMPU', 'singkatan' => 'BMP', 'koadmin' => 'koadmin21', 'asd' => 'rizky', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UCUB001', 'nama_lokasi' => 'LTI GEDUNG TATAAN', 'singkatan' => 'GDT', 'koadmin' => 'koadmin11', 'asd' => 'ridwan', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UC22001', 'nama_lokasi' => 'LTI KALIANDA', 'singkatan' => 'KLD', 'koadmin' => 'koadmin21', 'asd' => 'rizky', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UIUB002', 'nama_lokasi' => 'LTI KALIREJO', 'singkatan' => 'KLJ', 'koadmin' => 'koadmin13', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UA22003', 'nama_lokasi' => 'LTI KARANG ANYAR', 'singkatan' => 'KRA', 'koadmin' => 'koadmin23', 'asd' => 'rizky', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL003', 'nama_lokasi' => 'LTI KEDATON', 'singkatan' => 'KDT', 'koadmin' => 'koadmin22', 'asd' => 'rudi', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL008', 'nama_lokasi' => 'LTI KOTA AGUNG', 'singkatan' => 'KTA', 'koadmin' => 'koadmin11', 'asd' => 'rudi', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UE22002', 'nama_lokasi' => 'LTI KOTA GAJAH', 'singkatan' => 'KTG', 'koadmin' => 'koadmin13', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UFUA001', 'nama_lokasi' => 'LTI KOTABUMI', 'singkatan' => 'KTB', 'koadmin' => 'koadmin21', 'asd' => 'rizky', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL002A', 'nama_lokasi' => 'LTI KRUI', 'singkatan' => 'KRI', 'koadmin' => 'koadmin22', 'asd' => 'rudi', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL002', 'nama_lokasi' => 'LTI LIWA', 'singkatan' => 'LWA', 'koadmin' => 'koadmin22', 'asd' => 'rudi', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL006', 'nama_lokasi' => 'LTI MANDALA', 'singkatan' => 'MDL', 'koadmin' => 'koadmin11', 'asd' => 'rizky', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UDUA002', 'nama_lokasi' => 'LTI MENGGALA', 'singkatan' => 'MGL', 'koadmin' => 'koadmin22', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UB22001', 'nama_lokasi' => 'LTI METRO', 'singkatan' => 'MTR', 'koadmin' => 'koadmin12', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UA22003A', 'nama_lokasi' => 'LTI NATAR', 'singkatan' => 'NTR', 'koadmin' => 'koadmin23', 'asd' => 'rudi', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UA22002', 'nama_lokasi' => 'LTI PAHOMAN', 'singkatan' => 'PHM', 'koadmin' => 'koadmin13', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UC22001A', 'nama_lokasi' => 'LTI PATOK', 'singkatan' => 'PTK', 'koadmin' => 'koadmin23', 'asd' => 'rizky', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UB22001A', 'nama_lokasi' => 'LTI PEKALONGAN', 'singkatan' => 'PKL', 'koadmin' => 'koadmin12', 'asd' => 'ridwan', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UC22002', 'nama_lokasi' => 'LTI PEMATANG PASIR', 'singkatan' => 'PPS', 'koadmin' => 'koadmin23', 'asd' => 'rizky', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL003B', 'nama_lokasi' => 'LTI PRAMUKA', 'singkatan' => 'PMK', 'koadmin' => 'koadmin22', 'asd' => 'rudi', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UIUB001', 'nama_lokasi' => 'LTI PRINGSEWU', 'singkatan' => 'PSW', 'koadmin' => 'koadmin23', 'asd' => 'ridwan', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UE22002A', 'nama_lokasi' => 'LTI PUNGGUR', 'singkatan' => 'PGR', 'koadmin' => 'koadmin13', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL004', 'nama_lokasi' => 'LTI PURBOLINGGO', 'singkatan' => 'PBG', 'koadmin' => 'koadmin12', 'asd' => 'ridwan', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UD00003', 'nama_lokasi' => 'LTI RAWAJITU', 'singkatan' => 'RWJ', 'koadmin' => 'koadmin23', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UE22003', 'nama_lokasi' => 'LTI RUMBIA', 'singkatan' => 'RBA', 'koadmin' => 'koadmin11', 'asd' => 'rizky', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL004A', 'nama_lokasi' => 'LTI SEKAMPUNG', 'singkatan' => 'SKP', 'koadmin' => 'koadmin12', 'asd' => 'rizky', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UA22001', 'nama_lokasi' => 'LTI SENTRAL YAMAHA', 'singkatan' => 'CTL', 'koadmin' => 'koadmin11', 'asd' => 'rizky', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL009', 'nama_lokasi' => 'LTI SIMPANG PEMATANG', 'singkatan' => 'SPM', 'koadmin' => 'koadmin21', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UHUB001', 'nama_lokasi' => 'LTI SRIBHAWONO', 'singkatan' => 'SBW', 'koadmin' => 'koadmin12', 'asd' => 'rizky', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL002B', 'nama_lokasi' => 'LTI SUMBER JAYA', 'singkatan' => 'SBJ', 'koadmin' => 'koadmin22', 'asd' => 'rudi', 'aom' => 'henry', 'asm' => 'asm3', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL001', 'nama_lokasi' => 'LTI TANJUNG BINTANG', 'singkatan' => 'TJB', 'koadmin' => 'koadmin23', 'asd' => 'rudi', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => '9HL007', 'nama_lokasi' => 'LTI TIRTAYASA', 'singkatan' => 'TTY', 'koadmin' => 'koadmin22', 'asd' => 'rudi', 'aom' => 'evin', 'asm' => 'asm1', 'gm' => 'iwan', 'is_active' => 1],
+            ['kode_lokasi' => 'UDUA001', 'nama_lokasi' => 'LTI UNIT DUA', 'singkatan' => 'TLB', 'koadmin' => 'koadmin23', 'asd' => 'ridwan', 'aom' => 'chandra', 'asm' => 'asm2', 'gm' => 'iwan', 'is_active' => 1],
         ];
 
-        // 3. Masukkan setiap dealer sebagai Lokasi Tipe DEALER
-        foreach ($dealers as $dealer) {
-            if (strtoupper($dealer['grup']) === 'LT') {
-                Lokasi::create([
-                    'tipe' => 'DEALER',
-                    'kode_lokasi' => $dealer['kode_lks'],
-                    'nama_lokasi' => $dealer['subyek'],
-                    'is_active' => $dealer['nonaktif'] == 0,
-                ]);
-            }
+        foreach ($data as $item) {
+            Lokasi::create([
+                'tipe'        => $item['tipe'] ?? 'DEALER',
+                'kode_lokasi' => $item['kode_lokasi'],
+                'nama_lokasi' => $item['nama_lokasi'],
+                'singkatan'   => $item['singkatan'],
+                'npwp'        => null,
+                'alamat'      => null, 
+                'is_active'   => $item['is_active'],
+                'koadmin'     => $item['koadmin'],
+                'asd'         => $item['asd'],
+                'aom'         => $item['aom'],
+                'asm'         => $item['asm'],
+                'gm'          => $item['gm'],
+            ]);
         }
     }
 }

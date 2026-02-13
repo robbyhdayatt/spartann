@@ -14,9 +14,15 @@ class Lokasi extends Model
     protected $fillable = [
         'kode_lokasi',
         'nama_lokasi',
+        'singkatan',
         'npwp',
         'alamat',
         'tipe',
+        'koadmin',  
+        'asd',      
+        'aom',      
+        'asm',      
+        'gm',       
         'is_active',
     ];
 
@@ -28,10 +34,5 @@ class Lokasi extends Model
     public function users()
     {
         return $this->hasMany(User::class, 'lokasi_id');
-    }
-
-    public function dealer()
-    {
-        return $this->belongsTo(Dealer::class, 'kode_lokasi', 'kode_dealer');
     }
 }

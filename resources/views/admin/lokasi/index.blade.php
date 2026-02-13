@@ -19,15 +19,16 @@
             </div>
         </div>
         <div class="card-body">
-            <table id="lokasi-table" class="table table-bordered table-striped">
+            <table id="lokasi-table" class="table table-bordered table-striped table-hover text-nowrap">
                 <thead>
                     <tr>
                         <th>#</th>
                         <th>Tipe</th>
                         <th>Kode</th>
+                        <th>Singkatan</th>
                         <th>Nama Lokasi</th>
-                        <th>NPWP</th>
-                        <th>Alamat</th>
+                        <th>Koordinator</th>
+                        <th>GM</th>
                         <th>Status</th>
                         <th>Aksi</th>
                     </tr>
@@ -44,9 +45,10 @@
                             @endif
                         </td>
                         <td>{{ $item->kode_lokasi }}</td>
+                        <td>{{ $item->singkatan }}</td>
                         <td>{{ $item->nama_lokasi }}</td>
-                        <td>{{ $item->npwp ?? '-' }}</td>
-                        <td>{{ Str::limit($item->alamat, 30) }}</td> {{-- Limit alamat biar tabel rapi --}}
+                        <td>{{ $item->koadmin ?? '-' }}</td>
+                        <td>{{ $item->gm ?? '-' }}</td>
                         <td>
                             @if($item->is_active)
                                 <span class="badge badge-success">Aktif</span>
@@ -55,25 +57,30 @@
                             @endif
                         </td>
                         <td>
-                            {{-- PERBAIKAN: Data Attribute harus lengkap --}}
                             <button class="btn btn-warning btn-xs edit-btn"
                                     data-id="{{ $item->id }}"
                                     data-tipe="{{ $item->tipe }}"
                                     data-kode_lokasi="{{ $item->kode_lokasi }}"
                                     data-nama_lokasi="{{ $item->nama_lokasi }}"
+                                    data-singkatan="{{ $item->singkatan }}"
                                     data-npwp="{{ $item->npwp }}"
                                     data-alamat="{{ $item->alamat }}"
+                                    data-koadmin="{{ $item->koadmin }}"
+                                    data-asd="{{ $item->asd }}"
+                                    data-aom="{{ $item->aom }}"
+                                    data-asm="{{ $item->asm }}"
+                                    data-gm="{{ $item->gm }}"
                                     data-is_active="{{ $item->is_active }}"
                                     data-toggle="modal"
                                     data-target="#editLokasiModal">
-                                <i class="fas fa-edit"></i> Edit
+                                <i class="fas fa-edit"></i>
                             </button>
 
                             @if($item->tipe != 'PUSAT')
                             <form action="{{ route('admin.lokasi.destroy', $item->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus lokasi ini?');">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-danger btn-xs"><i class="fas fa-trash"></i> Hapus</button>
+                                <button type="submit" class="btn btn-danger btn-xs"><i class="fas fa-trash"></i></button>
                             </form>
                             @endif
                         </td>
@@ -84,9 +91,9 @@
         </div>
     </div>
 
-    {{-- Modal Tambah (Tidak Berubah) --}}
+    {{-- Modal Tambah --}}
     <div class="modal fade" id="createLokasiModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Tambah Lokasi Baru</h5>
@@ -95,28 +102,62 @@
                 <form action="{{ route('admin.lokasi.store') }}" method="POST">
                     @csrf
                     <div class="modal-body">
-                        <div class="form-group">
-                            <label>Tipe Lokasi</label>
-                            <select class="form-control" name="tipe" required>
-                                <option value="DEALER">Dealer</option>
-                                <option value="PUSAT">Gudang Pusat</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Kode Lokasi</label>
-                            <input type="text" class="form-control" name="kode_lokasi" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Nama Lokasi</label>
-                            <input type="text" class="form-control" name="nama_lokasi" required>
-                        </div>
-                        <div class="form-group">
-                            <label>NPWP</label>
-                            <input type="text" class="form-control" name="npwp" placeholder="Opsional">
-                        </div>
-                         <div class="form-group">
-                            <label>Alamat</label>
-                            <textarea class="form-control" name="alamat" rows="3"></textarea>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-primary"><i class="fas fa-info-circle"></i> Info Dasar</h6>
+                                <hr>
+                                <div class="form-group">
+                                    <label>Tipe Lokasi</label>
+                                    <select class="form-control" name="tipe" required>
+                                        <option value="DEALER">Dealer</option>
+                                        <option value="PUSAT">Gudang Pusat</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Kode Lokasi</label>
+                                    <input type="text" class="form-control" name="kode_lokasi" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Nama Lokasi</label>
+                                    <input type="text" class="form-control" name="nama_lokasi" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Singkatan (3 Huruf)</label>
+                                    <input type="text" class="form-control" name="singkatan" maxlength="10">
+                                </div>
+                                <div class="form-group">
+                                    <label>NPWP</label>
+                                    <input type="text" class="form-control" name="npwp">
+                                </div>
+                                <div class="form-group">
+                                    <label>Alamat</label>
+                                    <textarea class="form-control" name="alamat" rows="2"></textarea>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-primary"><i class="fas fa-sitemap"></i> Struktur Organisasi</h6>
+                                <hr>
+                                <div class="form-group">
+                                    <label>Koordinator Admin (Koadmin)</label>
+                                    <input type="text" class="form-control" name="koadmin" placeholder="Contoh: koadmin12">
+                                </div>
+                                <div class="form-group">
+                                    <label>ASD</label>
+                                    <input type="text" class="form-control" name="asd" placeholder="Contoh: ridwan">
+                                </div>
+                                <div class="form-group">
+                                    <label>AOM</label>
+                                    <input type="text" class="form-control" name="aom" placeholder="Contoh: chandra">
+                                </div>
+                                <div class="form-group">
+                                    <label>ASM</label>
+                                    <input type="text" class="form-control" name="asm" placeholder="Contoh: asm2">
+                                </div>
+                                <div class="form-group">
+                                    <label>General Manager (GM)</label>
+                                    <input type="text" class="form-control" name="gm" placeholder="Contoh: iwan">
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -130,7 +171,7 @@
 
     {{-- Modal Edit --}}
     <div class="modal fade" id="editLokasiModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Edit Lokasi</h5>
@@ -140,35 +181,69 @@
                     @csrf
                     @method('PUT')
                     <div class="modal-body">
-                        <div class="form-group">
-                            <label>Tipe Lokasi</label>
-                            <select class="form-control" id="edit_tipe" name="tipe" required>
-                                <option value="DEALER">Dealer</option>
-                                <option value="PUSAT">Gudang Pusat</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Kode Lokasi</label>
-                            <input type="text" class="form-control" id="edit_kode_lokasi" name="kode_lokasi" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Nama Lokasi</label>
-                            <input type="text" class="form-control" id="edit_nama_lokasi" name="nama_lokasi" required>
-                        </div>
-                        <div class="form-group">
-                            <label>NPWP</label>
-                            <input type="text" class="form-control" id="edit_npwp" name="npwp">
-                        </div>
-                         <div class="form-group">
-                            <label>Alamat</label>
-                            <textarea class="form-control" id="edit_alamat" name="alamat" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>Status</label>
-                            <select class="form-control" id="edit_is_active" name="is_active">
-                                <option value="1">Aktif</option>
-                                <option value="0">Non-Aktif</option>
-                            </select>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-primary"><i class="fas fa-info-circle"></i> Info Dasar</h6>
+                                <hr>
+                                <div class="form-group">
+                                    <label>Tipe Lokasi</label>
+                                    <select class="form-control" id="edit_tipe" name="tipe" required>
+                                        <option value="DEALER">Dealer</option>
+                                        <option value="PUSAT">Gudang Pusat</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Kode Lokasi</label>
+                                    <input type="text" class="form-control" id="edit_kode_lokasi" name="kode_lokasi" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Nama Lokasi</label>
+                                    <input type="text" class="form-control" id="edit_nama_lokasi" name="nama_lokasi" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Singkatan</label>
+                                    <input type="text" class="form-control" id="edit_singkatan" name="singkatan">
+                                </div>
+                                <div class="form-group">
+                                    <label>NPWP</label>
+                                    <input type="text" class="form-control" id="edit_npwp" name="npwp">
+                                </div>
+                                <div class="form-group">
+                                    <label>Alamat</label>
+                                    <textarea class="form-control" id="edit_alamat" name="alamat" rows="2"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Status</label>
+                                    <select class="form-control" id="edit_is_active" name="is_active">
+                                        <option value="1">Aktif</option>
+                                        <option value="0">Non-Aktif</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-primary"><i class="fas fa-sitemap"></i> Struktur Organisasi</h6>
+                                <hr>
+                                <div class="form-group">
+                                    <label>Koordinator Admin (Koadmin)</label>
+                                    <input type="text" class="form-control" id="edit_koadmin" name="koadmin">
+                                </div>
+                                <div class="form-group">
+                                    <label>ASD</label>
+                                    <input type="text" class="form-control" id="edit_asd" name="asd">
+                                </div>
+                                <div class="form-group">
+                                    <label>AOM</label>
+                                    <input type="text" class="form-control" id="edit_aom" name="aom">
+                                </div>
+                                <div class="form-group">
+                                    <label>ASM</label>
+                                    <input type="text" class="form-control" id="edit_asm" name="asm">
+                                </div>
+                                <div class="form-group">
+                                    <label>General Manager (GM)</label>
+                                    <input type="text" class="form-control" id="edit_gm" name="gm">
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -184,37 +259,31 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        // Simpan instance DataTable ke variabel (opsional, tapi praktik bagus)
-        var table = $('#lokasi-table').DataTable({ "responsive": true });
+        var table = $('#lokasi-table').DataTable({ 
+            "responsive": true,
+            "pageLength": 25 // Biar lebih banyak data terlihat
+        });
 
-        // PERBAIKAN: Gunakan Event Delegation ('body' atau ID tabel)
-        // Ganti $('.edit-btn').on('click', ...) menjadi:
         $('#lokasi-table').on('click', '.edit-btn', function() {
-
-            // Ambil data dari tombol yang diklik
             var id = $(this).data('id');
-            var tipe = $(this).data('tipe');
-            var kode = $(this).data('kode_lokasi');
-            var nama = $(this).data('nama_lokasi');
-            var npwp = $(this).data('npwp');
-            var alamat = $(this).data('alamat');
-            var active = $(this).data('is_active');
-
-            // Set URL Form Action
             var url = "{{ url('admin/lokasi') }}/" + id;
             $('#editLokasiForm').attr('action', url);
 
-            // Isi Field Input
-            $('#edit_tipe').val(tipe);
-            $('#edit_kode_lokasi').val(kode);
-            $('#edit_nama_lokasi').val(nama);
+            $('#edit_tipe').val($(this).data('tipe'));
+            $('#edit_kode_lokasi').val($(this).data('kode_lokasi'));
+            $('#edit_nama_lokasi').val($(this).data('nama_lokasi'));
+            $('#edit_singkatan').val($(this).data('singkatan'));
+            $('#edit_npwp').val($(this).data('npwp'));
+            $('#edit_alamat').val($(this).data('alamat'));
+            
+            // Field Struktur
+            $('#edit_koadmin').val($(this).data('koadmin'));
+            $('#edit_asd').val($(this).data('asd'));
+            $('#edit_aom').val($(this).data('aom'));
+            $('#edit_asm').val($(this).data('asm'));
+            $('#edit_gm').val($(this).data('gm'));
 
-            // Handle nilai null/kosong
-            $('#edit_npwp').val(npwp ? npwp : '');
-            $('#edit_alamat').val(alamat ? alamat : '');
-
-            // Handle Boolean (1/0)
-            $('#edit_is_active').val(active ? 1 : 0);
+            $('#edit_is_active').val($(this).data('is_active'));
         });
     });
 </script>

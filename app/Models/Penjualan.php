@@ -12,28 +12,24 @@ class Penjualan extends Model
 
     protected $table = 'penjualans';
 
-    // Kita gunakan $fillable untuk keamanan dan memastikan kolom baru terdaftar
     protected $fillable = [
         'nomor_faktur',
         'konsumen_id',
         'lokasi_id',
         'sales_id',
-        'created_by',        // Kolom Baru
-        'tanggal_jual',
+        'created_by',
         'total_harga',
-        'subtotal',          // Kolom Baru
-        'diskon',            // Kolom Baru
-        'total_diskon',      // Kolom Legacy (Disamakan dengan diskon)
-        'keterangan_diskon', // Kolom Baru
-        'pajak',             // Kolom Baru
-        'status',            // Kolom Baru
+        'subtotal',         
+        'diskon',           
+        'total_diskon',
+        'keterangan_diskon',
+        'pajak',            
+        'status',           
     ];
 
     protected $casts = [
         'tanggal_jual' => 'date',
     ];
-
-    // --- RELASI ---
 
     public function details()
     {
@@ -55,19 +51,16 @@ class Penjualan extends Model
         return $this->belongsTo(User::class, 'sales_id');
     }
 
-    // Relasi ke User pembuat transaksi (Kasir/PC)
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    // Relasi Polymorphic ke StockMovement (jika diperlukan untuk tracking)
     public function stockMovements()
     {
         return $this->morphMany(StockMovement::class, 'referensi');
     }
 
-    // Helper Generate Nomor (Opsional, tapi sudah ditangani di Controller)
     public static function generateNomorFaktur()
     {
         $prefix = 'INV/' . date('Ym') . '/';

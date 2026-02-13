@@ -39,11 +39,15 @@ class PurchaseOrderController extends Controller
         $user = Auth::user();
         $barangs = Barang::orderBy('part_name')->get();
 
-        // --- SKENARIO 1: SERVICE MD / DEALER ---
-        if ($user->hasRole(['SMD', 'SA', 'PIC', 'PC']) || ($user->lokasi && $user->lokasi->tipe === 'DEALER')) {
+        // --- SKENARIO 1: DEALER REQUEST (PC, KC) ATAU INVENTORY MD (IMS) ---
+        // Jika user adalah IMS, SA, PIC, atau PC Dealer
+        if ($user->hasRole(['IMS', 'SA', 'PIC', 'PC']) || ($user->lokasi && $user->lokasi->tipe === 'DEALER')) {
             $sumberPusat = Lokasi::where('tipe', 'PUSAT')->first();
             
-            if ($user->hasRole(['SMD', 'SA', 'PIC']) || ($user->lokasi && $user->lokasi->tipe === 'PUSAT')) {
+            // Jika user Pusat (IMS/SA/PIC), bisa pilih dealer mana saja sebagai pemohon (opsional)
+            // Tapi biasanya Inventory MD buat PO Supplier.
+            // Kita asumsikan ini form untuk Dealer Request ke Pusat.
+            if ($user->hasRole(['IMS', 'SA', 'PIC']) || ($user->lokasi && $user->lokasi->tipe === 'PUSAT')) {
                 $dealers = Lokasi::where('tipe', 'DEALER')->where('is_active', true)->orderBy('nama_lokasi')->get();
             } else {
                 $dealers = Lokasi::where('id', $user->lokasi_id)->get();
@@ -52,7 +56,8 @@ class PurchaseOrderController extends Controller
             return view('admin.purchase_orders.create_request', compact('sumberPusat', 'dealers', 'barangs'));
         }
 
-        // --- SKENARIO 2: ADMIN GUDANG ---
+        // --- SKENARIO 2: PO SUPPLIER (ADMIN GUDANG / IMS) ---
+        // Digunakan oleh AG, KG, IMS untuk order ke Supplier Eksternal
         $suppliers = Supplier::all();
         return view('admin.purchase_orders.create_supplier', compact('suppliers', 'barangs'));
     }
@@ -82,7 +87,11 @@ class PurchaseOrderController extends Controller
             'items'       => 'required|array',
         ]);
 
+        // Default ke Lokasi User, jika null (SA) ambil Gudang Pusat
         $gudangId = Auth::user()->lokasi_id; 
+        if (!$gudangId) {
+             $gudangId = Lokasi::where('kode_lokasi', 'GUDANG PART')->value('id');
+        }
 
         DB::beginTransaction();
         try {
@@ -160,6 +169,7 @@ class PurchaseOrderController extends Controller
 
                 foreach ($items as $item) {
                     $barang = Barang::find($item['barang_id']);
+                    // Harga Transfer ke Dealer = Selling Out (Harga Jual ke Cabang)
                     $hargaSatuan = $barang->selling_out > 0 ? $barang->selling_out : $barang->selling_in;
                     
                     $subtotalItem = $item['qty'] * $hargaSatuan;
@@ -227,6 +237,7 @@ class PurchaseOrderController extends Controller
             'approvedByHead'
         ])->findOrFail($id);
 
+        // Jika tipe request dealer, tampilkan info stok di gudang sumber
         if ($purchaseOrder->po_type === 'dealer_request') {
             $gudangSumberId = $purchaseOrder->sumber_lokasi_id;
 

@@ -12,9 +12,7 @@ class LokasiController extends Controller
     public function index()
     {
         $this->authorize('manage-locations');
-
         $lokasi = Lokasi::orderBy('tipe', 'asc')->latest()->get();
-
         return view('admin.lokasi.index', compact('lokasi'));
     }
 
@@ -23,11 +21,18 @@ class LokasiController extends Controller
         $this->authorize('manage-locations');
 
         $validated = $request->validate([
-            'kode_lokasi' => 'required|string|max:10|unique:lokasi',
+            'kode_lokasi' => 'required|string|max:20|unique:lokasi', // Update max length to accommodate codes like UDUA001
             'nama_lokasi' => 'required|string|max:100',
-            'npwp' => 'nullable|string|max:25',
-            'alamat' => 'nullable|string',
-            'tipe' => 'required|in:PUSAT,DEALER',
+            'singkatan'   => 'nullable|string|max:10',
+            'npwp'        => 'nullable|string|max:25',
+            'alamat'      => 'nullable|string',
+            'tipe'        => 'required|in:PUSAT,DEALER',
+            // Validasi field struktur
+            'koadmin'     => 'nullable|string|max:50',
+            'asd'         => 'nullable|string|max:50',
+            'aom'         => 'nullable|string|max:50',
+            'asm'         => 'nullable|string|max:50',
+            'gm'          => 'nullable|string|max:50',
         ]);
 
         Lokasi::create($validated);
@@ -40,12 +45,19 @@ class LokasiController extends Controller
         $this->authorize('manage-locations');
 
         $validated = $request->validate([
-            'kode_lokasi' => 'required|string|max:10|unique:lokasi,kode_lokasi,' . $lokasi->id,
+            'kode_lokasi' => 'required|string|max:20|unique:lokasi,kode_lokasi,' . $lokasi->id,
             'nama_lokasi' => 'required|string|max:100',
-            'npwp' => 'nullable|string|max:25',
-            'alamat' => 'nullable|string',
-            'tipe' => 'required|in:PUSAT,DEALER',
-            'is_active' => 'required|boolean',
+            'singkatan'   => 'nullable|string|max:10',
+            'npwp'        => 'nullable|string|max:25',
+            'alamat'      => 'nullable|string',
+            'tipe'        => 'required|in:PUSAT,DEALER',
+            'is_active'   => 'required|boolean',
+            // Validasi field struktur
+            'koadmin'     => 'nullable|string|max:50',
+            'asd'         => 'nullable|string|max:50',
+            'aom'         => 'nullable|string|max:50',
+            'asm'         => 'nullable|string|max:50',
+            'gm'          => 'nullable|string|max:50',
         ]);
 
         $lokasi->update($validated);

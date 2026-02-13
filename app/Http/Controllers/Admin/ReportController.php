@@ -35,7 +35,9 @@ class ReportController extends Controller
         $movements = collect();
         $lokasis = collect();
         $selectedLokasiId = $request->input('lokasi_id');
-        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'ASD']);
+        
+        // Ganti Role Lama
+        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS']);
 
         if ($isRestrictedUser && $user->lokasi_id) {
             $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
@@ -100,7 +102,9 @@ class ReportController extends Controller
         $lokasis = collect();
         $selectedLokasiId = null;
         $selectedLokasiName = null;
-        $isDealerUser = $user->hasRole(['KG', 'KC', 'AG', 'AD', 'PC', 'KSR']) && $user->lokasi_id;
+        
+        // Ganti Role Lama: Jika user adalah Staff Dealer
+        $isDealerUser = $user->hasRole(['KC', 'AG', 'PC', 'KSR']) && $user->lokasi_id;
 
         if ($isDealerUser) {
             $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
@@ -175,7 +179,8 @@ class ReportController extends Controller
             ->with(['barang', 'lokasi', 'rak'])
             ->groupBy('barang_id', 'lokasi_id', 'rak_id');
 
-        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'AG', 'ASD']) && $user->lokasi_id) {
+        // Ganti Role Lama
+        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'AG', 'ASD', 'IMS']) && $user->lokasi_id) {
              $query->where('lokasi_id', $user->lokasi_id);
         }
 
@@ -204,7 +209,7 @@ class ReportController extends Controller
             ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $user) {
                 $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
 
-                if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'ASD']) && $user->lokasi_id) {
+                if (!$user->hasRole(['SA', 'PIC', 'ACC', 'ASD', 'IMS']) && $user->lokasi_id) {
                     $q->where('lokasi_id', $user->lokasi_id);
                 }
             });
@@ -239,7 +244,7 @@ class ReportController extends Controller
             ->whereHas('receiving', function ($q) use ($startDate, $endDate, $user) {
                 $q->whereBetween('tanggal_terima', [$startDate, $endDate]);
 
-                if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC']) && $user->lokasi_id) {
+                if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS']) && $user->lokasi_id) {
                     $q->where('lokasi_id', $user->lokasi_id);
                 }
             });
@@ -276,7 +281,7 @@ class ReportController extends Controller
             ->with(['barang', 'lokasi', 'rak'])
             ->groupBy('barang_id', 'lokasi_id', 'rak_id');
 
-        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC']) && $user->lokasi_id) {
+        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS']) && $user->lokasi_id) {
             $inventoryQuery->where('lokasi_id', $user->lokasi_id);
         }
 
@@ -310,7 +315,7 @@ class ReportController extends Controller
         $selectedLokasiId = $request->input('dealer_id');
 
         $dealerList = collect();
-        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'MA', 'ASD', 'ACC']) && $user->lokasi_id;
+        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS']) && $user->lokasi_id;
 
         if ($isRestrictedUser) {
             $dealerList = Lokasi::where('id', $user->lokasi_id)->get();
@@ -371,7 +376,7 @@ class ReportController extends Controller
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         
         $dealerId = $request->input('dealer_id');
-        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'MA', 'ASD', 'ACC']) && $user->lokasi_id;
+        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS']) && $user->lokasi_id;
         
         if ($isRestrictedUser) {
             $dealerId = $user->lokasi_id;
@@ -420,7 +425,7 @@ class ReportController extends Controller
             ->whereBetween('services.reg_date', [$startDate, $endDate])
             ->groupBy('barangs.id', 'barangs.part_code', 'barangs.part_name');
 
-        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC']) && $user->lokasi_id) {
+        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS', 'ASD']) && $user->lokasi_id) {
             $query->where('services.lokasi_id', $user->lokasi_id);
         }
 
@@ -460,7 +465,7 @@ class ReportController extends Controller
         $invoiceNo = $request->input('invoice_no');
 
         $lokasiId = null;
-        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC'])) {
+        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS', 'ASD'])) {
             $lokasiId = $user->lokasi_id;
         }
 

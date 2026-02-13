@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Jabatan;
-use App\Models\Lokasi; // DIUBAH
+use App\Models\Lokasi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -14,16 +14,13 @@ class UserController extends Controller
 {
     public function __construct()
     {
-        // Menggunakan gate yang sudah kita definisikan di AuthServiceProvider
         $this->authorizeResource(User::class, 'user');
     }
 
     public function index()
     {
-        // PERUBAHAN: Memuat relasi 'lokasi'
         $users = User::with(['jabatan', 'lokasi'])->latest()->get();
         $jabatans = Jabatan::where('is_active', true)->orderBy('nama_jabatan')->get();
-        // PERUBAHAN: Mengambil data dari model Lokasi
         $lokasi = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
 
         return view('admin.users.index', compact('users', 'jabatans', 'lokasi'));
@@ -36,7 +33,7 @@ class UserController extends Controller
             'nik' => 'required|string|max:50|unique:users',
             'username' => 'required|string|max:100|unique:users',
             'jabatan_id' => 'required|exists:jabatans,id',
-            'lokasi_id' => 'nullable|exists:lokasi,id', // PERUBAHAN: Validasi ke tabel lokasi
+            'lokasi_id' => 'nullable|exists:lokasi,id',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
@@ -59,7 +56,7 @@ class UserController extends Controller
             'nik' => 'required|string|max:50|unique:users,nik,' . $user->id,
             'username' => 'required|string|max:100|unique:users,username,' . $user->id,
             'jabatan_id' => 'required|exists:jabatans,id',
-            'lokasi_id' => 'nullable|exists:lokasi,id', // PERUBAHAN: Validasi ke tabel lokasi
+            'lokasi_id' => 'nullable|exists:lokasi,id',
             'password' => 'nullable|string|min:8|confirmed',
             'is_active' => 'required|boolean',
         ]);
@@ -84,7 +81,6 @@ class UserController extends Controller
         return redirect()->route('admin.users.index')->with('success', 'Pengguna berhasil dihapus!');
     }
 
-    // Metode ini diperlukan untuk 'authorizeResource'
     protected function resourceAbilityMap()
     {
         return [

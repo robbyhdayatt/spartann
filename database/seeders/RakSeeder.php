@@ -15,17 +15,18 @@ class RakSeeder extends Seeder
         Rak::truncate();
         Schema::enableForeignKeyConstraints();
 
-        // Ambil Gudang Pusat
-        $pusat = Lokasi::where('tipe', 'PUSAT')->first();
+        // Ambil Gudang Pusat berdasarkan kode baru
+        $pusat = Lokasi::where('kode_lokasi', 'GUDANG PART')->first();
+        
         // Ambil Dealer
         $dealers = Lokasi::where('tipe', 'DEALER')->get();
 
-        // 1. SEED RAK GUDANG PUSAT (Format Lengkap)
+        // 1. SEED RAK GUDANG PUSAT (GUDANG PART)
         if ($pusat) {
             // Buat Zona A, Rak 01-03, Level 1-3, Bin 01-05
             $this->generateRaks($pusat, 'A', 3, 3, 5, 'PENYIMPANAN');
             
-            // Rak Karantina Pusat (Simpel)
+            // Rak Karantina Pusat
             Rak::create([
                 'lokasi_id' => $pusat->id,
                 'zona'      => 'K',   // K = Karantina
@@ -39,21 +40,8 @@ class RakSeeder extends Seeder
 
         // 2. SEED RAK DEALER
         foreach ($dealers as $dealer) {
-            // Dealer biasanya lebih kecil: Zona D (Display), Zona S (Stock)
-            
             // Rak Stock: Zona S, 1 Rak, 2 Level, 3 Bin
             $this->generateRaks($dealer, 'S', 1, 2, 3, 'PENYIMPANAN');
-
-            // Rak Display
-            Rak::create([
-                'lokasi_id' => $dealer->id,
-                'zona'      => 'D', // Display
-                'nomor_rak' => '01',
-                'level'     => '01',
-                'bin'       => '01',
-                'tipe_rak'  => 'DISPLAY', // Pastikan enum di database mendukung atau pakai PENYIMPANAN
-                'is_active' => true,
-            ]);
 
             // Rak Karantina Dealer
             Rak::create([
@@ -77,12 +65,11 @@ class RakSeeder extends Seeder
                     Rak::create([
                         'lokasi_id' => $lokasi->id,
                         'zona'      => $zona,
-                        'nomor_rak' => 'R' . str_pad($r, 2, '0', STR_PAD_LEFT), // R01
-                        'level'     => 'L' . $l, // L1
-                        'bin'       => 'B' . str_pad($b, 2, '0', STR_PAD_LEFT), // B01
+                        'nomor_rak' => 'R' . str_pad($r, 2, '0', STR_PAD_LEFT),
+                        'level'     => 'L' . $l,
+                        'bin'       => 'B' . str_pad($b, 2, '0', STR_PAD_LEFT),
                         'tipe_rak'  => $tipe,
                         'is_active' => true,
-                        // kode_rak & nama_rak akan digenerate otomatis oleh Model Boot() yang saya buat sebelumnya
                     ]);
 
                 }

@@ -16,14 +16,14 @@ use Illuminate\Support\Facades\DB;
 
 class PenjualanController extends Controller
 {
-
     public function index()
     {
         $this->authorize('view-sales');
         $user = Auth::user();
         $query = Penjualan::with(['konsumen', 'sales', 'lokasi', 'details.barang'])->latest();
 
-        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ASD'])) {
+        // Ganti Role Lama
+        if (!$user->hasRole(['SA', 'PIC', 'ASD', 'IMS', 'ACC'])) {
             if ($user->lokasi_id) {
                 $query->where('lokasi_id', $user->lokasi_id);
             } else {
@@ -49,6 +49,11 @@ class PenjualanController extends Controller
         return view('admin.penjualans.create', compact('lokasi', 'today'));
     }
 
+    // ... (Method Store, Show, GenerateNomor, Helper TIDAK BERUBAH) ...
+    // Silakan gunakan method store() yang ada di pesan user sebelumnya, itu sudah benar logikanya.
+    // Yang penting di index() sudah disesuaikan rolenya.
+    
+    // Copy Paste method store() dari kode Anda sebelumnya di sini
     public function store(Request $request)
     {
         $this->authorize('create-sale');
@@ -170,8 +175,6 @@ class PenjualanController extends Controller
                     ]);
 
                     // 3. [PERBAIKAN UTAMA] Buat Penjualan Detail disini!
-                    // Kita simpan detail SESUAI dengan Rak/Batch yang diambil.
-                    // Jika ambil dari 2 rak, maka akan create 2 baris detail.
                     $penjualan->details()->create([
                         'barang_id'  => $barang->id,
                         'rak_id'     => $batch->rak_id, // <-- Rak ID Akurat sesuai batch
@@ -213,8 +216,7 @@ class PenjualanController extends Controller
             return back()->with('error', 'Gagal: ' . $e->getMessage())->withInput();
         }
     }
-
-    // ... (Method generateNomorFaktur & getBarangItems TETAP SAMA seperti sebelumnya) ...
+    
     private function generateNomorFaktur($lokasiId)
     {
         $lokasi = Lokasi::find($lokasiId);

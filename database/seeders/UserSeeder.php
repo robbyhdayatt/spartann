@@ -6,10 +6,9 @@ use Illuminate\Database\Seeder;
 use App\Models\User;
 use App\Models\Jabatan;
 use App\Models\Lokasi;
-use App\Models\Dealer; 
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str; 
+use Illuminate\Support\Str;
 
 class UserSeeder extends Seeder
 {
@@ -20,163 +19,120 @@ class UserSeeder extends Seeder
      */
     public function run()
     {
-        // Nonaktifkan foreign key checks untuk truncate
         Schema::disableForeignKeyConstraints();
         User::query()->truncate();
         Schema::enableForeignKeyConstraints();
 
-        // Ambil ID Jabatan berdasarkan singkatan
-        // Pastikan JabatanSeeder sudah dijalankan sehingga 'PC' sudah ada
+        // Ambil ID Jabatan untuk referensi
         $jabatans = Jabatan::pluck('id', 'singkatan');
         
-        $gudangPusat = Lokasi::where('tipe', 'PUSAT')->first();
-        $dealerLokasi = Lokasi::where('tipe', 'DEALER')
-                              ->with(['dealer' => function ($query) {
-                                  $query->select('kode_dealer', 'singkatan');
-                              }])
-                              ->get();
+        // Ambil Lokasi Spesifik berdasarkan Kode Baru
+        $kantorPusat = Lokasi::where('kode_lokasi', 'KANTOR PUSAT')->first();
+        $gudangPusat = Lokasi::where('kode_lokasi', 'GUDANG PART')->first();
+        
+        // Ambil Semua Dealer
+        $dealerLokasi = Lokasi::where('tipe', 'DEALER')->get();
+
+        // Default Password
+        $password = Hash::make('password');
 
         // =================================================================
-        // PENGGUNA LEVEL PUSAT (TIDAK TERIKAT LOKASI)
+        // 1. PENGGUNA GLOBAL (Tanpa Lokasi)
         // =================================================================
         User::create([
             'nik' => 'SA-001', 'username' => 'superadmin', 'nama' => 'Super Admin',
-            'jabatan_id' => $jabatans['SA'], 'password' => Hash::make('password'), 'is_active' => true,
+            'jabatan_id' => $jabatans['SA'], 'password' => $password, 'is_active' => true,
             'lokasi_id' => null, 
         ]);
 
         User::create([
             'nik' => 'PIC-001', 'username' => 'pic', 'nama' => 'PIC',
-            'jabatan_id' => $jabatans['PIC'], 'password' => Hash::make('password'), 'is_active' => true,
+            'jabatan_id' => $jabatans['PIC'], 'password' => $password, 'is_active' => true,
             'lokasi_id' => null,
         ]);
 
-        User::create([
-            'nik' => 'MA-001', 'username' => 'manajer', 'nama' => 'Manajer Area',
-            'jabatan_id' => $jabatans['MA'], 'password' => Hash::make('password'), 'is_active' => true,
-            'lokasi_id' => null,
-        ]);
-
-        User::create([
-            'nik' => 'ASD-001',
-            'username' => 'asd',
-            'nama' => 'Area Service Development',
-            'jabatan_id' => $jabatans['ASD'],   
-            'password' => Hash::make('password'),
-            'is_active' => true,
-            'lokasi_id' => null, 
-        ]);
-
-        User::create([
-            'nik' => 'SMD-001',
-            'username' => 'servicemd',
-            'nama' => 'Service MD',
-            'jabatan_id' => $jabatans['SMD'],
-            'password' => Hash::make('password'),
-            'is_active' => true,
-            'lokasi_id' => null, 
-        ]);
-
-        User::create([
-            'nik' => 'ACC-001',
-            'username' => 'accounting',
-            'nama' => 'Accounting MD',
-            'jabatan_id' => $jabatans['ACC'],
-            'password' => Hash::make('password'),
-            'is_active' => true,
-            'lokasi_id' => null, 
-        ]);
-
         // =================================================================
-        // PENGGUNA LEVEL GUDANG PUSAT
+        // 2. PENGGUNA DI MAIN DEALER (KANTOR PUSAT)
         // =================================================================
-        if ($gudangPusat) {
-            $kodeLokasiPusat = Str::lower($gudangPusat->kode_lokasi); 
-            
+        if ($kantorPusat) {
+            // Area Service Development
             User::create([
-                'nik' => "KG-{$gudangPusat->kode_lokasi}-001", 'username' => "kg_{$kodeLokasiPusat}", 'nama' => "Kepala Gudang Pusat",
-                'jabatan_id' => $jabatans['KG'], 'lokasi_id' => $gudangPusat->id, 'password' => Hash::make('password'), 'is_active' => true,
+                'nik' => 'ASD-001', 'username' => 'asd_pusat', 'nama' => 'Staff ASD',
+                'jabatan_id' => $jabatans['ASD'], 'password' => $password, 'is_active' => true,
+                'lokasi_id' => $kantorPusat->id, 
             ]);
 
+            // Inventory MD Shop (Pengganti Service MD)
             User::create([
-                'nik' => "AG-{$gudangPusat->kode_lokasi}-001", 'username' => "admin_{$kodeLokasiPusat}", 'nama' => "Admin Gudang Pusat",
-                'jabatan_id' => $jabatans['AG'], 'lokasi_id' => $gudangPusat->id, 'password' => Hash::make('password'), 'is_active' => true,
+                'nik' => 'IMS-001', 'username' => 'inventory_md', 'nama' => 'Staff Inventory MD',
+                'jabatan_id' => $jabatans['IMS'], 'password' => $password, 'is_active' => true,
+                'lokasi_id' => $kantorPusat->id, 
             ]);
 
+            // Accounting MD
             User::create([
-                'nik' => "SLS-{$gudangPusat->kode_lokasi}-001", 'username' => "sales_{$kodeLokasiPusat}", 'nama' => "Sales Pusat",
-                'jabatan_id' => $jabatans['SLS'], 'lokasi_id' => $gudangPusat->id, 'password' => Hash::make('password'), 'is_active' => true,
-            ]);
-
-            User::create([
-                'nik' => "KSR-{$gudangPusat->kode_lokasi}-001", 'username' => "kasir_{$kodeLokasiPusat}", 'nama' => "Kasir Pusat",
-                'jabatan_id' => $jabatans['KSR'], 'lokasi_id' => $gudangPusat->id, 'password' => Hash::make('password'), 'is_active' => true,
+                'nik' => 'ACC-001', 'username' => 'accounting_md', 'nama' => 'Staff Accounting',
+                'jabatan_id' => $jabatans['ACC'], 'password' => $password, 'is_active' => true,
+                'lokasi_id' => $kantorPusat->id, 
             ]);
         }
 
         // =================================================================
-        // === PENGGUNA LEVEL DEALER (LOOPING UNTUK SETIAP DEALER LOKASI) ===
+        // 3. PENGGUNA DI GUDANG PUSAT (GUDANG PART)
+        // =================================================================
+        if ($gudangPusat) {
+            User::create([
+                'nik' => "KG-PUSAT", 'username' => "kepala_gudang", 'nama' => "Kepala Gudang",
+                'jabatan_id' => $jabatans['KG'], 'lokasi_id' => $gudangPusat->id, 'password' => $password, 'is_active' => true,
+            ]);
+
+            User::create([
+                'nik' => "AG-PUSAT", 'username' => "admin_gudang", 'nama' => "Admin Gudang",
+                'jabatan_id' => $jabatans['AG'], 'lokasi_id' => $gudangPusat->id, 'password' => $password, 'is_active' => true,
+            ]);
+        
+        }
+
+        // =================================================================
+        // 4. PENGGUNA DI SETIAP DEALER CABANG
         // =================================================================
         foreach ($dealerLokasi as $lokasi) {
-            $dealerInfo = $lokasi->dealer; 
-            $singkatan = $dealerInfo ? $dealerInfo->singkatan : $lokasi->kode_lokasi;
-            $usernameSuffix = Str::lower($singkatan); 
-            $namaSuffix = $singkatan; 
+            $suffix = Str::lower($lokasi->singkatan); 
+            $namaSuffix = $lokasi->singkatan; 
 
             // Kepala Cabang
             User::create([
-                'nik' => "KC-{$lokasi->kode_lokasi}-001",
-                'username' => "kc_{$usernameSuffix}",
+                'nik' => "KC-{$lokasi->singkatan}",
+                'username' => "kc_{$suffix}",
                 'nama' => "Kepala Cabang {$namaSuffix}",
                 'jabatan_id' => $jabatans['KC'],
                 'lokasi_id' => $lokasi->id,
-                'password' => Hash::make('password'),
+                'password' => $password,
                 'is_active' => $lokasi->is_active, 
             ]);
 
-            // Admin Dealer
+            // Part Counter
             User::create([
-                'nik' => "AD-{$lokasi->kode_lokasi}-001",
-                'username' => "admin_{$usernameSuffix}",
-                'nama' => "Admin Dealer {$namaSuffix}",
-                'jabatan_id' => $jabatans['AD'],
+                'nik' => "PC-{$lokasi->singkatan}",
+                'username' => "pc_{$suffix}",
+                'nama' => "Part Counter {$namaSuffix}",
+                'jabatan_id' => $jabatans['PC'],
                 'lokasi_id' => $lokasi->id, 
-                'password' => Hash::make('password'),
+                'password' => $password,
                 'is_active' => $lokasi->is_active,
             ]);
 
-            // Sales Dealer
+            // Kasir
             User::create([
-                'nik' => "SLS-{$lokasi->kode_lokasi}-001",
-                'username' => "sales_{$usernameSuffix}",
-                'nama' => "Sales {$namaSuffix}",
-                'jabatan_id' => $jabatans['SLS'],
-                'lokasi_id' => $lokasi->id, 
-                'password' => Hash::make('password'),
-                'is_active' => $lokasi->is_active,
-            ]);
-
-            // PERUBAHAN: Part Counter (PC) - Menggantikan CS
-            User::create([
-                'nik' => "PC-{$lokasi->kode_lokasi}-001", // NIK diubah jadi PC
-                'username' => "partcounter_{$usernameSuffix}", // Username diubah
-                'nama' => "Part Counter {$namaSuffix}", // Nama diubah
-                'jabatan_id' => $jabatans['PC'], // ID Jabatan PC
-                'lokasi_id' => $lokasi->id, 
-                'password' => Hash::make('password'),
-                'is_active' => $lokasi->is_active,
-            ]);
-
-            // Kasir Dealer
-            User::create([
-                'nik' => "KSR-{$lokasi->kode_lokasi}-001",
-                'username' => "kasir_{$usernameSuffix}",
+                'nik' => "KSR-{$lokasi->singkatan}",
+                'username' => "kasir_{$suffix}",
                 'nama' => "Kasir {$namaSuffix}",
                 'jabatan_id' => $jabatans['KSR'],
                 'lokasi_id' => $lokasi->id, 
-                'password' => Hash::make('password'),
+                'password' => $password,
                 'is_active' => $lokasi->is_active,
             ]);
+            
         }
     }
 }

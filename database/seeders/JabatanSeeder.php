@@ -16,22 +16,21 @@ class JabatanSeeder extends Seeder
         Schema::enableForeignKeyConstraints();
 
         $jabatans = [
-            // Level Pusat / Global
+            // === Level Pusat / Global ===
             ['nama_jabatan' => 'Super Admin', 'singkatan' => 'SA'],
             ['nama_jabatan' => 'PIC', 'singkatan' => 'PIC'],
-            ['nama_jabatan' => 'Manajer Area', 'singkatan' => 'MA'],
+            
+            // Masuk ke Lokasi MAIN DEALER (KANTOR PUSAT)
             ['nama_jabatan' => 'Area Service Development', 'singkatan' => 'ASD'],
-            ['nama_jabatan' => 'Service MD', 'singkatan' => 'SMD'],
+            ['nama_jabatan' => 'Inventory MD Shop', 'singkatan' => 'IMS'],
             ['nama_jabatan' => 'Accounting MD', 'singkatan' => 'ACC'],
 
-            // Level Gudang
+            // === Level Gudang (GUDANG PART) ===
             ['nama_jabatan' => 'Kepala Gudang', 'singkatan' => 'KG'],
             ['nama_jabatan' => 'Admin Gudang', 'singkatan' => 'AG'],
-            ['nama_jabatan' => 'Sales', 'singkatan' => 'SLS'],
 
-            // Level Dealer
+            // === Level Dealer ===
             ['nama_jabatan' => 'Kepala Cabang', 'singkatan' => 'KC'],
-            ['nama_jabatan' => 'Admin Dealer', 'singkatan' => 'AD'],
             ['nama_jabatan' => 'Part Counter', 'singkatan' => 'PC'],
             ['nama_jabatan' => 'Kasir', 'singkatan' => 'KSR'],
         ];

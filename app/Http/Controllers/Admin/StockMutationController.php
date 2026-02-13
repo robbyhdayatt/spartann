@@ -16,14 +16,14 @@ use Illuminate\Validation\Rule;
 
 class StockMutationController extends Controller
 {
-    // ... method index dan create TETAP SAMA ...
     public function index()
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $query = StockMutation::with(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy']);
 
-        if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'ASD'])) {
+        // Ganti Role Lama dengan Baru
+        if (!$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS'])) {
             $query->where(function($q) use ($user) {
                 $q->where('lokasi_asal_id', $user->lokasi_id)
                   ->orWhere('lokasi_tujuan_id', $user->lokasi_id);
@@ -41,7 +41,8 @@ class StockMutationController extends Controller
         $user = Auth::user();
 
         // 1. Lokasi Asal (Sumber Barang)
-        if ($user->hasRole(['SA', 'PIC', 'MA', 'ACC'])) {
+        // Ganti Role Lama
+        if ($user->hasRole(['SA', 'PIC', 'ACC', 'IMS', 'ASD'])) {
             // Pusat/Admin boleh pilih lokasi asal mana saja KECUALI PUSAT
             $lokasiAsal = Lokasi::where('is_active', true)
                                 ->where('tipe', '!=', 'PUSAT')
@@ -61,6 +62,10 @@ class StockMutationController extends Controller
         return view('admin.stock_mutations.create', compact('lokasiAsal', 'lokasiTujuan'));
     }
 
+    // ... (SISA METHOD STORE, APPROVE, REJECT, DLL TIDAK BERUBAH SECARA LOGIKA UTAMA, 
+    // HANYA PASTIKAN ROLE CHECK AMAN. KODE BAWAAN SUDAH CUKUP GENERIK) ...
+    // Copy-paste saja method store, approve, reject, show, helper dari kode sebelumnya
+    
     public function store(Request $request)
     {
         /** @var \App\Models\User $user */
@@ -130,11 +135,11 @@ class StockMutationController extends Controller
 
                    // === ANTI RACE CONDITION: LOCK FOR UPDATE ===
                    $batches = InventoryBatch::where('lokasi_id', $stockMutation->lokasi_asal_id)
-                         ->where('barang_id', $stockMutation->barang_id)
-                         ->where('quantity', '>', 0)
-                         ->orderBy('created_at', 'asc') // FIFO
-                         ->lockForUpdate() // <--- LOCKING PENTING
-                         ->get();
+                          ->where('barang_id', $stockMutation->barang_id)
+                          ->where('quantity', '>', 0)
+                          ->orderBy('created_at', 'asc') // FIFO
+                          ->lockForUpdate() // <--- LOCKING PENTING
+                          ->get();
 
                    $totalStock = $batches->sum('quantity');
 
@@ -190,7 +195,6 @@ class StockMutationController extends Controller
           return redirect()->route('admin.stock-mutations.index')->with('success', 'Permintaan mutasi disetujui. Stok telah dipotong (FIFO) dan status menjadi IN TRANSIT.');
     }
 
-    // ... method show dan reject TETAP SAMA ...
     public function show(StockMutation $stockMutation)
     {
         $stockMutation->load(['barang', 'lokasiAsal', 'lokasiTujuan', 'rakAsal', 'createdBy', 'approvedBy']);
@@ -210,7 +214,6 @@ class StockMutationController extends Controller
         return redirect()->route('admin.stock-mutations.index')->with('success', 'Ditolak.');
     }
 
-    // --- API Helper ---
     public function getPartsWithStock(Lokasi $lokasi)
     {
         $barangIds = InventoryBatch::where('lokasi_id', $lokasi->id)
