@@ -14,14 +14,13 @@ class PenjualanDetail extends Model
     protected $fillable = [
         'penjualan_id',
         'barang_id',
-        'rak_id',      // <-- Pastikan ini ada
+        'rak_id',      
         'qty_jual',
         'harga_jual',
         'subtotal',
         'qty_diretur'
     ];
 
-    // Relasi ke Rak (Agar nama rak bisa muncul di laporan)
     public function rak()
     {
         return $this->belongsTo(Rak::class, 'rak_id');

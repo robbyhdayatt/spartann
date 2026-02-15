@@ -8,21 +8,21 @@ use App\Models\InventoryBatch;
 use App\Models\Barang;
 use App\Models\Lokasi;
 use App\Models\StockMovement;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Validator;
 
 class StockMutationController extends Controller
 {
     public function index()
     {
-        /** @var \App\Models\User $user */
+        $this->authorize('view-stock-transaction'); // Pastikan permission ini ada/sesuai
+        
         $user = Auth::user();
         $query = StockMutation::with(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy']);
 
-        // Ganti Role Lama dengan Baru
+        // Filter berdasarkan Lokasi User (Kecuali Super Admin & Management)
         if (!$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS'])) {
             $query->where(function($q) use ($user) {
                 $q->where('lokasi_asal_id', $user->lokasi_id)
@@ -37,87 +37,93 @@ class StockMutationController extends Controller
     public function create()
     {
         $this->authorize('create-stock-transaction');
-        /** @var \App\Models\User $user */
         $user = Auth::user();
 
         // 1. Lokasi Asal (Sumber Barang)
-        // Ganti Role Lama
         if ($user->hasRole(['SA', 'PIC', 'ACC', 'IMS', 'ASD'])) {
-            // Pusat/Admin boleh pilih lokasi asal mana saja KECUALI PUSAT
-            $lokasiAsal = Lokasi::where('is_active', true)
-                                ->where('tipe', '!=', 'PUSAT')
-                                ->orderBy('nama_lokasi')
-                                ->get();
+            // Pusat/Admin boleh pilih lokasi asal mana saja
+            $lokasiAsal = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
         } else {
-            // PC (Dealer) HANYA BISA memutasi dari lokasinya sendiri
+            // User cabang HANYA BISA memutasi dari lokasinya sendiri
+            if (!$user->lokasi_id) {
+                return redirect()->route('admin.home')->with('error', 'Akun Anda tidak terasosiasi dengan lokasi manapun.');
+            }
             $lokasiAsal = Lokasi::where('id', $user->lokasi_id)->get();
         }
 
-        // 2. Lokasi Tujuan (Penerima Barang)
+        // 2. Lokasi Tujuan (Penerima Barang) - Kecuali Pusat (biasanya cabang ke cabang atau pusat ke cabang)
         $lokasiTujuan = Lokasi::where('is_active', true)
-                              ->where('tipe', '!=', 'PUSAT')
                               ->orderBy('nama_lokasi')
                               ->get();
 
         return view('admin.stock_mutations.create', compact('lokasiAsal', 'lokasiTujuan'));
     }
 
-    // ... (SISA METHOD STORE, APPROVE, REJECT, DLL TIDAK BERUBAH SECARA LOGIKA UTAMA, 
-    // HANYA PASTIKAN ROLE CHECK AMAN. KODE BAWAAN SUDAH CUKUP GENERIK) ...
-    // Copy-paste saja method store, approve, reject, show, helper dari kode sebelumnya
-    
     public function store(Request $request)
     {
-        /** @var \App\Models\User $user */
-        $user = Auth::user();
         $this->authorize('create-stock-transaction');
+        $user = Auth::user();
 
-        $validated = $request->validate([
-            'barang_id' => 'required|exists:barangs,id',
-            'lokasi_asal_id' => 'required|exists:lokasi,id',
-            'lokasi_tujuan_id' => 'required|exists:lokasi,id|different:lokasi_asal_id',
-            'jumlah' => 'required|integer|min:1',
-            'keterangan' => 'nullable|string',
+        // Validasi Input
+        $validator = Validator::make($request->all(), [
+            'barang_id'         => 'required|exists:barangs,id',
+            'lokasi_asal_id'    => 'required|exists:lokasi,id',
+            'lokasi_tujuan_id'  => 'required|exists:lokasi,id|different:lokasi_asal_id',
+            'jumlah'            => 'required|integer|min:1',
+            'keterangan'        => 'nullable|string|max:255',
+        ], [
+            'lokasi_tujuan_id.different' => 'Lokasi tujuan tidak boleh sama dengan lokasi asal.',
         ]);
 
-        if (!$user->hasRole(['SA', 'PIC']) && $validated['lokasi_asal_id'] != $user->lokasi_id) {
-             return back()->with('error', 'Anda hanya boleh melakukan mutasi dari lokasi Anda sendiri.')->withInput();
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
         }
 
-        $lokasiAsal = Lokasi::find($validated['lokasi_asal_id']);
-        $lokasiTujuan = Lokasi::find($validated['lokasi_tujuan_id']);
-
-        if ($lokasiAsal->tipe === 'PUSAT' || $lokasiTujuan->tipe === 'PUSAT') {
-            return back()->with('error', 'Mutasi yang melibatkan Gudang Pusat tidak diizinkan di menu ini.')->withInput();
+        // Validasi Hak Akses Lokasi
+        if (!$user->hasRole(['SA', 'PIC', 'ASD']) && $request->lokasi_asal_id != $user->lokasi_id) {
+             return back()->with('error', 'Anda tidak memiliki akses untuk memindahkan barang dari lokasi ini.')->withInput();
         }
 
-        // --- VALIDASI STOK TOTAL & MINIMUM ---
-        $barang = Barang::findOrFail($validated['barang_id']);
+        // --- SOFT CHECK STOK (Tanpa Lock, hanya validasi awal) ---
+        $barang = Barang::findOrFail($request->barang_id);
         
-        $totalStock = InventoryBatch::where('lokasi_id', $validated['lokasi_asal_id'])
-            ->where('barang_id', $validated['barang_id'])
+        $totalStock = InventoryBatch::where('lokasi_id', $request->lokasi_asal_id)
+            ->where('barang_id', $request->barang_id)
             ->sum('quantity');
 
-        // Cek 1: Stok Fisik
-        if ($totalStock < $validated['jumlah']) {
-            return back()->with('error', 'Stok total di lokasi asal tidak mencukupi. Stok tersedia: ' . $totalStock)->withInput();
+        // Cek 1: Stok Fisik Cukup?
+        if ($totalStock < $request->jumlah) {
+            return back()->with('error', "Gagal! Stok di lokasi asal tidak mencukupi. (Tersedia: {$totalStock})")->withInput();
         }
 
-        // Cek 2: Stok Minimum
-        $sisaStok = $totalStock - $validated['jumlah'];
-        if ($sisaStok < $barang->stok_minimum) {
-             return back()->with('error', "Gagal! Mutasi ini akan menyebabkan stok {$barang->part_name} menembus batas minimum ({$barang->stok_minimum}). Sisa prediksi: {$sisaStok}.")->withInput();
+        // Cek 2: Stok Minimum (Optional, tapi disarankan)
+        $sisaPrediksi = $totalStock - $request->jumlah;
+        if ($sisaPrediksi < $barang->stok_minimum) {
+             return back()->with('error', "Gagal! Mutasi ini melanggar batas stok minimum ({$barang->stok_minimum}).")->withInput();
         }
 
-        $mutationData = $validated;
-        $mutationData['nomor_mutasi'] = StockMutation::generateNomorMutasi();
-        $mutationData['status'] = 'PENDING_APPROVAL';
-        $mutationData['created_by'] = $user->id;
-        $mutationData['rak_asal_id'] = null;
+        // Simpan Request Mutasi
+        DB::beginTransaction();
+        try {
+            StockMutation::create([
+                'nomor_mutasi'     => StockMutation::generateNomorMutasi(),
+                'barang_id'        => $request->barang_id,
+                'lokasi_asal_id'   => $request->lokasi_asal_id,
+                'lokasi_tujuan_id' => $request->lokasi_tujuan_id,
+                'jumlah'           => $request->jumlah,
+                'keterangan'       => $request->keterangan,
+                'status'           => 'PENDING_APPROVAL',
+                'created_by'       => $user->id,
+            ]);
 
-        StockMutation::create($mutationData);
+            DB::commit();
+            return redirect()->route('admin.stock-mutations.index')
+                ->with('success', 'Permintaan mutasi berhasil dibuat dan menunggu persetujuan.');
 
-        return redirect()->route('admin.stock-mutations.index')->with('success', 'Permintaan mutasi berhasil dibuat. Menunggu persetujuan ASD/Manager.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage())->withInput();
+        }
     }
 
     public function approve(StockMutation $stockMutation)
@@ -125,103 +131,129 @@ class StockMutationController extends Controller
         $this->authorize('approve-stock-transaction', $stockMutation);
 
         if ($stockMutation->status !== 'PENDING_APPROVAL') {
-            return back()->with('error', 'Hanya permintaan PENDING yang bisa diproses.');
+            return back()->with('error', 'Hanya mutasi dengan status PENDING yang dapat diproses.');
         }
 
-         try {
-               DB::transaction(function () use ($stockMutation) {
-                   $jumlahToMutate = $stockMutation->jumlah;
-                   $barang = $stockMutation->barang;
+        DB::beginTransaction();
+        try {
+            $jumlahToMutate = $stockMutation->jumlah;
+            $barang = $stockMutation->barang;
 
-                   // === ANTI RACE CONDITION: LOCK FOR UPDATE ===
-                   $batches = InventoryBatch::where('lokasi_id', $stockMutation->lokasi_asal_id)
-                          ->where('barang_id', $stockMutation->barang_id)
-                          ->where('quantity', '>', 0)
-                          ->orderBy('created_at', 'asc') // FIFO
-                          ->lockForUpdate() // <--- LOCKING PENTING
-                          ->get();
+            // === CORE LOGIC: FIFO & PESSIMISTIC LOCKING ===
+            // Ambil batch dari lokasi asal, urutkan dari yang terlama
+            $batches = InventoryBatch::where('lokasi_id', $stockMutation->lokasi_asal_id)
+                   ->where('barang_id', $stockMutation->barang_id)
+                   ->where('quantity', '>', 0)
+                   ->orderBy('created_at', 'asc') // FIFO
+                   ->lockForUpdate() // KUNCI BARIS DATABASE
+                   ->get();
 
-                   $totalStock = $batches->sum('quantity');
+            $totalStockRealtime = $batches->sum('quantity');
 
-                   if ($totalStock < $jumlahToMutate) {
-                       throw new \Exception('Gagal Approve! Stok saat ini tidak mencukupi (Tersedia: ' . $totalStock . ').');
-                   }
+            // Validasi Stok Keras (Hard Validation)
+            if ($totalStockRealtime < $jumlahToMutate) {
+                throw new \Exception("Stok fisik tidak mencukupi saat proses approval. (Tersedia: {$totalStockRealtime})");
+            }
 
-                   // Validasi Minimum saat Approve (Double Check)
-                   $sisaStok = $totalStock - $jumlahToMutate;
-                   if ($sisaStok < $barang->stok_minimum) {
-                        throw new \Exception("Gagal Approve! Stok akan menembus batas minimum ({$barang->stok_minimum}).");
-                   }
+            // Validasi Minimum Stok Keras
+            if (($totalStockRealtime - $jumlahToMutate) < $barang->stok_minimum) {
+                throw new \Exception("Approval dibatalkan! Sisa stok akan menembus batas minimum ({$barang->stok_minimum}).");
+            }
 
-                   $remainingToMutate = $jumlahToMutate;
+            $sisaPermintaan = $jumlahToMutate;
 
-                   foreach ($batches as $batch) {
-                       if ($remainingToMutate <= 0) break;
+            foreach ($batches as $batch) {
+                if ($sisaPermintaan <= 0) break;
 
-                       $stokSebelum = $batch->quantity;
-                       $stokKeluar = min($stokSebelum, $remainingToMutate);
+                // Ambil stok dari batch ini
+                $ambil = min($batch->quantity, $sisaPermintaan);
+                
+                $stokAwalBatch = $batch->quantity;
+                $batch->decrement('quantity', $ambil);
 
-                       $batch->decrement('quantity', $stokKeluar);
-                       $remainingToMutate -= $stokKeluar;
+                // Catat Pergerakan Barang (KELUAR DARI ASAL)
+                // Note: Kita belum menambah ke tujuan. Itu terjadi saat 'Receiving' di modul MutationReceiving.
+                StockMovement::create([
+                    'barang_id'      => $stockMutation->barang_id,
+                    'lokasi_id'      => $stockMutation->lokasi_asal_id,
+                    'rak_id'         => $batch->rak_id, // Ambil dari rak batch yang spesifik
+                    'jumlah'         => -$ambil, // Negatif (Keluar)
+                    'stok_sebelum'   => $stokAwalBatch,
+                    'stok_sesudah'   => $stokAwalBatch - $ambil,
+                    'referensi_type' => get_class($stockMutation),
+                    'referensi_id'   => $stockMutation->id,
+                    'keterangan'     => 'Mutasi Keluar ke: ' . $stockMutation->lokasiTujuan->nama_lokasi,
+                    'user_id'        => Auth::id(),
+                ]);
 
-                       StockMovement::create([
-                           'barang_id' => $stockMutation->barang_id,
-                           'lokasi_id' => $stockMutation->lokasi_asal_id,
-                           'rak_id' => $batch->rak_id,
-                           'jumlah' => -$stokKeluar,
-                           'stok_sebelum' => $stokSebelum,
-                           'stok_sesudah' => $batch->quantity, // Batch quantity baru
-                           'referensi_type' => get_class($stockMutation),
-                           'referensi_id' => $stockMutation->id,
-                           'keterangan' => 'Mutasi Keluar ke ' . $stockMutation->lokasiTujuan->kode_lokasi . ' (Appr: ' . Auth::user()->name . ')',
-                           'user_id' => Auth::id(),
-                       ]);
-                   }
+                $sisaPermintaan -= $ambil;
+            }
 
-                   if ($remainingToMutate > 0) {
-                        throw new \Exception('Sistem Error: Gagal mengalokasikan stok FIFO sepenuhnya.');
-                   }
+            if ($sisaPermintaan > 0) {
+                throw new \Exception("Terjadi anomali saat alokasi batch. Silakan coba lagi.");
+            }
 
-                   $stockMutation->status = 'IN_TRANSIT';
-                   $stockMutation->approved_by = Auth::id();
-                   $stockMutation->approved_at = now();
-                   $stockMutation->save();
-               });
-         } catch (\Exception $e) {
-               DB::rollBack();
-               return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
-         }
+            // Update Status Mutasi
+            $stockMutation->update([
+                'status'      => 'IN_TRANSIT', // Barang sedang dikirim, stok asal sudah berkurang, stok tujuan belum nambah.
+                'approved_by' => Auth::id(),
+                'approved_at' => now(),
+            ]);
 
-          return redirect()->route('admin.stock-mutations.index')->with('success', 'Permintaan mutasi disetujui. Stok telah dipotong (FIFO) dan status menjadi IN TRANSIT.');
-    }
+            DB::commit();
+            return redirect()->route('admin.stock-mutations.index')
+                ->with('success', 'Mutasi disetujui. Stok asal telah dipotong dan status berubah menjadi IN TRANSIT.');
 
-    public function show(StockMutation $stockMutation)
-    {
-        $stockMutation->load(['barang', 'lokasiAsal', 'lokasiTujuan', 'rakAsal', 'createdBy', 'approvedBy']);
-        return view('admin.stock_mutations.show', compact('stockMutation'));
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal memproses: ' . $e->getMessage());
+        }
     }
 
     public function reject(Request $request, StockMutation $stockMutation)
     {
         $this->authorize('approve-stock-transaction', $stockMutation);
-        $request->validate(['rejection_reason' => 'required|string|min:5']);
-        if ($stockMutation->status !== 'PENDING_APPROVAL') return back()->with('error', 'Sudah diproses.');
-        $stockMutation->status = 'REJECTED';
-        $stockMutation->rejection_reason = $request->rejection_reason;
-        $stockMutation->approved_by = Auth::id();
-        $stockMutation->approved_at = now();
-        $stockMutation->save();
-        return redirect()->route('admin.stock-mutations.index')->with('success', 'Ditolak.');
+        
+        $request->validate([
+            'rejection_reason' => 'required|string|min:5|max:255'
+        ], [
+            'rejection_reason.required' => 'Alasan penolakan wajib diisi.',
+            'rejection_reason.min' => 'Alasan penolakan terlalu singkat.',
+        ]);
+
+        if ($stockMutation->status !== 'PENDING_APPROVAL') {
+             return back()->with('error', 'Permintaan sudah diproses sebelumnya.');
+        }
+
+        $stockMutation->update([
+            'status'           => 'REJECTED',
+            'rejection_reason' => $request->rejection_reason,
+            'approved_by'      => Auth::id(), // Yang menolak
+            'approved_at'      => now(),
+        ]);
+
+        return redirect()->route('admin.stock-mutations.index')->with('success', 'Permintaan mutasi ditolak.');
     }
 
+    public function show(StockMutation $stockMutation)
+    {
+        // Eager load relasi untuk efisiensi
+        $stockMutation->load(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy', 'approvedBy', 'receivedBy']);
+        return view('admin.stock_mutations.show', compact('stockMutation'));
+    }
+
+    // --- API HELPER UNTUK FORM ---
+    
     public function getPartsWithStock(Lokasi $lokasi)
     {
-        $barangIds = InventoryBatch::where('lokasi_id', $lokasi->id)
-            ->where('quantity', '>', 0)
-            ->pluck('barang_id')
-            ->unique();
+        // Hanya ambil barang yang punya stok positif di lokasi tersebut
+        $barangs = Barang::whereHas('inventoryBatches', function($q) use ($lokasi) {
+                $q->where('lokasi_id', $lokasi->id)->where('quantity', '>', 0);
+            })
+            ->select('id', 'part_name', 'part_code')
+            ->orderBy('part_name')
+            ->get();
 
-        $barangs = Barang::whereIn('id', $barangIds)->orderBy('part_name')->get();
         return response()->json($barangs);
     }
 
@@ -235,11 +267,11 @@ class StockMutationController extends Controller
         $totalStock = InventoryBatch::where('lokasi_id', $request->lokasi_id)
             ->where('barang_id', $request->barang_id)
             ->sum('quantity');
-            
+
         $barang = Barang::find($request->barang_id);
 
         return response()->json([
-            'total_stock' => $totalStock,
+            'total_stock'  => $totalStock,
             'stok_minimum' => $barang->stok_minimum ?? 0
         ]);
     }

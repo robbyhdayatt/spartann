@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class PurchaseReturn extends Model
 {
     use HasFactory;
+    
     protected $guarded = ['id'];
 
     protected $casts = [
@@ -32,5 +33,17 @@ class PurchaseReturn extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public static function generateReturnNumber()
+    {
+        // Format: RTB/YYYYMMDD/0001 (RTB = Retur Beli)
+        $prefix = 'RTB/' . now()->format('Ymd') . '/';
+        $last = self::where('nomor_retur', 'like', $prefix . '%')
+                    ->orderBy('nomor_retur', 'desc')
+                    ->first();
+
+        $seq = $last ? ((int) substr($last->nomor_retur, -4)) + 1 : 1;
+        return $prefix . str_pad($seq, 4, '0', STR_PAD_LEFT);
     }
 }

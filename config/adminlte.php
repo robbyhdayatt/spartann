@@ -217,14 +217,13 @@ return [
             'header' => 'MASTER & PENGATURAN',
             'can'    => ['manage-locations', 'view-master-data', 'manage-users', 'manage-converts', 'manage-barangs'],
         ],
-        // 1. MANAJEMEN LOKASI (Hanya SA, Admin GSP tidak boleh lihat)
+        // 1. MANAJEMEN LOKASI
         [
             'text' => 'Manajemen Lokasi',
             'icon' => 'fas fa-fw fa-map-marked-alt',
-            'can'  => 'manage-locations-sa-only', // Ganti permission jadi khusus SA
+            'can'  => 'manage-locations-sa-only',
             'submenu' => [
                 ['text' => 'Lokasi', 'icon' => 'fas fa-fw fa-warehouse', 'route' => 'admin.lokasi.index'],
-                // ['text' => 'Master Dealer', 'icon' => 'fas fa-fw fa-store', 'route' => 'admin.dealers.index'],
                 ['text' => 'Rak', 'icon' => 'fas fa-fw fa-pallet', 'route' => 'admin.raks.index'],
             ],
         ],
@@ -233,11 +232,7 @@ return [
             'icon'    => 'fas fa-fw fa-database',
             'can'     => ['view-master-data', 'manage-converts', 'manage-barangs',],
             'submenu' => [
-                // ['text' => 'Brand', 'icon' => 'far fa-fw fa-copyright', 'route' => 'admin.brands.index', 'can' => 'view-master-data'],
-                // ['text' => 'Kategori', 'icon' => 'far fa-fw fa-folder-open', 'route' => 'admin.categories.index', 'can' => 'view-master-data'],
                 ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index', 'can' => 'view-master-data'],
-                // ['text' => 'Part (Stok)', 'icon' => 'fas fa-fw fa-cogs', 'route' => 'admin.parts.index', 'can' => 'view-master-data'],
-                // ['text' => 'Konsumen', 'icon' => 'fas fa-fw fa-user-friends', 'route' => 'admin.konsumens.index', 'can' => 'view-master-data'],
                 ['text' => 'Master Convert','route'=> 'admin.converts.index','icon' => 'fas fa-fw fa-exchange-alt','can'  => 'manage-converts',],
                 ['text' => 'Item','icon' => 'fas fa-fw fa-box-open','route' => 'admin.barangs.index','can'  => 'manage-barangs'],
             ],
@@ -366,26 +361,9 @@ return [
 
         // ================== ANALISIS & MARKETING ==================
         [
-            'header' => 'ANALISIS & MARKETING',
-            'can' => ['manage-marketing', 'view-reports'],
+            'header' => 'ANALISIS LAPORAN',
+            'can' => ['view-reports'],
         ],
-        // [
-        //     'text'    => 'Marketing',
-        //     'icon'    => 'fas fa-fw fa-bullhorn',
-        //     'can'     => 'manage-marketing',
-        //     'submenu' => [
-        //         ['text' => 'Manajemen Campaign', 'icon' => 'fas fa-fw fa-tags', 'route' => 'admin.campaigns.index'],
-        //         ['text' => 'Kategori Diskon', 'icon' => 'fas fa-fw fa-percent', 'route' => 'admin.customer-discount-categories.index'],
-        //         [
-        //             'text'    => 'Insentif Sales',
-        //             'icon'    => 'fas fa-fw fa-gift',
-        //             'submenu' => [
-        //                 ['text' => 'Set Target', 'icon' => 'fas fa-fw fa-bullseye', 'route' => 'admin.incentives.targets'],
-        //                 ['text' => 'Laporan Insentif', 'icon' => 'fas fa-fw fa-file-invoice-dollar', 'route' => 'admin.incentives.report'],
-        //             ],
-        //         ],
-        //     ],
-        // ],
         [
             'text'    => 'Laporan',
             'icon'    => 'fas fa-fw fa-chart-pie',

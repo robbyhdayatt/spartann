@@ -76,7 +76,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="6" class="text-center">Belum ada data item.</td>
+                    <td colspan="7" class="text-center">Belum ada data item.</td>
                 </tr>
                 @endforelse
             </tbody>
@@ -84,8 +84,7 @@
     </div>
 </div>
 
-{{-- ======================== MODAL ======================== --}}
-
+{{-- ======================== MODAL CREATE ======================== --}}
 <div class="modal fade" id="createBarangModal" tabindex="-1" role="dialog" aria-labelledby="createModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
         <form action="{{ route('admin.barangs.store') }}" method="POST" id="createForm">
@@ -98,7 +97,38 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    @include('admin.barangs._form', ['idPrefix' => 'create', 'barang' => $barang])
+                    {{-- Form Content Create --}}
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label>Nama Part / Jasa <span class="text-danger">*</span></label>
+                            <input type="text" name="part_name" id="create_part_name" class="form-control" required value="{{ old('part_name') }}">
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label>Kode Part (Unik) <span class="text-danger">*</span></label>
+                            <input type="text" name="part_code" id="create_part_code" class="form-control" required value="{{ old('part_code') }}">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 form-group">
+                            <label>Merk</label>
+                            <input type="text" name="merk" id="create_merk" class="form-control" value="{{ old('merk') }}">
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label>Selling In (Rp)</label>
+                            <input type="text" name="selling_in" id="create_selling_in" class="form-control currency-input" value="{{ old('selling_in') }}">
+                            <small class="form-text text-muted">Harga beli dari Supplier</small>
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label>Selling Out (Rp) <span class="text-danger">*</span></label>
+                            <input type="text" name="selling_out" id="create_selling_out" class="form-control currency-input" required value="{{ old('selling_out') }}">
+                            <small class="form-text text-muted">Harga jual ke Dealer</small>
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label>Retail (Rp) <span class="text-danger">*</span></label>
+                            <input type="text" name="retail" id="create_retail" class="form-control currency-input" required value="{{ old('retail') }}">
+                            <small class="form-text text-muted">Harga jual ke Konsumen</small>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
@@ -109,6 +139,7 @@
     </div>
 </div>
 
+{{-- ======================== MODAL EDIT ======================== --}}
 <div class="modal fade" id="editBarangModal" tabindex="-1" role="dialog" aria-labelledby="editModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
         <form method="POST" id="editForm">
@@ -122,7 +153,38 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    @include('admin.barangs._form', ['idPrefix' => 'edit', 'barang' => $barang])
+                    {{-- Form Content Edit --}}
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label>Nama Part / Jasa <span class="text-danger">*</span></label>
+                            <input type="text" name="part_name" id="edit_part_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label>Kode Part (Unik) <span class="text-danger">*</span></label>
+                            <input type="text" name="part_code" id="edit_part_code" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 form-group">
+                            <label>Merk</label>
+                            <input type="text" name="merk" id="edit_merk" class="form-control">
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label>Selling In (Rp)</label>
+                            <input type="text" name="selling_in" id="edit_selling_in" class="form-control currency-input">
+                            <small class="form-text text-muted">Harga beli dari Supplier</small>
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label>Selling Out (Rp) <span class="text-danger">*</span></label>
+                            <input type="text" name="selling_out" id="edit_selling_out" class="form-control currency-input" required>
+                            <small class="form-text text-muted">Harga jual ke Dealer</small>
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label>Retail (Rp) <span class="text-danger">*</span></label>
+                            <input type="text" name="retail" id="edit_retail" class="form-control currency-input" required>
+                            <small class="form-text text-muted">Harga jual ke Konsumen</small>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
@@ -143,6 +205,31 @@ $(document).ready(function() {
         "autoWidth": false,
         "order": [[ 0, "asc" ]]
     });
+
+    // --- LOGIC FORMAT RUPIAH / ANGKA RIBUAN ---
+    function formatRupiah(angka) {
+        if (!angka) return '';
+        var number_string = angka.toString().replace(/[^,\d]/g, ''),
+            split   = number_string.split(','),
+            sisa    = split[0].length % 3,
+            rupiah  = split[0].substr(0, sisa),
+            ribuan  = split[0].substr(sisa).match(/\d{3}/gi);
+
+        if (ribuan) {
+            separator = sisa ? '.' : '';
+            rupiah += separator + ribuan.join('.');
+        }
+
+        rupiah = split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
+        return rupiah;
+    }
+
+    // Event listener untuk input class currency-input
+    $(document).on('keyup', '.currency-input', function() {
+        $(this).val(formatRupiah($(this).val()));
+    });
+
+    // --- LOGIC EDIT MODAL ---
     $('.btn-edit').on('click', function() {
         let url = $(this).data('url');
         let updateUrl = $(this).data('update-url');
@@ -155,42 +242,49 @@ $(document).ready(function() {
             $('#edit_part_name').val(data.part_name);
             $('#edit_part_code').val(data.part_code);
             $('#edit_merk').val(data.merk);
-            $('#edit_selling_in').val(data.selling_in);
-            $('#edit_selling_out').val(data.selling_out);
-            $('#edit_retail').val(data.retail);
+
+            // Format angka dari DB (misal 10000.00) ke format rupiah (10.000)
+            $('#edit_selling_in').val(formatRupiah(parseInt(data.selling_in)));
+            $('#edit_selling_out').val(formatRupiah(parseInt(data.selling_out)));
+            $('#edit_retail').val(formatRupiah(parseInt(data.retail)));
 
         }).fail(function() {
             alert('Gagal mengambil data item.');
         });
     });
 
+    // --- LOGIC ERROR HANDLING ---
     @if($errors->any())
         @if(session('edit_form_id'))
             let failedId = {{ session('edit_form_id') }};
             let editButton = $(`.btn-edit[data-update-url*="${failedId}"]`);
+            // Jika ada error validasi, pastikan format rupiah tetap ada
+            $('.currency-input').each(function() {
+                $(this).val(formatRupiah($(this).val()));
+            });
             $('#editForm').attr('action', editButton.data('update-url'));
             $('#editBarangModal').modal('show');
         @else
+            // Format input di modal create jika kembali dengan error
+            $('.currency-input').each(function() {
+                $(this).val(formatRupiah($(this).val()));
+            });
             $('#createBarangModal').modal('show');
         @endif
     @endif
 
+    // Reset Form Create saat modal dibuka (jika tidak ada error)
     $('#createBarangModal').on('show.bs.modal', function () {
         let hasCreateErrors = {{ $errors->any() && !session('edit_form_id') ? 'true' : 'false' }};
 
         if (!hasCreateErrors) {
             $('#createForm')[0].reset();
-            $('#create_part_name').val('');
-            $('#create_part_code').val('');
-            $('#create_merk').val('');
-            $('#create_selling_in').val('0');
-            $('#create_selling_out').val('0');
-            $('#create_retail').val('0');
             $('#createForm .is-invalid').removeClass('is-invalid');
             $('#createForm .alert-danger').remove();
         }
     });
 
+    // Reset Form Edit saat modal ditutup
     $('#editBarangModal').on('hidden.bs.modal', function () {
         let hasEditErrors = {{ $errors->any() && session('edit_form_id') ? 'true' : 'false' }};
         if (!hasEditErrors) {

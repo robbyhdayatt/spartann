@@ -11,6 +11,10 @@ class StockAdjustment extends Model
 
     protected $guarded = ['id'];
 
+    protected $casts = [
+        'approved_at' => 'datetime',
+    ];
+
     public function barang()
     {
         return $this->belongsTo(Barang::class, 'barang_id');
@@ -23,7 +27,7 @@ class StockAdjustment extends Model
 
     public function rak()
     {
-        return $this->belongsTo(Rak::class);
+        return $this->belongsTo(Rak::class, 'rak_id');
     }
 
     public function createdBy()

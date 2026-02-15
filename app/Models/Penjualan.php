@@ -25,10 +25,15 @@ class Penjualan extends Model
         'keterangan_diskon',
         'pajak',            
         'status',           
+        'tanggal_jual',
     ];
 
     protected $casts = [
         'tanggal_jual' => 'date',
+        'total_harga' => 'float',
+        'subtotal' => 'float',
+        'pajak' => 'float',
+        'diskon' => 'float',
     ];
 
     public function details()
@@ -64,8 +69,7 @@ class Penjualan extends Model
     public static function generateNomorFaktur()
     {
         $prefix = 'INV/' . date('Ym') . '/';
-        $lastSale = DB::table('penjualans')
-                        ->where('nomor_faktur', 'like', $prefix . '%')
+        $lastSale = self::where('nomor_faktur', 'like', $prefix . '%')
                         ->orderBy('nomor_faktur', 'desc')
                         ->first();
 

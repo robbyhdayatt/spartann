@@ -12,26 +12,28 @@
 @section('content')
 <div class="row justify-content-center">
     <div class="col-md-10">
+        {{-- Alert Errors --}}
+        @if($errors->any())
+            <x-adminlte-alert theme="danger" title="Terdapat Kesalahan!" dismissable>
+                <ul class="mb-0">
+                   @foreach($errors->all() as $error)
+                       <li>{{ $error }}</li>
+                   @endforeach
+                </ul>
+            </x-adminlte-alert>
+        @endif
+
+        @if(session('error'))
+            <x-adminlte-alert theme="danger" title="Gagal" dismissable>
+                {{ session('error') }}
+            </x-adminlte-alert>
+        @endif
+
         <div class="card card-outline card-primary shadow-sm">
             <form action="{{ route('admin.stock-mutations.store') }}" method="POST">
                 @csrf
                 <div class="card-body">
-                    {{-- Alert Info --}}
-                    @if(session('error'))
-                        <div class="alert alert-danger alert-dismissible">
-                            <button type="button" class="close" data-dismiss="alert">×</button>
-                            <i class="icon fas fa-ban"></i> {{ session('error') }}
-                        </div>
-                    @endif
-                    @if ($errors->any())
-                        <div class="alert alert-danger alert-dismissible">
-                            <button type="button" class="close" data-dismiss="alert">×</button>
-                            <ul class="mb-0 pl-3">
-                                @foreach ($errors->all() as $error) <li>{{ $error }}</li> @endforeach
-                            </ul>
-                        </div>
-                    @endif
-
+                    
                     <div class="alert alert-light border-left-primary" role="alert">
                         <i class="fas fa-info-circle text-primary mr-1"></i>
                         Pastikan sisa stok setelah mutasi tidak kurang dari <strong>Batas Minimum</strong>.
@@ -60,8 +62,8 @@
                                         <div class="input-group-prepend">
                                             <span class="input-group-text bg-light"><i class="fas fa-map-marker-alt text-danger"></i></span>
                                         </div>
-                                        <input type="text" class="form-control bg-light" value="{{ $lokasiAsal->first()->nama_lokasi }}" readonly>
-                                        <input type="hidden" id="lokasi_asal_id" name="lokasi_asal_id" value="{{ $lokasiAsal->first()->id }}">
+                                        <input type="text" class="form-control bg-light" value="{{ $lokasiAsal->first()->nama_lokasi ?? '-' }}" readonly>
+                                        <input type="hidden" id="lokasi_asal_id" name="lokasi_asal_id" value="{{ $lokasiAsal->first()->id ?? '' }}">
                                     </div>
                                 @endif
                             </div>
@@ -162,8 +164,7 @@ $(document).ready(function() {
     // --- 1. FILTER LOKASI TUJUAN ---
     function filterLokasiTujuan() {
         const selectedAsalId = lokasiAsalSelect.val();
-        const currentTujuanVal = lokasiTujuanSelect.val();
-
+        
         lokasiTujuanSelect.find('option').each(function() {
             if ($(this).val() === selectedAsalId) {
                 $(this).prop('disabled', true);
@@ -171,12 +172,8 @@ $(document).ready(function() {
                 $(this).prop('disabled', false);
             }
         });
-
-        if (selectedAsalId && currentTujuanVal === selectedAsalId) {
-            lokasiTujuanSelect.val('').trigger('change');
-        } else {
-            lokasiTujuanSelect.trigger('change.select2'); // Refresh UI
-        }
+        // Refresh Select2
+        lokasiTujuanSelect.trigger('change.select2');
     }
 
     // --- 2. LOAD BARANG (YANG ADA STOK) ---
@@ -213,8 +210,8 @@ $(document).ready(function() {
                 barangSelect.html('<option value="">Tidak ada stok tersedia</option>');
             }
         }).fail(() => {
-            alert('Gagal memuat data item.');
-            barangSelect.html('<option value="">Error</option>');
+            // alert('Gagal memuat data item.');
+            barangSelect.html('<option value="">Gagal memuat item</option>');
         });
     }
 
@@ -242,7 +239,7 @@ $(document).ready(function() {
             } else {
                 jumlahInput.prop('disabled', true);
             }
-            validateInput(); // Validasi ulang jika jumlah sudah terisi
+            validateInput(); 
         });
     }
 
@@ -255,24 +252,20 @@ $(document).ready(function() {
         jumlahInput.removeClass('is-invalid is-valid');
         minStockInfo.addClass('d-none');
 
-        if (qty <= 0) {
-            // Belum input valid
-            return;
-        }
+        if (qty <= 0) return;
 
         if (qty > currentTotalStock) {
             jumlahInput.addClass('is-invalid');
-            minStockInfo.removeClass('d-none').text(`Stok tidak cukup! (Maks: ${currentTotalStock})`);
+            minStockInfo.removeClass('d-none').text(`Stok tidak cukup! (Maks: ${currentTotalStock})`).addClass('text-danger');
             btnSubmit.prop('disabled', true);
         } 
         else if (sisa < currentMinStock) {
-            // Peringatan Batas Minimum
-            jumlahInput.addClass('is-invalid'); // Merah
-            minStockInfo.removeClass('d-none').text(`Melewati Batas Minimum! (Min: ${currentMinStock}, Sisa: ${sisa})`);
-            btnSubmit.prop('disabled', true); // Blokir submit
+            jumlahInput.addClass('is-invalid');
+            minStockInfo.removeClass('d-none').text(`Melewati Batas Minimum! (Min: ${currentMinStock}, Sisa: ${sisa})`).addClass('text-danger');
+            btnSubmit.prop('disabled', true);
         } 
         else {
-            jumlahInput.addClass('is-valid'); // Hijau
+            jumlahInput.addClass('is-valid');
         }
     }
 
@@ -281,8 +274,7 @@ $(document).ready(function() {
     barangSelect.on('change', fetchStock);
     jumlahInput.on('input change', validateInput);
 
-    // Init
-    filterLokasiTujuan();
+    // Init onload (jika old value ada)
     if (lokasiAsalSelect.val()) fetchBarangs();
 });
 </script>

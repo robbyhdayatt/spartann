@@ -8,18 +8,16 @@ use App\Models\PurchaseOrderDetail;
 use App\Models\Lokasi;
 use App\Models\Barang;
 use App\Models\Supplier;
-use App\Models\User;
 use App\Models\InventoryBatch;
-use App\Models\StockMovement; 
+use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use PDF; 
+use PDF;
 
 class PurchaseOrderController extends Controller
 {
-    // --- 1. DAFTAR PO ---
     public function index(Request $request)
     {
         $type = $request->get('type', 'dealer_request'); 
@@ -32,21 +30,16 @@ class PurchaseOrderController extends Controller
         return view('admin.purchase_orders.index', compact('purchaseOrders', 'type'));
     }
 
-    // --- 2. HALAMAN BUAT PO BARU ---
     public function create()
     {
         $this->authorize('create-po');
         $user = Auth::user();
         $barangs = Barang::orderBy('part_name')->get();
 
-        // --- SKENARIO 1: DEALER REQUEST (PC, KC) ATAU INVENTORY MD (IMS) ---
-        // Jika user adalah IMS, SA, PIC, atau PC Dealer
-        if ($user->hasRole(['IMS', 'SA', 'PIC', 'PC']) || ($user->lokasi && $user->lokasi->tipe === 'DEALER')) {
+        // Cek Role & Tipe Lokasi
+        if ($user->hasRole(['IMS', 'SA', 'PIC', 'PC', 'KC']) || ($user->lokasi && $user->lokasi->tipe === 'DEALER')) {
             $sumberPusat = Lokasi::where('tipe', 'PUSAT')->first();
             
-            // Jika user Pusat (IMS/SA/PIC), bisa pilih dealer mana saja sebagai pemohon (opsional)
-            // Tapi biasanya Inventory MD buat PO Supplier.
-            // Kita asumsikan ini form untuk Dealer Request ke Pusat.
             if ($user->hasRole(['IMS', 'SA', 'PIC']) || ($user->lokasi && $user->lokasi->tipe === 'PUSAT')) {
                 $dealers = Lokasi::where('tipe', 'DEALER')->where('is_active', true)->orderBy('nama_lokasi')->get();
             } else {
@@ -56,13 +49,10 @@ class PurchaseOrderController extends Controller
             return view('admin.purchase_orders.create_request', compact('sumberPusat', 'dealers', 'barangs'));
         }
 
-        // --- SKENARIO 2: PO SUPPLIER (ADMIN GUDANG / IMS) ---
-        // Digunakan oleh AG, KG, IMS untuk order ke Supplier Eksternal
-        $suppliers = Supplier::all();
+        $suppliers = Supplier::where('is_active', true)->get();
         return view('admin.purchase_orders.create_supplier', compact('suppliers', 'barangs'));
     }
 
-    // --- 3. SIMPAN PO (STORE) ---
     public function store(Request $request)
     {
         $this->authorize('create-po');
@@ -85,16 +75,20 @@ class PurchaseOrderController extends Controller
         $request->validate([
             'supplier_id' => 'required|exists:suppliers,id',
             'items'       => 'required|array',
+            // Pastikan qty & harga valid
+            'items.*.barang_id' => 'required|exists:barangs,id',
+            'items.*.qty'       => 'required|integer|min:1',
+            'items.*.harga_beli'=> 'required|numeric|min:0',
         ]);
 
-        // Default ke Lokasi User, jika null (SA) ambil Gudang Pusat
         $gudangId = Auth::user()->lokasi_id; 
         if (!$gudangId) {
-             $gudangId = Lokasi::where('kode_lokasi', 'GUDANG PART')->value('id');
+             $gudangId = Lokasi::where('tipe', 'PUSAT')->value('id');
         }
 
         DB::beginTransaction();
         try {
+            // Generate Nomor PO
             $poNumber = 'PO-SUP-' . date('ymd') . '-' . strtoupper(Str::random(4));
 
             $po = PurchaseOrder::create([
@@ -113,13 +107,12 @@ class PurchaseOrderController extends Controller
             foreach ($request->items as $item) {
                 if(empty($item['barang_id']) || empty($item['qty'])) continue;
 
-                $barang = Barang::findOrFail($item['barang_id']);
-                $hargaBeli = $barang->selling_in ?? 0;
+                $hargaBeli = $item['harga_beli'];
                 $subtotal = $item['qty'] * $hargaBeli;
 
                 PurchaseOrderDetail::create([
                     'purchase_order_id' => $po->id,
-                    'barang_id'         => $barang->id,
+                    'barang_id'         => $item['barang_id'],
                     'qty_pesan'         => $item['qty'],
                     'harga_beli'        => $hargaBeli,
                     'subtotal'          => $subtotal
@@ -139,269 +132,206 @@ class PurchaseOrderController extends Controller
         }
     }
 
-    // --- 3b. LOGIKA STORE: DEALER REQUEST ---
     protected function storeDealerRequest(Request $request)
     {
         $request->validate([
             'sumber_lokasi_id' => 'required|exists:lokasi,id',
-            'requests' => 'required|string',
+            'requests' => 'required|string', // JSON String
         ]);
 
         $dealerRequests = json_decode($request->requests, true);
 
         if (empty($dealerRequests)) {
-            return back()->with('error', 'Tidak ada item yang direquest.')->withInput();
+            return back()->with('error', 'Item request kosong.')->withInput();
         }
 
         DB::beginTransaction();
         try {
-            $requestGroupId = 'REQ-' . now()->format('ymdHis') . '-' . strtoupper(Str::random(3));
-            $successCount = 0;
+            $groupId = 'REQ-' . now()->timestamp;
+            $count = 0;
 
-            foreach ($dealerRequests as $dealerReq) {
-                $lokasiTujuanId = $dealerReq['lokasi_id'];
-                $items = $dealerReq['items'];
-
+            foreach ($dealerRequests as $req) {
+                $items = $req['items'] ?? [];
                 if (empty($items)) continue;
 
+                $lokasiTujuanId = $req['lokasi_id'];
                 $subtotalPO = 0;
-                $detailsToInsert = [];
 
-                foreach ($items as $item) {
-                    $barang = Barang::find($item['barang_id']);
-                    // Harga Transfer ke Dealer = Selling Out (Harga Jual ke Cabang)
-                    $hargaSatuan = $barang->selling_out > 0 ? $barang->selling_out : $barang->selling_in;
-                    
-                    $subtotalItem = $item['qty'] * $hargaSatuan;
-                    $subtotalPO += $subtotalItem;
-
-                    $detailsToInsert[] = [
-                        'barang_id' => $barang->id,
-                        'qty_pesan' => $item['qty'],
-                        'harga_beli' => $hargaSatuan, 
-                        'subtotal' => $subtotalItem,
-                    ];
-                }
-
+                // Buat Header PO
                 $po = PurchaseOrder::create([
                     'nomor_po' => $this->generatePoNumber($lokasiTujuanId),
                     'po_type' => 'dealer_request',
-                    'request_group_id' => $requestGroupId,
+                    'request_group_id' => $groupId,
                     'tanggal_po' => $request->tanggal_po,
                     'sumber_lokasi_id' => $request->sumber_lokasi_id,
-                    'supplier_id' => null,
                     'lokasi_id' => $lokasiTujuanId,
                     'status' => 'PENDING_APPROVAL',
-                    'total_amount' => $subtotalPO,
                     'created_by' => Auth::id(),
-                    'catatan' => 'Request by ' . Auth::user()->name . ' (Group: ' . $requestGroupId . ')',
+                    'total_amount' => 0
                 ]);
 
-                $po->details()->createMany($detailsToInsert);
-                $successCount++;
+                foreach ($items as $item) {
+                    $barang = Barang::find($item['barang_id']);
+                    // Harga Transfer: Selling Out
+                    $harga = $barang->selling_out > 0 ? $barang->selling_out : $barang->selling_in;
+                    $subtotal = $item['qty'] * $harga;
+
+                    $po->details()->create([
+                        'barang_id' => $barang->id,
+                        'qty_pesan' => $item['qty'],
+                        'harga_beli' => $harga,
+                        'subtotal' => $subtotal
+                    ]);
+                    $subtotalPO += $subtotal;
+                }
+                
+                $po->update(['total_amount' => $subtotalPO]);
+                $count++;
             }
 
             DB::commit();
             return redirect()->route('admin.purchase-orders.index', ['type' => 'dealer_request'])
-                             ->with('success', "Berhasil membuat $successCount Request PO Dealer.");
+                ->with('success', "Berhasil membuat $count Request.");
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with('error', 'Gagal menyimpan: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Gagal: ' . $e->getMessage());
         }
     }
 
     private function generatePoNumber($lokasiId)
     {
         $lokasi = Lokasi::find($lokasiId);
-        $kodeLokasi = $lokasi ? $lokasi->kode_lokasi : 'GEN';
+        $kode = $lokasi ? $lokasi->kode_lokasi : 'GEN';
         $date = now()->format('ymd');
-
-        $count = PurchaseOrder::where('lokasi_id', $lokasiId)
-                              ->whereDate('created_at', today())
-                              ->count();
-        $sequence = str_pad($count + 1, 3, '0', STR_PAD_LEFT);
-
-        return "PO/{$kodeLokasi}/{$date}/{$sequence}";
+        $seq = PurchaseOrder::whereDate('created_at', today())->count() + 1;
+        return "PO/{$kode}/{$date}/" . str_pad($seq, 3, '0', STR_PAD_LEFT);
     }
 
-    // --- 4. DETAIL PO (SHOW) ---
     public function show($id)
     {
-        $purchaseOrder = PurchaseOrder::with([
-            'lokasi', 
-            'sumberLokasi', 
-            'details.barang', 
-            'createdBy', 
-            'approvedBy', 
-            'approvedByHead'
-        ])->findOrFail($id);
-
-        // Jika tipe request dealer, tampilkan info stok di gudang sumber
+        $purchaseOrder = PurchaseOrder::with(['lokasi', 'sumberLokasi', 'details.barang', 'createdBy', 'approvedBy'])
+            ->findOrFail($id);
+            
+        // Tambahkan info stok gudang sumber jika dealer request
         if ($purchaseOrder->po_type === 'dealer_request') {
-            $gudangSumberId = $purchaseOrder->sumber_lokasi_id;
-
-            foreach ($purchaseOrder->details as $detail) {
-                $stokFisik = InventoryBatch::where('lokasi_id', $gudangSumberId)
-                    ->where('barang_id', $detail->barang_id)
-                    ->sum('quantity');
-
-                $stokMin = $detail->barang->stok_minimum ?? 0;
-
-                $detail->stok_aktual_gudang = $stokFisik;
-                $detail->stok_minimum_barang = $stokMin;
-                
-                $sisaSetelahKeluar = $stokFisik - $detail->qty_pesan;
-                $detail->sisa_prediksi = $sisaSetelahKeluar;
-                
-                $detail->is_stock_safe = ($sisaSetelahKeluar >= $stokMin);
-            }
+             foreach ($purchaseOrder->details as $detail) {
+                 $detail->stok_sumber = InventoryBatch::where('lokasi_id', $purchaseOrder->sumber_lokasi_id)
+                     ->where('barang_id', $detail->barang_id)
+                     ->sum('quantity');
+             }
         }
-                                      
+
         return view('admin.purchase_orders.show', compact('purchaseOrder'));
     }
 
-    public function approve(Request $request, PurchaseOrder $purchaseOrder) 
+    public function approve(Request $request, PurchaseOrder $purchaseOrder)
     {
         $this->authorize('approve-po', $purchaseOrder);
-        $user = Auth::user();
-
-        if ($purchaseOrder->po_type === 'supplier_po') {
-            $purchaseOrder->update([
-                'status' => 'APPROVED',
-                'approved_by_head_id' => $user->id,
-                'approved_by_head_at' => now(),
-            ]);
-            return back()->with('success', 'PO Supplier Disetujui.');
+        
+        if ($purchaseOrder->status !== 'PENDING_APPROVAL') {
+            return back()->with('error', 'PO sudah diproses.');
         }
 
-        // --- LOGIKA APPROVE REQUEST DEALER (Internal Transfer) ---
-        if ($purchaseOrder->po_type === 'dealer_request') {
-            
-            $request->validate([
-                'qty_approved' => 'required|array',
-                'qty_approved.*' => 'required|numeric|min:0',
-            ]);
-
-            DB::beginTransaction();
-            try {
-                $gudangSumberId = $purchaseOrder->sumber_lokasi_id;
-                $totalAmountBaru = 0; 
-
-                // 1. UPDATE QTY SESUAI INPUT
-                foreach ($purchaseOrder->details as $detail) {
-                    $barang = $detail->barang;
-                    $qtyDisetujui = $request->qty_approved[$detail->id] ?? $detail->qty_pesan;
-                    
-                    // Update Detail PO 
-                    if ($qtyDisetujui != $detail->qty_pesan) {
-                        $subtotalBaru = $qtyDisetujui * $detail->harga_beli;
-                        $detail->update([
-                            'qty_pesan' => $qtyDisetujui,
-                            'subtotal'  => $subtotalBaru
-                        ]);
-                    }
-                    $totalAmountBaru += ($qtyDisetujui * $detail->harga_beli);
-                }
-
-                $purchaseOrder->update(['total_amount' => $totalAmountBaru]);
-
-                // 2. EKSEKUSI PENGURANGAN STOK (FIFO) - DENGAN LOCKING
-                foreach ($purchaseOrder->details as $detail) {
-                    $qtySisaPotong = $detail->qty_pesan; 
-                    
-                    if ($qtySisaPotong == 0) continue; 
-
-                    // === ANTI RACE CONDITION: LOCK FOR UPDATE ===
-                    $batches = InventoryBatch::where('lokasi_id', $gudangSumberId)
-                        ->where('barang_id', $detail->barang_id)
-                        ->where('quantity', '>', 0)
-                        ->orderBy('created_at', 'asc')
-                        ->lockForUpdate() // <--- LOCKING PENTING
-                        ->get();
-
-                    // Cek Total Stok Fisik Lagi (Double Check)
-                    if ($batches->sum('quantity') < $qtySisaPotong) {
-                        throw new \Exception("Stok {$detail->barang->part_name} tidak mencukupi saat diproses. Transaksi dibatalkan.");
-                    }
-
-                    foreach ($batches as $batch) {
-                        if ($qtySisaPotong <= 0) break;
-
-                        $stokSebelumPotong = $batch->quantity;
-
-                        if ($batch->quantity >= $qtySisaPotong) {
-                            $batch->decrement('quantity', $qtySisaPotong);
-                            
-                            $this->createStockMovement($detail, $gudangSumberId, $batch->rak_id, $qtySisaPotong, $stokSebelumPotong, $purchaseOrder, $user);
-                            
-                            $qtySisaPotong = 0;
-                        } else {
-                            $qtyDiambil = $batch->quantity;
-                            
-                            $this->createStockMovement($detail, $gudangSumberId, $batch->rak_id, $qtyDiambil, $stokSebelumPotong, $purchaseOrder, $user);
-
-                            $qtySisaPotong -= $qtyDiambil;
-                            $batch->update(['quantity' => 0]);
-                        }
-                    }
-                }
-
+        DB::beginTransaction();
+        try {
+            if ($purchaseOrder->po_type === 'supplier_po') {
                 $purchaseOrder->update([
                     'status' => 'APPROVED',
-                    'approved_by' => $user->id,
-                    'approved_at' => now(),
+                    'approved_by' => Auth::id(),
+                    'approved_at' => now()
                 ]);
+            } 
+            // Logic Approve Dealer Request (Potong Stok Sumber & Lock)
+            elseif ($purchaseOrder->po_type === 'dealer_request') {
+                $request->validate(['qty_approved' => 'required|array']);
+                
+                // === LOCK PO AGAR TIDAK DOUBLE APPROVE ===
+                $poLocked = PurchaseOrder::where('id', $purchaseOrder->id)->lockForUpdate()->first();
 
-                DB::commit();
-                return back()->with('success', 'Request Dealer Disetujui. Stok dipotong aman (Locked).');
+                foreach ($poLocked->details as $detail) {
+                    $qtyApprove = $request->qty_approved[$detail->id] ?? 0;
+                    
+                    if ($qtyApprove > 0) {
+                        // Ambil batch dari Gudang Sumber (FIFO)
+                        $batches = InventoryBatch::where('lokasi_id', $poLocked->sumber_lokasi_id)
+                            ->where('barang_id', $detail->barang_id)
+                            ->where('quantity', '>', 0)
+                            ->orderBy('created_at', 'asc')
+                            ->lockForUpdate() // LOCK PENTING
+                            ->get();
+                        
+                        $sisaButuh = $qtyApprove;
+                        
+                        if ($batches->sum('quantity') < $sisaButuh) {
+                            throw new \Exception("Stok {$detail->barang->part_name} di Gudang Sumber tidak cukup.");
+                        }
 
-            } catch (\Exception $e) {
-                DB::rollBack();
-                return back()->with('error', $e->getMessage());
+                        foreach ($batches as $batch) {
+                            if ($sisaButuh <= 0) break;
+                            $ambil = min($batch->quantity, $sisaButuh);
+                            
+                            $stokAwal = $batch->quantity;
+                            $batch->decrement('quantity', $ambil);
+
+                            // Catat Mutasi Keluar dari Sumber (Transit)
+                            // Nanti saat Dealer Receive, baru masuk stok Dealer
+                            StockMovement::create([
+                                'barang_id' => $detail->barang_id,
+                                'lokasi_id' => $poLocked->sumber_lokasi_id,
+                                'rak_id'    => $batch->rak_id,
+                                'jumlah'    => -$ambil,
+                                'stok_sebelum' => $stokAwal,
+                                'stok_sesudah' => $stokAwal - $ambil,
+                                'referensi_type' => PurchaseOrder::class,
+                                'referensi_id' => $poLocked->id,
+                                'keterangan' => 'Transfer Out ke ' . $poLocked->lokasi->nama_lokasi,
+                                'user_id' => Auth::id()
+                            ]);
+
+                            $sisaButuh -= $ambil;
+                        }
+                    }
+                    
+                    // Update qty pesan dengan qty approved
+                    $detail->update(['qty_pesan' => $qtyApprove, 'subtotal' => $qtyApprove * $detail->harga_beli]);
+                }
+                
+                $poLocked->update([
+                    'status' => 'APPROVED', 
+                    'approved_by' => Auth::id(), 
+                    'approved_at' => now(),
+                    'total_amount' => $poLocked->details->sum('subtotal')
+                ]);
             }
-        }
-    }
 
-    private function createStockMovement($detail, $lokasiId, $rakId, $jumlah, $stokSebelum, $po, $user) 
-    {
-        StockMovement::create([
-            'barang_id' => $detail->barang_id,
-            'lokasi_id' => $lokasiId,
-            'rak_id'    => $rakId,
-            'jumlah'    => -$jumlah,
-            'stok_sebelum' => $stokSebelum,
-            'stok_sesudah' => $stokSebelum - $jumlah,
-            'user_id'   => $user->id,
-            'referensi_type' => PurchaseOrder::class,
-            'referensi_id'   => $po->id,
-            'keterangan' => 'Transfer Keluar ke ' . $po->lokasi->nama_lokasi,
-            'created_at' => now(),
-        ]);
+            DB::commit();
+            return back()->with('success', 'PO Disetujui.');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     public function reject(Request $request, PurchaseOrder $purchaseOrder)
     {
         $this->authorize('approve-po', $purchaseOrder);
-        $request->validate(['rejection_reason' => 'required|string|min:5']);
+        $request->validate(['rejection_reason' => 'required']);
 
         $purchaseOrder->update([
             'status' => 'REJECTED',
             'rejection_reason' => $request->rejection_reason,
             'approved_by' => Auth::id(),
-            'approved_at' => now(),
+            'approved_at' => now()
         ]);
 
-        return back()->with('success', 'PO berhasil ditolak.');
+        return back()->with('success', 'PO Ditolak.');
     }
-
+    
     public function pdf(PurchaseOrder $purchaseOrder)
     {
-        $purchaseOrder->load(['lokasi', 'sumberLokasi', 'details.barang', 'createdBy', 'approvedBy', 'approvedByHead']);
-        
-        $pdf = PDF::loadView('admin.purchase_orders.print', compact('purchaseOrder'));
-        $pdf->setPaper('a4', 'portrait');
-        
-        return $pdf->stream('PO-' . $purchaseOrder->nomor_po . '.pdf');
+         $pdf = PDF::loadView('admin.purchase_orders.print', compact('purchaseOrder'));
+         return $pdf->stream('PO.pdf');
     }
 }

@@ -12,6 +12,7 @@ use App\Models\Rak;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class StockAdjustmentController extends Controller
 {
@@ -19,9 +20,11 @@ class StockAdjustmentController extends Controller
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
-        $query = StockAdjustment::with(['barang', 'lokasi', 'rak', 'createdBy', 'approvedBy']);
+        
+        $query = StockAdjustment::with(['barang', 'lokasi', 'rak', 'createdBy', 'approvedBy'])
+            ->latest();
 
-        // Filter berdasarkan hak akses lokasi
+        // Filter Role
         if (!$user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'SMD'])) {
             if ($user->lokasi_id) {
                 $query->where('lokasi_id', $user->lokasi_id);
@@ -30,208 +33,222 @@ class StockAdjustmentController extends Controller
             }
         }
 
-        $adjustments = $query->latest()->get();
+        $adjustments = $query->get();
         return view('admin.stock_adjustments.index', compact('adjustments'));
     }
 
     public function create()
     {
         $this->authorize('create-stock-adjustment');
+        $user = Auth::user();
 
-        /** @var \App\Models\User $user */
-        $user = auth()->user();
-
-        $barangs = Barang::orderBy('part_name')->get();
-        $userLokasi = null;
-        $allLokasi = collect();
-
-        // 1. User Level Pusat (SA, PIC, dll) -> Bisa pilih lokasi target
+        // Load lokasi berdasarkan role
         if ($user->hasRole(['SA', 'PIC', 'ACC', 'SMD', 'MA'])) {
-            $allLokasi = Lokasi::where('is_active', true)
-                               ->where('tipe', '!=', 'PUSAT') 
-                               ->orderBy('nama_lokasi')
-                               ->get();
-        }
-        // 2. User Level Dealer/Gudang -> Lokasi terkunci
-        elseif ($user->lokasi_id) {
-            $userLokasi = Lokasi::where('id', $user->lokasi_id)->where('is_active', true)->first();
-
-            if (!$userLokasi) {
-                 return redirect()->route('admin.stock-adjustments.index')
-                      ->with('error', 'Lokasi Anda tidak aktif atau tidak ditemukan.');
+            $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
+        } else {
+            if(!$user->lokasi_id) {
+                return redirect()->route('admin.stock-adjustments.index')->with('error', 'Akun tidak terhubung lokasi.');
             }
-        }
-        // 3. Fallback
-        else {
-             return redirect()->route('admin.stock-adjustments.index')
-                  ->with('error', 'Akun Anda tidak terhubung ke lokasi manapun.');
+            $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
         }
 
-        return view('admin.stock_adjustments.create', compact('userLokasi', 'allLokasi', 'barangs'));
-    }
-
-    // API untuk mengambil rak berdasarkan lokasi
-    public function getRaksByLokasi(Lokasi $lokasi)
-    {
-        $raks = Rak::where('lokasi_id', $lokasi->id)
-                   ->where('is_active', true)
-                   ->where('tipe_rak', 'PENYIMPANAN')
-                   ->get();
-
-        return response()->json($raks);
+        return view('admin.stock_adjustments.create', compact('lokasis'));
     }
 
     public function store(Request $request)
-     {
-         $this->authorize('create-stock-adjustment');
-         $validated = $request->validate([
-             'barang_id' => 'required|exists:barangs,id',
-             'lokasi_id' => 'required|exists:lokasi,id',
-             'rak_id' => 'required|exists:raks,id',
-             'tipe' => 'required|in:TAMBAH,KURANG',
-             'jumlah' => 'required|integer|min:1',
-             'alasan' => 'required|string',
-         ]);
+    {
+        $this->authorize('create-stock-adjustment');
 
-          // Validasi Rak milik Lokasi
-          $rakIsValid = Rak::where('id', $validated['rak_id'])
-                           ->where('lokasi_id', $validated['lokasi_id'])
-                           ->exists();
+        $validator = Validator::make($request->all(), [
+            'lokasi_id' => 'required|exists:lokasi,id',
+            'rak_id'    => 'required|exists:raks,id',
+            'barang_id' => 'required|exists:barangs,id',
+            'tipe'      => 'required|in:TAMBAH,KURANG',
+            'jumlah'    => 'required|integer|min:1',
+            'alasan'    => 'required|string|max:255',
+        ]);
 
-          if (!$rakIsValid) {
-              return back()->withInput()->withErrors(['rak_id' => 'Rak yang dipilih tidak valid untuk lokasi yang dipilih.']);
-          }
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
 
-         StockAdjustment::create([
-             'barang_id' => $validated['barang_id'],
-             'lokasi_id' => $validated['lokasi_id'],
-             'rak_id' => $validated['rak_id'],
-             'tipe' => $validated['tipe'],
-             'jumlah' => $validated['jumlah'],
-             'alasan' => $validated['alasan'],
-             'status' => 'PENDING_APPROVAL',
-             'created_by' => Auth::id(),
-         ]);
+        // Validasi Rak milik Lokasi
+        $rakExists = Rak::where('id', $request->rak_id)
+            ->where('lokasi_id', $request->lokasi_id)
+            ->exists();
+            
+        if (!$rakExists) {
+            return back()->with('error', 'Rak tidak valid untuk lokasi yang dipilih.')->withInput();
+        }
 
-         return redirect()->route('admin.stock-adjustments.index')->with('success', 'Permintaan adjusment stok berhasil dibuat dan menunggu persetujuan.');
-     }
+        // Validasi Stok Awal (Soft Check)
+        if ($request->tipe === 'KURANG') {
+            $currentStock = InventoryBatch::where('lokasi_id', $request->lokasi_id)
+                ->where('rak_id', $request->rak_id)
+                ->where('barang_id', $request->barang_id)
+                ->sum('quantity');
+
+            if ($request->jumlah > $currentStock) {
+                return back()->with('error', "Gagal! Anda ingin mengurangi {$request->jumlah}, tapi stok di Rak tersebut hanya {$currentStock}.")->withInput();
+            }
+        }
+
+        StockAdjustment::create([
+            'barang_id'  => $request->barang_id,
+            'lokasi_id'  => $request->lokasi_id,
+            'rak_id'     => $request->rak_id,
+            'tipe'       => $request->tipe,
+            'jumlah'     => $request->jumlah,
+            'alasan'     => $request->alasan,
+            'status'     => 'PENDING_APPROVAL',
+            'created_by' => Auth::id(),
+        ]);
+
+        return redirect()->route('admin.stock-adjustments.index')
+            ->with('success', 'Permintaan adjustment berhasil dibuat. Menunggu persetujuan.');
+    }
 
     public function approve(StockAdjustment $stockAdjustment)
     {
         $this->authorize('approve-stock-adjustment', $stockAdjustment);
 
         if ($stockAdjustment->status !== 'PENDING_APPROVAL') {
-            return back()->with('error', 'Permintaan ini sudah diproses.');
+            return back()->with('error', 'Status adjustment tidak valid untuk diproses.');
         }
 
+        DB::beginTransaction();
         try {
-            DB::transaction(function () use ($stockAdjustment) {
-                $part_id = $stockAdjustment->barang_id;
-                $rak_id = $stockAdjustment->rak_id;
-                $lokasi_id = $stockAdjustment->lokasi_id;
-                $jumlahToAdjust = $stockAdjustment->jumlah;
-                $tipe = $stockAdjustment->tipe;
+            $qty = $stockAdjustment->jumlah;
+            
+            if ($stockAdjustment->tipe === 'KURANG') {
+                // --- PESSIMISTIC LOCKING ---
+                $batches = InventoryBatch::where('barang_id', $stockAdjustment->barang_id)
+                    ->where('lokasi_id', $stockAdjustment->lokasi_id)
+                    ->where('rak_id', $stockAdjustment->rak_id) // Spesifik Rak
+                    ->where('quantity', '>', 0)
+                    ->orderBy('created_at', 'asc') // FIFO
+                    ->lockForUpdate()
+                    ->get();
 
-                $stokSesudah = 0;
-                $stokSebelum = 0;
+                $totalAvailable = $batches->sum('quantity');
 
-                if ($tipe === 'KURANG') {
-                    // [PERBAIKAN RACE CONDITION]
-                    // Lock batch saat ingin mengurangi stok agar validasi stok akurat
-                    $batches = InventoryBatch::where('barang_id', $part_id)
-                        ->where('rak_id', $rak_id)
-                        ->where('quantity', '>', 0)
-                        ->orderBy('created_at', 'asc')
-                        ->lockForUpdate() // <--- LOCKING PENTING
-                        ->get();
-
-                    $stokSebelum = $batches->sum('quantity');
-
-                    if ($stokSebelum < $jumlahToAdjust) {
-                        throw new \Exception('Stok tidak mencukupi. Stok tersedia: ' . $stokSebelum . ', dibutuhkan: ' . $jumlahToAdjust);
-                    }
-
-                    $remainingQtyToReduce = $jumlahToAdjust;
-
-                    foreach ($batches as $batch) {
-                        if ($remainingQtyToReduce <= 0) break;
-                        $qtyInBatch = $batch->quantity;
-
-                        if ($qtyInBatch >= $remainingQtyToReduce) {
-                            $batch->quantity -= $remainingQtyToReduce;
-                            $remainingQtyToReduce = 0;
-                        } else {
-                            $remainingQtyToReduce -= $qtyInBatch;
-                            $batch->quantity = 0;
-                        }
-
-                        if ($batch->quantity == 0) {
-                            $batch->delete();
-                        } else {
-                            $batch->save();
-                        }
-                    }
-                    $stokSesudah = $stokSebelum - $jumlahToAdjust;
-
-                } else { // Tipe 'TAMBAH'
-                    // Untuk penambahan, kita hanya perlu snapshot stok saat ini untuk log history
-                    // Menggunakan lockForUpdate() opsional, tapi disarankan untuk konsistensi data
-                    $stokSebelum = InventoryBatch::where('barang_id', $part_id)
-                        ->where('rak_id', $rak_id)
-                        ->lockForUpdate()
-                        ->sum('quantity');
-
-                    InventoryBatch::create([
-                        'barang_id' => $part_id,
-                        'rak_id' => $rak_id,
-                        'lokasi_id' => $lokasi_id,
-                        'quantity' => $jumlahToAdjust,
-                        'receiving_detail_id' => null,
-                    ]);
-                    $stokSesudah = $stokSebelum + $jumlahToAdjust;
+                if ($totalAvailable < $qty) {
+                    throw new \Exception("Stok fisik berubah saat proses approval! Tersedia: {$totalAvailable}, Diminta Kurang: {$qty}");
                 }
 
-                StockMovement::create([
-                    'barang_id' => $part_id,
-                    'lokasi_id' => $lokasi_id,
-                    'rak_id' => $rak_id,
-                    'jumlah' => ($tipe === 'TAMBAH' ? $jumlahToAdjust : -$jumlahToAdjust),
-                    'stok_sebelum' => $stokSebelum,
-                    'stok_sesudah' => $stokSesudah,
-                    'referensi_type' => get_class($stockAdjustment),
-                    'referensi_id' => $stockAdjustment->id,
-                    'keterangan' => "Adjustment: " . $stockAdjustment->alasan,
-                    'user_id' => $stockAdjustment->created_by,
+                $remaining = $qty;
+                
+                foreach ($batches as $batch) {
+                    if ($remaining <= 0) break;
+                    
+                    $take = min($batch->quantity, $remaining);
+                    
+                    // Update Batch
+                    $stokAwal = $batch->quantity;
+                    $batch->decrement('quantity', $take);
+                    
+                    // Catat Movement
+                    StockMovement::create([
+                        'barang_id'    => $stockAdjustment->barang_id,
+                        'lokasi_id'    => $stockAdjustment->lokasi_id,
+                        'rak_id'       => $stockAdjustment->rak_id,
+                        'jumlah'       => -$take,
+                        'stok_sebelum' => $stokAwal,
+                        'stok_sesudah' => $stokAwal - $take,
+                        'referensi_type' => get_class($stockAdjustment),
+                        'referensi_id'   => $stockAdjustment->id,
+                        'keterangan'     => "Adjustment (KURANG): " . $stockAdjustment->alasan,
+                        'user_id'        => Auth::id(),
+                    ]);
+
+                    $remaining -= $take;
+                }
+
+            } else {
+                // TIPE: TAMBAH
+                // Buat Batch Baru
+                // Kita ambil stok terakhir untuk log history movement (opsional lock)
+                $currentTotal = InventoryBatch::where('barang_id', $stockAdjustment->barang_id)
+                    ->where('rak_id', $stockAdjustment->rak_id)
+                    ->sum('quantity');
+
+                InventoryBatch::create([
+                    'barang_id' => $stockAdjustment->barang_id,
+                    'lokasi_id' => $stockAdjustment->lokasi_id,
+                    'rak_id'    => $stockAdjustment->rak_id,
+                    'quantity'  => $qty,
+                    'receiving_detail_id' => null // Adjustment manual
                 ]);
 
-                $stockAdjustment->status = 'APPROVED';
-                $stockAdjustment->approved_by = Auth::id();
-                $stockAdjustment->approved_at = now();
-                $stockAdjustment->save();
-            });
+                StockMovement::create([
+                    'barang_id'    => $stockAdjustment->barang_id,
+                    'lokasi_id'    => $stockAdjustment->lokasi_id,
+                    'rak_id'       => $stockAdjustment->rak_id,
+                    'jumlah'       => $qty,
+                    'stok_sebelum' => $currentTotal,
+                    'stok_sesudah' => $currentTotal + $qty,
+                    'referensi_type' => get_class($stockAdjustment),
+                    'referensi_id'   => $stockAdjustment->id,
+                    'keterangan'     => "Adjustment (TAMBAH): " . $stockAdjustment->alasan,
+                    'user_id'        => Auth::id(),
+                ]);
+            }
 
-            return redirect()->route('admin.stock-adjustments.index')->with('success', 'Adjusment stok disetujui dan stok telah diperbarui.');
+            $stockAdjustment->update([
+                'status' => 'APPROVED',
+                'approved_by' => Auth::id(),
+                'approved_at' => now()
+            ]);
+
+            DB::commit();
+            return back()->with('success', 'Adjustment berhasil disetujui dan stok diperbarui.');
 
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal memproses persetujuan: ' . $e->getMessage());
+            DB::rollBack();
+            return back()->with('error', 'Gagal memproses: ' . $e->getMessage());
         }
     }
 
     public function reject(Request $request, StockAdjustment $stockAdjustment)
     {
         $this->authorize('approve-stock-adjustment', $stockAdjustment);
-        $request->validate(['rejection_reason' => 'required|string|min:10']);
+        
+        $request->validate([
+            'rejection_reason' => 'required|string|max:255'
+        ]);
 
         if ($stockAdjustment->status !== 'PENDING_APPROVAL') {
-            return back()->with('error', 'Permintaan ini sudah diproses.');
+            return back()->with('error', 'Status adjustment tidak valid.');
         }
 
-        $stockAdjustment->status = 'REJECTED';
-        $stockAdjustment->rejection_reason = $request->rejection_reason;
-        $stockAdjustment->approved_by = Auth::id();
-        $stockAdjustment->approved_at = now();
-        $stockAdjustment->save();
+        $stockAdjustment->update([
+            'status' => 'REJECTED',
+            'rejection_reason' => $request->rejection_reason,
+            'approved_by' => Auth::id(),
+            'approved_at' => now()
+        ]);
 
-        return redirect()->route('admin.stock-adjustments.index')->with('success', 'Permintaan adjusment stok telah ditolak.');
+        return back()->with('success', 'Permintaan adjustment ditolak.');
+    }
+
+    // --- API for Ajax ---
+    public function getRaksByLokasi(Lokasi $lokasi)
+    {
+        return response()->json($lokasi->raks()->orderBy('nama_rak')->get());
+    }
+
+    public function checkStock(Request $request)
+    {
+        // Validasi input API
+        if(!$request->lokasi_id || !$request->rak_id || !$request->barang_id) {
+             return response()->json(['stock' => 0]);
+        }
+
+        $stock = InventoryBatch::where('lokasi_id', $request->lokasi_id)
+            ->where('rak_id', $request->rak_id)
+            ->where('barang_id', $request->barang_id)
+            ->sum('quantity');
+
+        return response()->json(['stock' => (int)$stock]);
     }
 }

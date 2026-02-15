@@ -1,186 +1,210 @@
 @extends('adminlte::page')
 
 @section('title', 'Buat Stock Adjustment')
-
 @section('plugins.Select2', true)
 
 @section('content_header')
-    <h1>Buat Permintaan Stock Adjustment</h1>
+    <h1>Buat Stock Adjustment</h1>
 @stop
 
 @section('content')
-<div class="card">
-    <form action="{{ route('admin.stock-adjustments.store') }}" method="POST">
-        @csrf
-        <div class="card-body">
-            @if ($errors->any())
-                <div class="alert alert-danger">
-                    <ul class="mb-0">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card card-outline card-primary">
+            <form action="{{ route('admin.stock-adjustments.store') }}" method="POST">
+                @csrf
+                <div class="card-body">
+                    
+                    @if($errors->any())
+                        <x-adminlte-alert theme="danger" title="Error" dismissable>
+                            <ul class="mb-0 pl-3">
+                                @foreach($errors->all() as $error) <li>{{ $error }}</li> @endforeach
+                            </ul>
+                        </x-adminlte-alert>
+                    @endif
 
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="lokasi_id">Lokasi Adjustment <span class="text-danger">*</span></label>
-
-                        @if($userLokasi)
-                            {{-- Jika user terikat lokasi (Dealer) --}}
-                            <input type="text" class="form-control" value="{{ $userLokasi->nama_lokasi }} ({{ $userLokasi->kode_lokasi }})" readonly>
-                            <input type="hidden" name="lokasi_id" id="lokasi_id" value="{{ $userLokasi->id }}">
-                        @else
-                            {{-- Jika user Pusat/Global --}}
-                            <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
-                                <option value="">-- Pilih Lokasi --</option>
-                                @foreach($allLokasi as $loc)
-                                    <option value="{{ $loc->id }}" {{ old('lokasi_id') == $loc->id ? 'selected' : '' }}>
-                                        {{ $loc->nama_lokasi }} ({{ $loc->kode_lokasi }})
-                                    </option>
-                                @endforeach
-                            </select>
-                        @endif
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Lokasi</label>
+                                <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
+                                    @if(count($lokasis) > 1)
+                                        <option value="" selected disabled>-- Pilih Lokasi --</option>
+                                    @endif
+                                    @foreach($lokasis as $lok)
+                                        <option value="{{ $lok->id }}" {{ count($lokasis) == 1 ? 'selected' : '' }}>
+                                            {{ $lok->nama_lokasi }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Rak</label>
+                                <select name="rak_id" id="rak_id" class="form-control select2" required disabled>
+                                    <option value="">-- Pilih Lokasi Dulu --</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="col-md-6">
                     <div class="form-group">
-                        <label for="rak_id">Pilih Rak <span class="text-danger">*</span></label>
-                        <select name="rak_id" id="rak_id" class="form-control select2" required disabled>
-                            <option value="">-- Pilih Lokasi Dahulu --</option>
-                        </select>
-                        <small class="text-muted" id="rak-loading" style="display:none;">Memuat data rak...</small>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="barang_id">Pilih Barang <span class="text-danger">*</span></label>
-                        <select name="barang_id" id="barang_id" class="form-control select2" required>
-                            <option value="">-- Pilih Barang --</option>
-                            @foreach($barangs as $item)
-                                <option value="{{ $item->id }}" {{ old('barang_id') == $item->id ? 'selected' : '' }}>
-                                    {{ $item->part_name }} ({{ $item->part_code }}) {{ $item->merk ? '- '.$item->merk : '' }}
-                                </option>
-                            @endforeach
+                        <label>Barang</label>
+                        {{-- Select2 Ajax untuk Barang bisa lebih efisien jika data banyak, 
+                             disini saya gunakan Select2 standar dengan helper API --}}
+                        <select name="barang_id" id="barang_id" class="form-control select2" required disabled>
+                             <option value="">-- Pilih Rak Dulu --</option>
                         </select>
                     </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="tipe">Tipe Adjustment <span class="text-danger">*</span></label>
-                        <select name="tipe" id="tipe" class="form-control" required>
-                            <option value="KURANG" {{ old('tipe') == 'KURANG' ? 'selected' : '' }}>KURANG (Stok Hilang/Rusak)</option>
-                            <option value="TAMBAH" {{ old('tipe') == 'TAMBAH' ? 'selected' : '' }}>TAMBAH (Stok Ketemu/Lebih)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="jumlah">Jumlah <span class="text-danger">*</span></label>
-                        <input type="number" name="jumlah" id="jumlah" class="form-control" min="1" value="{{ old('jumlah', 1) }}" required>
-                    </div>
-                </div>
-            </div>
 
-            <div class="form-group">
-                <label for="alasan">Alasan / Keterangan <span class="text-danger">*</span></label>
-                <textarea name="alasan" id="alasan" class="form-control" rows="3" placeholder="Contoh: Barang rusak saat display, atau selisih stok opname" required>{{ old('alasan') }}</textarea>
-            </div>
+                    <div class="alert alert-info d-none" id="stock-info">
+                        <i class="fas fa-info-circle"></i> Stok saat ini di Rak tersebut: <strong id="stock-val">0</strong> unit.
+                    </div>
 
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Tipe Adjustment</label>
+                                <select name="tipe" id="tipe" class="form-control" required>
+                                    <option value="TAMBAH">TAMBAH (Stok Lebih/Ketemu)</option>
+                                    <option value="KURANG">KURANG (Stok Hilang/Rusak)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Jumlah Penyesuaian</label>
+                                <input type="number" name="jumlah" id="jumlah" class="form-control" min="1" required placeholder="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Alasan</label>
+                        <textarea name="alasan" class="form-control" rows="2" required placeholder="Contoh: Selisih SO bulan Juni..."></textarea>
+                    </div>
+
+                </div>
+                <div class="card-footer text-right">
+                    <a href="{{ route('admin.stock-adjustments.index') }}" class="btn btn-secondary">Batal</a>
+                    <button type="submit" class="btn btn-primary" id="btn-submit">Simpan</button>
+                </div>
+            </form>
         </div>
-        <div class="card-footer">
-            <button type="submit" class="btn btn-primary">Simpan Permintaan</button>
-            <a href="{{ route('admin.stock-adjustments.index') }}" class="btn btn-secondary">Batal</a>
-        </div>
-    </form>
+    </div>
 </div>
 @stop
-
-@push('css')
-<style>
-    .select2-container .select2-selection--single { height: calc(2.25rem + 2px) !important; }
-    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 1.5 !important; padding-left: .75rem !important; padding-top: .375rem !important; }
-    .select2-container--default .select2-selection--single .select2-selection__arrow { height: calc(2.25rem + 2px) !important; }
-</style>
-@endpush
 
 @section('js')
 <script>
 $(document).ready(function() {
-    $('.select2').select2({
-        theme: 'bootstrap4'
-    });
+    $('.select2').select2({ theme: 'bootstrap4' });
 
     const lokasiSelect = $('#lokasi_id');
-    const rakSelect = $('#rak_id');
-    const loadingLabel = $('#rak-loading');
+    const rakSelect    = $('#rak_id');
+    const barangSelect = $('#barang_id');
+    const stockInfo    = $('#stock-info');
+    const stockVal     = $('#stock-val');
+    const jumlahInput  = $('#jumlah');
+    const tipeSelect   = $('#tipe');
+    const btnSubmit    = $('#btn-submit');
+    let currentStock = 0;
 
-    // Fungsi Load Rak via AJAX
+    // 1. Load Rak saat Lokasi berubah
     function loadRaks(lokasiId) {
-        if (!lokasiId) {
-            rakSelect.empty().append('<option value="">-- Pilih Lokasi Dahulu --</option>').prop('disabled', true);
-            return;
-        }
+        if(!lokasiId) return;
+        rakSelect.prop('disabled', true).html('<option>Loading...</option>');
+        
+        $.get("{{ url('admin/api/lokasi') }}/" + lokasiId + "/raks", function(data){
+            rakSelect.empty().append('<option value="" selected disabled>-- Pilih Rak --</option>');
+            data.forEach(function(rak){
+                rakSelect.append(new Option(rak.nama_rak + ' ('+rak.kode_rak+')', rak.id));
+            });
+            rakSelect.prop('disabled', false);
+        });
+    }
 
-        loadingLabel.show();
-        rakSelect.prop('disabled', true);
-
-        // URL API: pastikan route ini ada di web.php (Route::get('/api/lokasi/{lokasi}/raks', ...))
-        let url = "{{ url('admin/api/lokasi') }}/" + lokasiId + "/raks";
-
-        $.ajax({
-            url: url,
-            type: 'GET',
+    // 2. Load Barang saat Rak berubah (Hanya barang yang ada stok di lokasi itu? 
+    //    Untuk adjustment TAMBAH, harusnya semua barang bisa. 
+    //    Disini kita load semua barang aktif via API getBarangItems umum atau API khusus)
+    //    Untuk efisiensi, mari gunakan endpoint yang sudah kita buat di Penjualan/Mutation.
+    function loadBarangs(lokasiId) {
+        // Kita gunakan endpoint dari StockMutationController yang sudah ada: getPartsWithStock
+        // Atau ambil semua barang master. Agar aman (bisa TAMBAH barang yang stok 0), ambil master barang.
+        barangSelect.prop('disabled', true).html('<option>Loading...</option>');
+        
+        // Kita panggil API master barang
+        // Asumsi route: admin.barangs.index (json) atau buat helper baru.
+        // Agar cepat, kita gunakan data dari Mutation logic: Parts yang ada di lokasi ini. 
+        // TAPI: Adjustment TAMBAH bisa untuk barang yang stoknya 0.
+        // Solusi: Kita gunakan search select2 ajax ke endpoint general barang.
+        barangSelect.prop('disabled', false).empty(); // Reset dan enable agar select2 ajax jalan
+    }
+    
+    // Inisialisasi Select2 Ajax untuk Barang
+    barangSelect.select2({
+        theme: 'bootstrap4',
+        placeholder: 'Cari Barang...',
+        ajax: {
+            url: "{{ route('admin.api.penjualan.items') }}", // Gunakan endpoint penjualan yang return semua barang aktif
             dataType: 'json',
-            success: function(data) {
-                rakSelect.empty();
-                if (data.length > 0) {
-                    rakSelect.append('<option value="">-- Pilih Rak --</option>');
-                    $.each(data, function(key, value) {
-                        let selected = "{{ old('rak_id') }}" == value.id ? 'selected' : '';
-                        rakSelect.append('<option value="' + value.id + '" '+selected+'>' + value.kode_rak + ' (' + value.nama_rak + ')</option>');
-                    });
-                    rakSelect.prop('disabled', false);
-                } else {
-                    rakSelect.append('<option value="">Tidak ada rak di lokasi ini</option>');
-                }
+            delay: 250,
+            data: function (params) {
+                return { 
+                    q: params.term, 
+                    lokasi_id: lokasiSelect.val() // Kirim lokasi agar backend bisa kasih info stok (optional)
+                };
             },
-            error: function(xhr) {
-                console.error(xhr);
-                alert('Gagal memuat data rak. Periksa koneksi atau refresh halaman.');
+            processResults: function (data) {
+                return { results: data };
             },
-            complete: function() {
-                loadingLabel.hide();
-            }
-        });
+            cache: true
+        }
+    });
+
+    // 3. Cek Stok saat Barang/Rak Dipilih
+    function checkStock() {
+        let l_id = lokasiSelect.val();
+        let r_id = rakSelect.val();
+        let b_id = barangSelect.val();
+
+        if(l_id && r_id && b_id) {
+            // Kita butuh endpoint khusus di StockAdjustmentController untuk cek stok spesifik Rak
+            // Tambahkan route ini di web.php: Route::get('api/check-stock', ...)
+            $.get("{{ url('admin/api/check-stock') }}", { lokasi_id: l_id, rak_id: r_id, barang_id: b_id }, function(res) {
+                currentStock = parseInt(res.stock);
+                stockVal.text(currentStock);
+                stockInfo.removeClass('d-none');
+                validateInput();
+            });
+        }
     }
 
-    // 1. Listener saat Lokasi Berubah (Untuk User Pusat)
-    if (lokasiSelect.is('select')) {
-        lokasiSelect.on('change', function() {
-            loadRaks($(this).val());
-        });
-        // Jika ada old value (misal setelah error validasi), trigger change
-        if(lokasiSelect.val()) {
-            loadRaks(lokasiSelect.val());
-        }
-    }
-    // 2. Listener saat Halaman Load (Untuk User Dealer dengan Input Hidden)
-    else {
-        let initialLokasiId = lokasiSelect.val(); // Ambil value dari input hidden
-        if (initialLokasiId) {
-            loadRaks(initialLokasiId);
+    function validateInput() {
+        let val = parseInt(jumlahInput.val()) || 0;
+        let tipe = tipeSelect.val();
+
+        if (tipe === 'KURANG' && val > currentStock) {
+            jumlahInput.addClass('is-invalid');
+            btnSubmit.prop('disabled', true);
+            Swal.fire('Stok Tidak Cukup', 'Jumlah pengurangan melebihi stok yang ada di rak ini.', 'warning');
         } else {
-            // Fallback jika entah kenapa kosong
-            rakSelect.append('<option value="">Lokasi User Tidak Valid</option>');
+            jumlahInput.removeClass('is-invalid');
+            btnSubmit.prop('disabled', false);
         }
     }
+
+    lokasiSelect.on('change', function() { loadRaks($(this).val()); });
+    rakSelect.on('change', function() { 
+        barangSelect.prop('disabled', false); 
+        checkStock(); 
+    });
+    barangSelect.on('change', checkStock);
+    jumlahInput.on('input', validateInput);
+    tipeSelect.on('change', validateInput);
+
+    if(lokasiSelect.val()) loadRaks(lokasiSelect.val());
 });
 </script>
 @stop

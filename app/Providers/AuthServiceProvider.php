@@ -110,8 +110,8 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-users', fn(User $user) => $user->hasRole('SA'));
         Gate::define('manage-locations-sa-only', fn(User $user) => $user->hasRole('SA'));
         Gate::define('manage-locations', fn(User $user) => $user->hasRole(['SA', 'PIC', 'AG']));
-        Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD'])); // MA dihapus
-        Gate::define('manage-barangs', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD', 'IMS']));
+        Gate::define('view-master-data', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
+        Gate::define('manage-barangs', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD', 'IMS', 'AG']));
         Gate::define('manage-converts', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
         
         // Sales Module: Hanya PC dan KSR (karena SLS dihapus)
@@ -123,8 +123,6 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('view-service', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KC', 'PC', 'KSR', 'ASD', 'ACC', 'IMS']));
         Gate::define('manage-service', fn(User $user) => $user->hasRole(['PC', 'KSR']));
         Gate::define('export-service-report', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KC', 'PC', 'KSR', 'ASD', 'ACC']));
-        
-        Gate::define('manage-marketing', fn(User $user) => $user->hasRole(['SA', 'PIC', 'ASD']));
         
         Gate::define('view-reports', fn(User $user) => $user->hasRole(['SA', 'PIC', 'KG', 'KC', 'IMS', 'ACC', 'AG', 'PC', 'ASD']));
         Gate::define('view-stock-card', fn(User $user) => $user->hasRole(['SA', 'PIC', 'AG', 'KG', 'KC', 'PC', 'ASD', 'IMS'])); 

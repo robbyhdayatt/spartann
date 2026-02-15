@@ -3,160 +3,137 @@
 @section('title', 'Buat Retur Penjualan')
 
 @section('content_header')
-    <h1>Buat Retur Penjualan</h1>
+    <h1><i class="fas fa-undo-alt mr-2"></i>Buat Retur Penjualan</h1>
 @stop
 
 @section('content')
-<div class="card">
-    <form action="{{ route('admin.sales-returns.store') }}" method="POST">
-        @csrf
-        <div class="card-body">
-            @if ($errors->any())
-                <div class="alert alert-danger">
-                    <ul class="mb-0">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
-            @if(session('error'))
-                <div class="alert alert-danger">{{ session('error') }}</div>
-            @endif
+<div class="row">
+    <div class="col-12">
+        @if(session('success'))
+            <x-adminlte-alert theme="success" title="Sukses" dismissable>
+                {{ session('success') }}
+            </x-adminlte-alert>
+        @endif
 
-            <div class="row">
-                <div class="col-md-6 form-group">
-                    <label for="penjualan-select">Pilih Faktur Penjualan Asli</label>
-                    <select id="penjualan-select" name="penjualan_id" class="form-control" required>
-                        <option value="" selected>--- Pilih Faktur ---</option>
-                        @foreach($penjualans as $penjualan)
-                            <option value="{{ $penjualan->id }}">{{ $penjualan->nomor_faktur }} - {{ $penjualan->konsumen->nama_konsumen }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-6 form-group">
-                    <label for="tanggal-retur">Tanggal Retur</label>
-                    <input type="date" id="tanggal-retur" class="form-control" name="tanggal_retur" value="{{ now()->format('Y-m-d') }}" required>
-                </div>
-            </div>
+        @if(session('error'))
+            <x-adminlte-alert theme="danger" title="Gagal" dismissable>
+                {{ session('error') }}
+            </x-adminlte-alert>
+        @endif
 
-             <div class="form-group">
-                <label for="catatan">Catatan</label>
-                <textarea name="catatan" id="catatan" class="form-control" rows="2" placeholder="Catatan tambahan untuk retur">{{ old('catatan') }}</textarea>
-            </div>
+        <div class="card card-outline card-primary">
+            <form action="{{ route('admin.sales-returns.store') }}" method="POST">
+                @csrf
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="penjualan-select">Pilih Faktur Penjualan <span class="text-danger">*</span></label>
+                                <select id="penjualan-select" name="penjualan_id" class="form-control @error('penjualan_id') is-invalid @enderror" required>
+                                    <option value="">--- Cari Nomor Faktur ---</option>
+                                    @foreach($penjualans as $p)
+                                        <option value="{{ $p->id }}" {{ old('penjualan_id') == $p->id ? 'selected' : '' }}>
+                                            {{ $p->nomor_faktur }} ({{ $p->konsumen->nama_konsumen }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('penjualan_id') <span class="invalid-feedback">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="tanggal_retur">Tanggal Retur <span class="text-danger">*</span></label>
+                                <input type="date" name="tanggal_retur" class="form-control @error('tanggal_retur') is-invalid @enderror" value="{{ old('tanggal_retur', now()->format('Y-m-d')) }}" required>
+                                @error('tanggal_retur') <span class="invalid-feedback">{{ $message }}</span> @enderror
+                            </div>
+                        </div>
+                    </div>
 
-            <h5 class="mt-4">Item untuk Diretur</h5>
-            <div class="table-responsive">
-                <table class="table table-bordered">
-                    <thead>
-                        <tr>
-                            <th>Part</th>
-                            <th style="width: 200px">Qty Tersedia u/ Diretur</th>
-                            <th style="width: 200px">Qty Diretur</th>
-                        </tr>
-                    </thead>
-                    <tbody id="return-items-table">
-                        <tr>
-                            <td colspan="3" class="text-center text-muted">Pilih faktur untuk menampilkan item.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+                    <div class="form-group">
+                        <label for="catatan">Catatan / Alasan Retur</label>
+                        <textarea name="catatan" class="form-control" rows="2" placeholder="Contoh: Barang cacat produksi">{{ old('catatan') }}</textarea>
+                    </div>
+
+                    <hr>
+                    <h5 class="text-primary mb-3"><i class="fas fa-list mr-2"></i>Daftar Item Faktur</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped border">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th>Nama Part / Suku Cadang</th>
+                                    <th class="text-center" style="width: 15%">Qty Jual</th>
+                                    <th class="text-center" style="width: 15%">Sudah Retur</th>
+                                    <th class="text-center" style="width: 20%">Jumlah Retur Baru</th>
+                                </tr>
+                            </thead>
+                            <tbody id="return-items-table">
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">Silakan pilih nomor faktur terlebih dahulu.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white text-right">
+                    <a href="{{ route('admin.sales-returns.index') }}" class="btn btn-default">Kembali</a>
+                    <button type="submit" class="btn btn-primary ml-2">
+                        <i class="fas fa-save mr-1"></i> Simpan Data Retur
+                    </button>
+                </div>
+            </form>
         </div>
-        <div class="card-footer">
-            <button type="submit" class="btn btn-primary">Simpan Retur Penjualan</button>
-            <a href="{{ route('admin.sales-returns.index') }}" class="btn btn-secondary">Batal</a>
-        </div>
-    </form>
+    </div>
 </div>
 @stop
 
 @section('plugins.Select2', true)
 
-@push('css')
-<style>
-    /* Menyesuaikan tinggi Select2 agar sama dengan input form lainnya */
-    .select2-container .select2-selection--single {
-        height: calc(2.25rem + 2px) !important;
-    }
-    .select2-container--default .select2-selection--single .select2-selection__rendered {
-        line-height: 1.5 !important;
-        padding-left: .75rem !important;
-        padding-top: .375rem !important;
-    }
-    .select2-container--default .select2-selection--single .select2-selection__arrow {
-        height: calc(2.25rem + 2px) !important;
-    }
-</style>
-@endpush
-
 @section('js')
 <script>
 $(document).ready(function() {
-    // Inisialisasi Select2
-    $('#penjualan-select').select2({
-        placeholder: "--- Pilih Faktur ---",
-        allowClear: true
-    });
+    $('#penjualan-select').select2({ theme: 'bootstrap4' });
 
-    // Event handler ketika faktur dipilih
     $('#penjualan-select').on('change', function() {
-        let penjualanId = $(this).val();
-        let tableBody = $('#return-items-table');
+        let id = $(this).val();
+        let tbody = $('#return-items-table');
 
-        // Kosongkan tabel jika tidak ada faktur yang dipilih
-        if (!penjualanId) {
-            tableBody.html('<tr><td colspan="3" class="text-center text-muted">Pilih faktur untuk menampilkan item.</td></tr>');
+        if (!id) {
+            tbody.html('<tr><td colspan="4" class="text-center text-muted py-4">Silakan pilih nomor faktur terlebih dahulu.</td></tr>');
             return;
         }
 
-        // Tampilkan status loading
-        tableBody.html('<tr><td colspan="3" class="text-center"><i class="fas fa-spinner fa-spin"></i> Memuat item...</td></tr>');
+        tbody.html('<tr><td colspan="4" class="text-center py-4"><i class="fas fa-sync fa-spin"></i> Sedang mengambil data...</td></tr>');
 
-        // Buat URL yang benar menggunakan route helper Laravel
-        let url = "{{ route('admin.penjualans.returnable-items', ['penjualan' => ':id']) }}".replace(':id', penjualanId);
-
-        // Request ke API untuk mengambil data item
-        $.ajax({
-            url: url,
-            type: 'GET',
-            dataType: 'json',
-            success: function(items) {
-                tableBody.empty();
-                if (items.length > 0) {
-                    items.forEach(function(item) {
-                        let availableToReturn = item.qty_jual - item.qty_diretur;
-                        let row = `
-                            <tr>
-                                <td>
-                                    ${item.barang.part_name}
-                                    <input type="hidden" name="items[${item.id}][penjualan_detail_id]" value="${item.id}">
-                                </td>
-                                <td>
-                                    <input type="text" class="form-control" value="${availableToReturn}" readonly>
-                                </td>
-                                <td>
-                                    <input type="number" name="items[${item.id}][qty_retur]" class="form-control" value="1" min="1" max="${availableToReturn}" required>
-                                </td>
-                            </tr>
-                        `;
-                        tableBody.append(row);
-                    });
-                } else {
-                    tableBody.html('<tr><td colspan="3" class="text-center">Tidak ada item yang bisa diretur dari faktur ini.</td></tr>');
-                }
-            },
-            error: function(jqXHR, textStatus, errorThrown) {
-                // Tampilkan pesan error yang lebih informatif
-                let errorMsg = 'Gagal memuat item. Silakan coba lagi.';
-                if (jqXHR.status === 404) {
-                    errorMsg = 'Gagal memuat item. Endpoint tidak ditemukan (Error 404).';
-                } else if (jqXHR.status === 500) {
-                    errorMsg = 'Gagal memuat item. Terjadi kesalahan pada server (Error 500).';
-                }
-                tableBody.html('<tr><td colspan="3" class="text-center text-danger">' + errorMsg + '</td></tr>');
-                console.error("AJAX Error: ", textStatus, errorThrown, jqXHR.responseText);
+        $.get("{{ url('admin/api/penjualans') }}/" + id + "/returnable-items", function(items) {
+            tbody.empty();
+            if (items.length === 0) {
+                tbody.html('<tr><td colspan="4" class="text-center text-warning py-4">Semua item dalam faktur ini sudah diretur habis.</td></tr>');
+            } else {
+                items.forEach(function(item) {
+                    tbody.append(`
+                        <tr>
+                            <td>
+                                <strong>${item.barang.part_name}</strong><br>
+                                <small class="text-muted">${item.barang.part_code}</small>
+                            </td>
+                            <td class="text-center">${item.qty_jual}</td>
+                            <td class="text-center text-danger">${item.qty_diretur}</td>
+                            <td>
+                                <div class="input-group">
+                                    <input type="number" name="items[${item.id}][qty_retur]" 
+                                           class="form-control text-center" 
+                                           value="0" min="0" max="${item.max_returnable}" required>
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">Maks: ${item.max_returnable}</span>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `);
+                });
             }
+        }).fail(function() {
+            tbody.html('<tr><td colspan="4" class="text-center text-danger py-4">Gagal memuat data. Silakan refresh halaman.</td></tr>');
         });
     });
 });

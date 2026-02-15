@@ -10,6 +10,7 @@ use App\Models\PurchaseOrderDetail;
 use App\Models\Rak;
 use App\Models\Receiving;
 use App\Models\ReceivingDetail;
+use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -22,7 +23,7 @@ class PutawayController extends Controller
         $user = Auth::user();
 
         $query = Receiving::where('status', 'PENDING_PUTAWAY')
-                            ->with(['purchaseOrder.supplier', 'purchaseOrder.sumberLokasi', 'lokasi']); 
+            ->with(['purchaseOrder.supplier', 'lokasi']); 
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('lokasi_id', $user->lokasi_id);
@@ -38,22 +39,26 @@ class PutawayController extends Controller
         $this->authorize('perform-warehouse-ops');
         
         if ($receiving->status !== 'PENDING_PUTAWAY') {
-            return redirect()->route('admin.putaway.index')->with('error', 'Dokumen ini tidak siap untuk Putaway.');
+            return redirect()->route('admin.putaway.index')->with('error', 'Status dokumen tidak valid.');
         }
 
-        if (Auth::user()->lokasi_id != $receiving->lokasi_id && !Auth::user()->hasRole(['SA', 'PIC'])) {
-            return redirect()->route('admin.putaway.index')->with('error', 'Akses ditolak.');
+        if (Auth::user()->lokasi_id && Auth::user()->lokasi_id != $receiving->lokasi_id) {
+            return redirect()->route('admin.putaway.index')->with('error', 'Akses Ditolak.');
         }
 
         $receiving->load('details.barang');
+        
+        // Filter: Hanya ambil item yang lolos QC > 0
+        $itemsToPutaway = $receiving->details->filter(function($d) {
+            return $d->qty_lolos_qc > 0;
+        });
 
+        // Ambil Rak Penyimpanan yang Aktif
         $raks = Rak::where('lokasi_id', $receiving->lokasi_id)
-                    ->where('is_active', true)
-                    ->where('tipe_rak', 'PENYIMPANAN')
-                    ->orderBy('kode_rak')
-                    ->get();
-
-        $itemsToPutaway = $receiving->details()->where('qty_lolos_qc', '>', 0)->get();
+            ->where('tipe_rak', 'PENYIMPANAN') // Filter tipe rak penting!
+            ->where('is_active', true)
+            ->orderBy('kode_rak')
+            ->get();
 
         return view('admin.putaway.form', compact('receiving', 'itemsToPutaway', 'raks'));
     }
@@ -61,6 +66,7 @@ class PutawayController extends Controller
     public function storePutaway(Request $request, Receiving $receiving)
     {
         $this->authorize('perform-warehouse-ops');
+        
         $request->validate([
             'items' => 'required|array',
             'items.*.rak_id' => 'required|exists:raks,id',
@@ -68,104 +74,103 @@ class PutawayController extends Controller
 
         DB::beginTransaction();
         try {
-            // Lock Receiving agar tidak diproses double
+            // Lock Receiving
             $receiving = Receiving::where('id', $receiving->id)->lockForUpdate()->first();
-            
-            if ($receiving->status == 'COMPLETED') {
-                 throw new \Exception("Receiving ini sudah selesai diproses.");
+
+            if ($receiving->status !== 'PENDING_PUTAWAY') {
+                throw new \Exception("Dokumen sudah diproses/berubah status.");
             }
 
             foreach ($request->items as $detailId => $data) {
                 $detail = ReceivingDetail::findOrFail($detailId);
-                
-                // === LOCK MASTER BARANG (PENTING UNTUK HPP) ===
+                $qtyMasuk = $detail->qty_lolos_qc;
+
+                if ($qtyMasuk <= 0) continue;
+
+                // === LOCK MASTER BARANG UNTUK UPDATE HPP ===
                 $barang = Barang::where('id', $detail->barang_id)->lockForUpdate()->first();
-                
-                $jumlahMasuk = $detail->qty_lolos_qc;
-                if ($jumlahMasuk <= 0) continue;
 
-                // 1. Cek Stok Lama (Untuk History)
-                $stokSebelumDiRak = InventoryBatch::where('lokasi_id', $receiving->lokasi_id)
-                    ->where('rak_id', $data['rak_id'])
-                    ->where('barang_id', $detail->barang_id)
-                    ->sum('quantity');
+                // 1. UPDATE HPP (AVERAGE COST)
+                // Hanya jika ini dari Supplier PO (bukan transfer antar cabang)
+                if ($receiving->purchaseOrder && $receiving->purchaseOrder->po_type == 'supplier_po') {
+                    // Ambil harga beli dari PO
+                    $poDetail = PurchaseOrderDetail::where('purchase_order_id', $receiving->purchase_order_id)
+                        ->where('barang_id', $barang->id)
+                        ->first();
+                        
+                    $hargaBeliBaru = $poDetail ? $poDetail->harga_beli : 0;
+                    
+                    if ($hargaBeliBaru > 0) {
+                        // Hitung Weighted Average
+                        $currentTotalStock = InventoryBatch::where('barang_id', $barang->id)->sum('quantity'); // Global stock for HPP? Atau per lokasi? Biasanya Global.
+                        
+                        $nilaiAsetLama = $currentTotalStock * $barang->selling_in; // selling_in = HPP
+                        $nilaiAsetBaru = $qtyMasuk * $hargaBeliBaru;
+                        $totalQtyBaru = $currentTotalStock + $qtyMasuk;
+                        
+                        $newHpp = ($nilaiAsetLama + $nilaiAsetBaru) / $totalQtyBaru;
+                        
+                        $barang->update(['selling_in' => $newHpp]);
+                    }
+                }
 
-                // 2. Buat Batch Inventory Baru
-                InventoryBatch::create([
-                    'barang_id'           => $detail->barang_id, 
+                // 2. CREATE INVENTORY BATCH
+                $batch = InventoryBatch::create([
+                    'barang_id'           => $barang->id,
                     'rak_id'              => $data['rak_id'],
                     'lokasi_id'           => $receiving->lokasi_id,
                     'receiving_detail_id' => $detail->id,
-                    'quantity'            => $jumlahMasuk,
+                    'quantity'            => $qtyMasuk,
+                    // 'harga_beli'       => $hargaBeliBaru // Jika ingin track harga per batch
                 ]);
 
-                // 3. Update HPP (Average Cost) Aman karena Barang sudah di-LOCK
-                if ($receiving->purchaseOrder && $receiving->purchaseOrder->po_type == 'supplier_po') {
-                    $poDetail = PurchaseOrderDetail::where('purchase_order_id', $receiving->purchase_order_id)
-                                                ->where('barang_id', $barang->id)
-                                                ->first();
+                // 3. CATAT STOCK MOVEMENT
+                // Kita perlu snapshot stok sebelumnya di rak tersebut untuk log yang akurat
+                // Tapi karena InventoryBatch baru di-create (bukan update), stok sebelumnya untuk *batch ini* adalah 0.
+                // Namun untuk *Rak tersebut*, stok sebelumnya mungkin ada. 
+                // StockMovement mencatat stok agregat per Rak/Barang atau per Transaksi? 
+                // Standarnya per transaksi (flow).
+                
+                // Hitung stok akumulasi di Rak itu sebelum insert (untuk reporting)
+                $stokRakSebelum = InventoryBatch::where('rak_id', $data['rak_id'])
+                    ->where('barang_id', $barang->id)
+                    ->where('id', '!=', $batch->id)
+                    ->sum('quantity');
 
-                    $hargaBeliBaru = $poDetail ? $poDetail->harga_beli : $barang->selling_in;
-                    
-                    $allBatches = InventoryBatch::where('barang_id', $barang->id)->get();
-                    $totalStokSekarang = $allBatches->sum('quantity'); 
-                    
-                    $stokLama = $totalStokSekarang - $jumlahMasuk; 
-                    if ($stokLama < 0) $stokLama = 0; 
-
-                    $nilaiAsetLama = $stokLama * $barang->selling_in;
-                    $nilaiAsetBaru = $jumlahMasuk * $hargaBeliBaru;
-
-                    $sellingInBaru = ($totalStokSekarang > 0)
-                        ? (($nilaiAsetLama + $nilaiAsetBaru) / $totalStokSekarang)
-                        : $hargaBeliBaru;
-
-                    $barang->update(['selling_in' => $sellingInBaru]);
-                }
-
-                // 4. Catat Movement
-                $stokSesudahDiRak = $stokSebelumDiRak + $jumlahMasuk;
-
-                $receiving->stockMovements()->create([
-                    'barang_id'    => $detail->barang_id,
-                    'lokasi_id'    => $receiving->lokasi_id,
-                    'rak_id'       => $data['rak_id'],
-                    'jumlah'       => $jumlahMasuk,
-                    'stok_sebelum' => $stokSebelumDiRak, 
-                    'stok_sesudah' => $stokSesudahDiRak, 
-                    'user_id'      => Auth::id(),
-                    'keterangan'   => 'Putaway PO ' . ($receiving->purchaseOrder->nomor_po ?? '-'),
+                StockMovement::create([
+                    'barang_id'      => $barang->id,
+                    'lokasi_id'      => $receiving->lokasi_id,
+                    'rak_id'         => $data['rak_id'],
+                    'jumlah'         => $qtyMasuk,
+                    'stok_sebelum'   => $stokRakSebelum,
+                    'stok_sesudah'   => $stokRakSebelum + $qtyMasuk,
+                    'referensi_type' => Receiving::class,
+                    'referensi_id'   => $receiving->id,
+                    'keterangan'     => "Putaway PO #{$receiving->purchaseOrder->nomor_po}",
+                    'user_id'        => Auth::id()
                 ]);
-
-                $detail->update(['qty_disimpan' => $jumlahMasuk]);
             }
 
-            // 5. Update Status Receiving & PO
-            $statusAkhirReceiving = 'COMPLETED'; 
-
-            if($receiving->purchaseOrder) {
-                $receiving->purchaseOrder->syncStatus();
-                $receiving->purchaseOrder->refresh(); 
-
-                if ($receiving->purchaseOrder->status === 'FULLY_RECEIVED') {
-                    $statusAkhirReceiving = 'COMPLETED';
-                    // Update saudara-saudaranya
-                    Receiving::where('purchase_order_id', $receiving->purchaseOrder->id)
-                             ->where('status', 'PARTIAL_CLOSED')
-                             ->where('id', '!=', $receiving->id)
-                             ->update(['status' => 'COMPLETED']);
-                } else {
-                    $statusAkhirReceiving = 'PARTIAL_CLOSED';
-                }
-            }
-
-            $receiving->status = $statusAkhirReceiving;
+            // 4. UPDATE STATUS RECEIVING & PO
+            $receiving->status = 'COMPLETED';
             $receiving->putaway_by = Auth::id();
             $receiving->putaway_at = now();
             $receiving->save();
 
+            // Sync PO Status
+            if ($receiving->purchaseOrder) {
+                $receiving->purchaseOrder->syncStatus();
+                
+                // Cek apakah PO sudah Fully Received, jika ya, tutup semua receiving parsial lain
+                if ($receiving->purchaseOrder->status === 'FULLY_RECEIVED') {
+                    Receiving::where('purchase_order_id', $receiving->purchase_order_id)
+                        ->where('status', 'PARTIAL_CLOSED')
+                        ->update(['status' => 'COMPLETED']);
+                }
+            }
+
             DB::commit();
-            return redirect()->route('admin.putaway.index')->with('success', 'Putaway berhasil. Stok dan Status PO diperbarui.');
+            return redirect()->route('admin.putaway.index')->with('success', 'Barang berhasil disimpan ke Rak. Stok telah bertambah.');
 
         } catch (\Exception $e) {
             DB::rollBack();

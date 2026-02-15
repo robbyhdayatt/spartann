@@ -7,25 +7,24 @@ use App\Models\SalesReturn;
 use App\Models\Penjualan;
 use App\Models\PenjualanDetail;
 use App\Models\InventoryBatch;
-use App\Models\Lokasi; // DIUBAH
+use App\Models\Lokasi;
 use App\Models\Rak;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class SalesReturnController extends Controller
 {
-public function index()
+    public function index()
     {
-        // PERBAIKAN: Menggunakan gate yang sudah ada
         $this->authorize('view-sales');
 
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $query = SalesReturn::with(['konsumen', 'penjualan', 'lokasi'])->latest();
 
-        // Filter data berdasarkan lokasi user
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('lokasi_id', $user->lokasi_id);
         }
@@ -36,16 +35,15 @@ public function index()
 
     public function create()
     {
-        // PERBAIKAN: Menggunakan gate yang sudah ada
         $this->authorize('create-sale');
 
         /** @var \App\Models\User $user */
         $user = Auth::user();
+        
         $query = Penjualan::whereHas('details', function ($q) {
             $q->where(DB::raw('qty_jual - qty_diretur'), '>', 0);
         });
 
-        // Filter faktur penjualan berdasarkan lokasi user
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('lokasi_id', $user->lokasi_id);
         }
@@ -57,104 +55,138 @@ public function index()
     public function store(Request $request)
     {
         $this->authorize('create-sale');
-        $request->validate([
+
+        $validator = Validator::make($request->all(), [
             'penjualan_id' => 'required|exists:penjualans,id',
-            'tanggal_retur' => 'required|date',
+            'tanggal_retur' => 'required|date|before_or_equal:today',
             'items' => 'required|array|min:1',
-            'items.*.qty_retur' => 'required|integer|min:1',
+            'items.*.qty_retur' => 'required|integer|min:0',
+        ], [
+            'penjualan_id.required' => 'Faktur penjualan wajib dipilih.',
+            'tanggal_retur.required' => 'Tanggal retur wajib diisi.',
+            'tanggal_retur.before_or_equal' => 'Tanggal retur tidak boleh melebihi hari ini.',
+            'items.required' => 'Minimal satu item harus dipilih untuk diretur.',
         ]);
 
-        $penjualan = Penjualan::findOrFail($request->penjualan_id);
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
 
+        DB::beginTransaction();
         try {
-            DB::transaction(function () use ($request, $penjualan) {
-                // Cari atau buat rak karantina di lokasi yang sama
-                $rakKarantina = Rak::firstOrCreate(
-                    ['lokasi_id' => $penjualan->lokasi_id, 'tipe_rak' => 'KARANTINA'],
-                    ['nama_rak' => 'RAK KARANTINA RETUR', 'kode_rak' => $penjualan->lokasi->kode_lokasi . '-KRN-RT']
-                );
+            // 1. Lock data Penjualan utama
+            $penjualan = Penjualan::where('id', $request->penjualan_id)->lockForUpdate()->firstOrFail();
 
-                $salesReturn = SalesReturn::create([
-                    'nomor_retur_jual' => SalesReturn::generateReturnNumber(),
-                    'penjualan_id' => $penjualan->id,
-                    'konsumen_id' => $penjualan->konsumen_id,
+            // Cek apakah user mengirim semua qty 0
+            $hasQty = false;
+            foreach ($request->items as $item) {
+                if (($item['qty_retur'] ?? 0) > 0) $hasQty = true;
+            }
+
+            if (!$hasQty) {
+                throw new \Exception("Minimal masukkan jumlah retur 1 pada salah satu item.");
+            }
+
+            // 2. Cari/Buat Rak Karantina
+            $rakKarantina = Rak::where('lokasi_id', $penjualan->lokasi_id)
+                                ->where('tipe_rak', 'KARANTINA')
+                                ->first();
+            
+            if (!$rakKarantina) {
+                $rakKarantina = Rak::create([
                     'lokasi_id' => $penjualan->lokasi_id,
-                    'tanggal_retur' => $request->tanggal_retur,
-                    'catatan' => $request->catatan,
-                    'created_by' => auth()->id(),
-                    'total_retur' => 0, // Placeholder
+                    'tipe_rak' => 'KARANTINA',
+                    'nama_rak' => 'RAK KARANTINA RETUR',
+                    'kode_rak' => $penjualan->lokasi->kode_lokasi . '-KRN-RT'
                 ]);
+            }
 
-                $subtotalRetur = 0;
+            // 3. Simpan Header Sales Return
+            $salesReturn = SalesReturn::create([
+                'nomor_retur_jual' => SalesReturn::generateReturnNumber(),
+                'penjualan_id' => $penjualan->id,
+                'konsumen_id' => $penjualan->konsumen_id,
+                'lokasi_id' => $penjualan->lokasi_id,
+                'tanggal_retur' => $request->tanggal_retur,
+                'catatan' => $request->catatan,
+                'created_by' => auth()->id(),
+                'total_retur' => 0, 
+            ]);
 
-                foreach ($request->items as $penjualanDetailId => $itemData) {
-                    $penjualanDetail = PenjualanDetail::findOrFail($penjualanDetailId);
-                    $qtyRetur = (int)$itemData['qty_retur'];
-                    $maxQty = $penjualanDetail->qty_jual - $penjualanDetail->qty_diretur;
+            $totalNilaiRetur = 0;
 
-                    if ($qtyRetur <= 0 || $qtyRetur > $maxQty) {
-                        throw new \Exception("Jumlah retur untuk part {$penjualanDetail->barang->part_name} tidak valid.");
-                    }
+            foreach ($request->items as $penjualanDetailId => $itemData) {
+                $qtyReturRequest = (int)($itemData['qty_retur'] ?? 0);
+                if ($qtyReturRequest <= 0) continue;
 
-                    $itemSubtotal = $penjualanDetail->harga_jual * $qtyRetur;
-                    $subtotalRetur += $itemSubtotal;
+                // --- PENCEGAHAN RACE CONDITION ---
+                // lockForUpdate() akan memastikan baris ini tidak bisa dibaca/ubah oleh 
+                // request lain sampai transaksi ini selesai (commit).
+                $penjualanDetail = PenjualanDetail::where('id', $penjualanDetailId)
+                                    ->with('barang')
+                                    ->lockForUpdate()
+                                    ->firstOrFail();
 
-                    $salesReturn->details()->create([
-                        'barang_id' => $penjualanDetail->barang_id,
-                        'qty_retur' => $qtyRetur,
-                        'harga_saat_jual' => $penjualanDetail->harga_jual,
-                        'subtotal' => $itemSubtotal,
-                    ]);
+                $maxBisaDiretur = $penjualanDetail->qty_jual - $penjualanDetail->qty_diretur;
 
-                    $penjualanDetail->increment('qty_diretur', $qtyRetur);
-
-                    // LOGIKA BARU: Buat InventoryBatch baru di rak karantina
-                    $newBatch = InventoryBatch::create([
-                        'barang_id' => $penjualanDetail->barang_id,
-                        'rak_id' => $rakKarantina->id,
-                        'lokasi_id' => $penjualan->lokasi_id,
-                        'quantity' => $qtyRetur,
-                        'receiving_detail_id' => null, // Tidak berasal dari PO
-                    ]);
-
-                    // LOGIKA BARU: Catat pergerakan stok dengan format yang benar
-                    StockMovement::create([
-                        'barang_id' => $penjualanDetail->barang_id,
-                        'lokasi_id' => $penjualan->lokasi_id,
-                        'rak_id' => $rakKarantina->id,
-                        'jumlah' => $qtyRetur,
-                        'stok_sebelum' => 0, // Stok di batch baru ini selalu mulai dari 0
-                        'stok_sesudah' => $qtyRetur,
-                        'referensi_type' => get_class($salesReturn),
-                        'referensi_id' => $salesReturn->id,
-                        'keterangan' => 'Retur Penjualan: ' . $salesReturn->nomor_retur_jual,
-                        'user_id' => auth()->id(),
-                    ]);
+                if ($qtyReturRequest > $maxBisaDiretur) {
+                    throw new \Exception("Item {$penjualanDetail->barang->part_name} gagal diretur. Qty yang diminta ({$qtyReturRequest}) melebihi sisa yang bisa diretur ({$maxBisaDiretur}). Mungkin data sudah diubah oleh pengguna lain.");
                 }
 
-                // Hitung ulang total
-                $taxRate = ($penjualan->subtotal > 0 && $penjualan->pajak > 0) ? ($penjualan->pajak / $penjualan->subtotal) : 0;
-                $pajakRetur = $subtotalRetur * $taxRate;
+                $itemSubtotal = $penjualanDetail->harga_jual * $qtyReturRequest;
+                $totalNilaiRetur += $itemSubtotal;
 
-                $salesReturn->update([
-                    'subtotal' => $subtotalRetur,
-                    'pajak' => $pajakRetur,
-                    'total_retur' => $subtotalRetur + $pajakRetur,
+                // Simpan Detail Retur
+                $salesReturn->details()->create([
+                    'barang_id' => $penjualanDetail->barang_id,
+                    'qty_retur' => $qtyReturRequest,
+                    'harga_saat_jual' => $penjualanDetail->harga_jual,
+                    'subtotal' => $itemSubtotal,
                 ]);
-            });
 
-            return redirect()->route('admin.sales-returns.index')->with('success', 'Retur penjualan berhasil dibuat dan barang telah masuk ke karantina.');
+                // Update Progress Retur di Penjualan Detail
+                $penjualanDetail->increment('qty_diretur', $qtyReturRequest);
+
+                // Tambah Stok di Karantina
+                InventoryBatch::create([
+                    'barang_id' => $penjualanDetail->barang_id,
+                    'rak_id' => $rakKarantina->id,
+                    'lokasi_id' => $penjualan->lokasi_id,
+                    'quantity' => $qtyReturRequest,
+                    'receiving_detail_id' => null,
+                ]);
+
+                // Riwayat Stok
+                StockMovement::create([
+                    'barang_id' => $penjualanDetail->barang_id,
+                    'lokasi_id' => $penjualan->lokasi_id,
+                    'rak_id' => $rakKarantina->id,
+                    'jumlah' => $qtyReturRequest,
+                    'stok_sebelum' => 0,
+                    'stok_sesudah' => $qtyReturRequest,
+                    'referensi_type' => get_class($salesReturn),
+                    'referensi_id' => $salesReturn->id,
+                    'keterangan' => 'Retur Penjualan: ' . $salesReturn->nomor_retur_jual,
+                    'user_id' => auth()->id(),
+                ]);
+            }
+
+            // Final Update Total
+            $salesReturn->update(['total_retur' => $totalNilaiRetur]);
+
+            DB::commit();
+            return redirect()->route('admin.sales-returns.index')->with('success', 'Retur ' . $salesReturn->nomor_retur_jual . ' berhasil diproses.');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage())->withInput();
+            return redirect()->back()->with('error', $e->getMessage())->withInput();
         }
     }
 
     public function show(SalesReturn $salesReturn)
     {
         $this->authorize('view-sales');
-        $salesReturn->load(['konsumen', 'penjualan', 'details.barang']);
+        $salesReturn->load(['konsumen', 'penjualan', 'details.barang', 'lokasi', 'createdBy']);
         return view('admin.sales_returns.show', compact('salesReturn'));
     }
 
@@ -164,7 +196,6 @@ public function index()
         $returnableItems = $penjualan->details->filter(function ($detail) {
             return $detail->qty_jual > $detail->qty_diretur;
         })->map(function ($detail) {
-            // Tambahkan max_returnable agar mudah divalidasi di frontend
             $detail->max_returnable = $detail->qty_jual - $detail->qty_diretur;
             return $detail;
         })->values();

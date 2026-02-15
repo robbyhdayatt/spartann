@@ -8,77 +8,23 @@ use Illuminate\Database\Eloquent\Model;
 class Receiving extends Model
 {
     use HasFactory;
-
     protected $guarded = ['id'];
-
     protected $casts = [
         'tanggal_terima' => 'date',
         'qc_at' => 'datetime',
         'putaway_at' => 'datetime',
     ];
 
-    public function purchaseOrder()
-    {
-        return $this->belongsTo(PurchaseOrder::class);
-    }
-
-    public function lokasi()
-    {
-        return $this->belongsTo(Lokasi::class, 'lokasi_id');
-    }
-
-    public function details()
-    {
-        return $this->hasMany(ReceivingDetail::class);
-    }
-
-    public function createdBy()
-    {
-        return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function receivedBy()
-    {
-        return $this->belongsTo(User::class, 'received_by');
-    }
-
-    public function qcBy()
-    {
-        return $this->belongsTo(User::class, 'qc_by');
-    }
-
-    public function putawayBy()
-    {
-        return $this->belongsTo(User::class, 'putaway_by');
-    }
-
-    public function stockMovements()
-    {
-        return $this->morphMany(StockMovement::class, 'referensi');
-    }
+    public function purchaseOrder() { return $this->belongsTo(PurchaseOrder::class); }
+    public function lokasi() { return $this->belongsTo(Lokasi::class, 'lokasi_id'); }
+    public function details() { return $this->hasMany(ReceivingDetail::class); }
+    public function receivedBy() { return $this->belongsTo(User::class, 'received_by'); }
+    public function stockMovements() { return $this->morphMany(StockMovement::class, 'referensi'); }
 
     public static function generateReceivingNumber()
     {
         $date = now()->format('Ymd');
-        $latest = self::whereDate('created_at', today())->count();
-        $sequence = str_pad($latest + 1, 4, '0', STR_PAD_LEFT);
-        return "RCV/{$date}/{$sequence}";
-    }
-
-    // --- AKSESOR STATUS BARU ---
-    public function getStatusClassAttribute()
-    {
-        switch ($this->status) {
-            case 'PENDING_QC': return 'badge-warning';
-            case 'PENDING_PUTAWAY': return 'badge-info';
-            case 'COMPLETED': return 'badge-success';
-            case 'PARTIAL_CLOSED': return 'badge-secondary'; // Status baru (Warna Abu/Biru Tua)
-            default: return 'badge-secondary';
-        }
-    }
-
-    public function getStatusBadgeAttribute()
-    {
-        return ucwords(str_replace('_', ' ', strtolower($this->status)));
+        $count = self::whereDate('created_at', today())->count() + 1;
+        return "RCV/{$date}/" . str_pad($count, 4, '0', STR_PAD_LEFT);
     }
 }

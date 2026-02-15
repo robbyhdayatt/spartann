@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 
 class StockMutation extends Model
 {
@@ -15,6 +14,8 @@ class StockMutation extends Model
     protected $casts = [
         'approved_at' => 'datetime',
         'received_at' => 'datetime',
+        'created_at'  => 'datetime',
+        'updated_at'  => 'datetime',
     ];
 
     public function barang()
@@ -32,9 +33,16 @@ class StockMutation extends Model
         return $this->belongsTo(Lokasi::class, 'lokasi_tujuan_id');
     }
 
+    // Relasi Rak Asal (Mungkin NULL jika mutasi belum diproses atau diambil dari banyak rak)
+    // Sebaiknya tidak diandalkan untuk logika FIFO, gunakan StockMovement untuk tracking detail rak
     public function rakAsal()
     {
         return $this->belongsTo(Rak::class, 'rak_asal_id');
+    }
+    
+    public function rakTujuan()
+    {
+        return $this->belongsTo(Rak::class, 'rak_tujuan_id');
     }
 
     public function createdBy()
@@ -52,13 +60,9 @@ class StockMutation extends Model
         return $this->belongsTo(User::class, 'received_by');
     }
 
-    public function rakTujuan()
-    {
-        return $this->belongsTo(Rak::class, 'rak_tujuan_id');
-    }
-
     public static function generateNomorMutasi()
     {
+        // Format: MT-YYYYMMDD-0001
         $prefix = 'MT-' . date('Ymd') . '-';
         $lastMutation = self::where('nomor_mutasi', 'like', $prefix . '%')->latest('id')->first();
         $newNumber = $lastMutation ? ((int) substr($lastMutation->nomor_mutasi, -4)) + 1 : 1;

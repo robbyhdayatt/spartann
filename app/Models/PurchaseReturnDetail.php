@@ -11,21 +11,7 @@ class PurchaseReturnDetail extends Model
 
     protected $guarded = ['id'];
 
-    /**
-     * Relasi ke Barang (Pengganti Part)
-     * Pastikan kolom di database purchase_return_details adalah 'barang_id'.
-     * Jika masih 'part_id', ubah parameter kedua menjadi 'part_id'.
-     */
     public function barang()
-    {
-        return $this->belongsTo(Barang::class, 'barang_id');
-    }
-
-    /**
-     * Deprecated: Relasi lama (bisa dihapus jika sudah tidak dipakai)
-     * Saya arahkan ke Barang juga untuk safety.
-     */
-    public function part()
     {
         return $this->belongsTo(Barang::class, 'barang_id');
     }

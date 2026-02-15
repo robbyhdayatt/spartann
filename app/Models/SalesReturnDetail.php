@@ -7,5 +7,8 @@ class SalesReturnDetail extends Model
 {
     use HasFactory;
     protected $guarded = ['id'];
-    public function part() { return $this->belongsTo(Part::class); }
+    public function barang()
+    {
+        return $this->belongsTo(Barang::class, 'barang_id');
+    }
 }

@@ -6,14 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\PurchaseReturn;
 use App\Models\Receiving;
 use App\Models\ReceivingDetail;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use App\Models\InventoryBatch;
 use App\Models\Rak;
 use App\Models\StockMovement;
-use App\Models\Lokasi;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class PurchaseReturnController extends Controller
 {
@@ -27,21 +26,27 @@ class PurchaseReturnController extends Controller
     public function create()
     {
         $this->authorize('manage-purchase-returns');
-        // Get receiving documents that have failed items which have not been fully returned yet
-        $receivings = Receiving::whereHas('details', function ($query) {
-            $query->where('qty_gagal_qc', '>', DB::raw('qty_diretur'));
-        })->get();
+        
+        // Ambil penerimaan yang memiliki item gagal QC dan belum diretur sepenuhnya
+        $receivings = Receiving::with('supplier')
+            ->whereHas('details', function ($query) {
+                $query->whereRaw('qty_gagal_qc > qty_diretur');
+            })->latest()->get();
 
         return view('admin.purchase_returns.create', compact('receivings'));
     }
 
-    // API Endpoint
     public function getFailedItems(Receiving $receiving)
     {
         $items = $receiving->details()
             ->with('barang')
-            ->where('qty_gagal_qc', '>', DB::raw('qty_diretur'))
-            ->get();
+            ->whereRaw('qty_gagal_qc > qty_diretur')
+            ->get()
+            ->map(function ($detail) {
+                // Tambahkan sisa yang bisa diretur ke objek JSON
+                $detail->sisa_retur = $detail->qty_gagal_qc - $detail->qty_diretur;
+                return $detail;
+            });
 
         return response()->json($items);
     }
@@ -49,195 +54,164 @@ class PurchaseReturnController extends Controller
     public function store(Request $request)
     {
         $this->authorize('manage-purchase-returns');
-        $request->validate([
+        
+        // 1. Validasi Input
+        $validator = Validator::make($request->all(), [
             'receiving_id' => 'required|exists:receivings,id',
-            'tanggal_retur' => 'required|date',
-            'catatan' => 'nullable|string|max:255', // Tambahkan validasi catatan
+            'tanggal_retur' => 'required|date|before_or_equal:today',
+            'catatan' => 'nullable|string|max:255',
             'items' => 'required|array|min:1',
-            'items.*.receiving_detail_id' => 'required|exists:receiving_details,id', // Validasi receiving_detail_id dari form
-            'items.*.qty_retur' => 'required|integer|min:1',
-            'items.*.alasan' => 'nullable|string',
+            'items.*.receiving_detail_id' => 'required|exists:receiving_details,id',
+            'items.*.qty_retur' => 'required|integer|min:0',
+            'items.*.alasan' => 'nullable|string|max:150',
+        ], [
+            'receiving_id.required' => 'Dokumen Penerimaan wajib dipilih.',
+            'items.required' => 'Minimal satu barang harus diretur.',
+            'items.*.qty_retur.min' => 'Jumlah retur tidak boleh negatif.',
         ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
 
         DB::beginTransaction();
         try {
-            // Eager load relasi yang dibutuhkan
-            $receiving = Receiving::with('purchaseOrder', 'lokasi')->findOrFail($request->receiving_id);
-            $lokasiId = $receiving->lokasi_id; // Ambil ID lokasi penerimaan
+            // Cek apakah ada item yang qty > 0
+            $hasQty = collect($request->items)->sum('qty_retur') > 0;
+            if (!$hasQty) {
+                throw new \Exception("Mohon isi jumlah retur minimal pada satu barang.");
+            }
 
-            // --- Cari Rak Karantina ---
-            $quarantineRak = Rak::where('lokasi_id', $lokasiId)
+            // 2. Lock Receiving Document
+            $receiving = Receiving::with('purchaseOrder', 'lokasi')
+                ->lockForUpdate() // PESSIMISTIC LOCKING
+                ->findOrFail($request->receiving_id);
+
+            $lokasiId = $receiving->lokasi_id;
+
+            // 3. Cari Rak Karantina di Lokasi Tersebut
+            $rakKarantina = Rak::where('lokasi_id', $lokasiId)
                                 ->where('tipe_rak', 'KARANTINA')
                                 ->first();
 
-            if (!$quarantineRak) {
-                throw new \Exception("Rak karantina tidak ditemukan di lokasi " . ($receiving->lokasi->nama_lokasi ?? 'N/A') . ".");
+            if (!$rakKarantina) {
+                throw new \Exception("Rak Karantina tidak ditemukan di lokasi penerimaan ({$receiving->lokasi->nama_lokasi}). Sistem tidak dapat memotong stok gagal QC.");
             }
-            $quarantineRakId = $quarantineRak->id;
-            // --- Akhir Cari Rak Karantina ---
 
-            $return = PurchaseReturn::create([
-                'nomor_retur' => $this->generateReturnNumber(),
+            // 4. Buat Header Retur
+            $purchaseReturn = PurchaseReturn::create([
+                'nomor_retur' => PurchaseReturn::generateReturnNumber(),
                 'receiving_id' => $receiving->id,
-                 // Pastikan relasi purchaseOrder ada sebelum akses supplier_id
                 'supplier_id' => $receiving->purchaseOrder->supplier_id ?? null,
                 'tanggal_retur' => $request->tanggal_retur,
                 'catatan' => $request->catatan,
                 'created_by' => Auth::id(),
             ]);
 
+            // 5. Loop Items
             foreach ($request->items as $itemData) {
-                 // Ambil receiving_detail_id dari data item yang disubmit
-                 $detailId = $itemData['receiving_detail_id'];
-                 // Eager load barang untuk pesan error
-                $detail = ReceivingDetail::with('barang')->findOrFail($detailId);
-                $barangId = $detail->barang_id;
-                $qtyToReturn = (int)$itemData['qty_retur']; // Pastikan integer
-                $alasanRetur = $itemData['alasan'];
+                $qtyRetur = (int)$itemData['qty_retur'];
+                
+                if ($qtyRetur <= 0) continue;
 
-                // Validasi jumlah retur vs gagal QC
-                $availableToReturn = $detail->qty_gagal_qc - $detail->qty_diretur;
-                if ($qtyToReturn > $availableToReturn) {
-                    throw new \Exception("Jumlah retur ({$qtyToReturn}) untuk barang {$detail->barang->part_name} melebihi jumlah yang tersedia ({$availableToReturn}).");
+                // Lock Detail Penerimaan
+                $detail = ReceivingDetail::with('barang')
+                    ->where('id', $itemData['receiving_detail_id'])
+                    ->where('receiving_id', $receiving->id) // Pastikan detail milik receiving yang benar
+                    ->lockForUpdate() // PESSIMISTIC LOCKING
+                    ->firstOrFail();
+
+                // Validasi ulang stok vs request
+                $maxRetur = $detail->qty_gagal_qc - $detail->qty_diretur;
+                if ($qtyRetur > $maxRetur) {
+                    throw new \Exception("Gagal! Barang {$detail->barang->part_name} hanya memiliki sisa {$maxRetur} unit untuk diretur (Diminta: {$qtyRetur}). Data mungkin telah berubah.");
                 }
 
-                // ============================================
-                // ++ LOGIKA PENGURANGAN STOK KARANTINA ++
-                // ============================================
+                // 6. Kurangi Stok Fisik dari Batch (FIFO) di Rak Karantina
+                $this->processQuarantineStockDeduction(
+                    $detail->barang_id,
+                    $rakKarantina->id,
+                    $lokasiId,
+                    $qtyRetur,
+                    $purchaseReturn,
+                    $itemData['alasan'] ?? null
+                );
 
-                // Cari batch di rak karantina berdasarkan part, rak, lokasi
-                 $batchKarantina = InventoryBatch::where('barang_id', $barangId)
-                                                ->where('rak_id', $quarantineRakId)
-                                                ->where('lokasi_id', $lokasiId)
-                                                // Opsional: Jika batch karantina dibuat per receiving detail
-                                                // Jika demikian, pastikan 'receiving_detail_id' ada di batch saat dibuat di QcController
-                                                // ->where('receiving_detail_id', $detailId)
-                                                ->where('quantity', '>=', $qtyToReturn) // Pastikan stok cukup
-                                                ->orderBy('created_at', 'asc') // Opsi: ambil batch tertua jika ada > 1
-                                                ->first();
+                // 7. Update Receiving Detail
+                $detail->increment('qty_diretur', $qtyRetur);
 
-                if (!$batchKarantina) {
-                     // Stok di batch karantina tidak cukup atau tidak ditemukan
-                     $currentQuarantineStock = InventoryBatch::where('barang_id', $barangId)
-                                                ->where('rak_id', $quarantineRakId)
-                                                ->where('lokasi_id', $lokasiId)
-                                                ->sum('quantity');
-                     throw new \Exception("Stok karantina tidak mencukupi/tidak ditemukan untuk barang {$detail->barang->part_name}. Stok batch: " . ($currentQuarantineStock) . ", Retur: {$qtyToReturn}");
-                }
-
-                 // Ambil stok total sebelum dikurangi untuk StockMovement
-                 $stokTotalSebelum = InventoryBatch::where('barang_id', $barangId)->where('lokasi_id', $lokasiId)->sum('quantity');
-
-                 // Kurangi stok batch karantina
-                 $batchKarantina->decrement('quantity', $qtyToReturn);
-
-                 // Buat Stock Movement
-                 StockMovement::create([
-                     'barang_id' => $barangId,
-                     'lokasi_id' => $lokasiId,
-                     'rak_id' => $quarantineRakId, // Rak Sumber adalah Rak Karantina
-                     'jumlah' => -$qtyToReturn, // Jumlah negatif karena keluar
-                     'stok_sebelum' => $stokTotalSebelum,
-                     'stok_sesudah' => $stokTotalSebelum - $qtyToReturn,
-                     'referensi_type' => get_class($return), // Referensi ke dokumen retur
-                     'referensi_id' => $return->id,
-                     'keterangan' => 'Retur Pembelian: ' . ($alasanRetur ?: $return->nomor_retur),
-                     'user_id' => Auth::id(),
-                 ]);
-                // ============================================
-                // -- AKHIR LOGIKA PENGURANGAN STOK --
-                // ============================================
-
-
-                // Buat detail return (sudah ada sebelumnya)
-                $return->details()->create([
-                    'barang_id' => $barangId,
-                    'qty_retur' => $qtyToReturn,
-                    'alasan' => $alasanRetur,
-                    'receiving_detail_id' => $detailId, // Simpan ID detail penerimaan
+                // 8. Buat Detail Retur
+                $purchaseReturn->details()->create([
+                    'barang_id' => $detail->barang_id,
+                    'receiving_detail_id' => $detail->id,
+                    'qty_retur' => $qtyRetur,
+                    'alasan' => $itemData['alasan'] ?? null,
                 ]);
-
-                // Update qty_diretur di receiving detail (sudah ada sebelumnya)
-                // Gunakan increment agar aman dari race condition
-                $detail->increment('qty_diretur', $qtyToReturn);
             }
 
             DB::commit();
-            // Pesan sukses diperbarui
-            return redirect()->route('admin.purchase-returns.index')->with('success', 'Retur pembelian berhasil dibuat dan stok karantina telah dikurangi.');
+            return redirect()->route('admin.purchase-returns.index')
+                ->with('success', 'Retur Pembelian berhasil disimpan: ' . $purchaseReturn->nomor_retur);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error("Purchase Return Store Failed: " . $e->getMessage() . " - Trace: " . $e->getTraceAsString()); // Log lebih detail
-            return back()->with('error', 'GAGAL: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Terjadi Kesalahan: ' . $e->getMessage())->withInput();
         }
     }
 
     public function show(PurchaseReturn $purchaseReturn)
     {
         $this->authorize('manage-purchase-returns');
-        $purchaseReturn->load(['supplier', 'receiving.purchaseOrder', 'details.barang']);
+        $purchaseReturn->load(['supplier', 'receiving.purchaseOrder', 'details.barang', 'createdBy']);
         return view('admin.purchase_returns.show', compact('purchaseReturn'));
     }
 
-    private function generateReturnNumber()
+    /**
+     * Mengurangi stok karantina menggunakan metode FIFO
+     * Mengunci baris inventory_batch saat proses.
+     */
+    private function processQuarantineStockDeduction($barangId, $rakId, $lokasiId, $qtyNeeded, $docRef, $alasan)
     {
-        $date = now()->format('Ymd');
-        $latest = PurchaseReturn::whereDate('created_at', today())->count();
-        $sequence = str_pad($latest + 1, 4, '0', STR_PAD_LEFT);
-        return "RTN/{$date}/{$sequence}";
+        $remaining = $qtyNeeded;
+
+        // Ambil batch stok karantina, urutkan dari yang terlama (FIFO)
+        $batches = InventoryBatch::where('barang_id', $barangId)
+            ->where('rak_id', $rakId)
+            ->where('lokasi_id', $lokasiId)
+            ->where('quantity', '>', 0)
+            ->orderBy('created_at', 'asc')
+            ->lockForUpdate() // LOCK BATCH AGAR TIDAK DIAMBIL TRANSAKSI LAIN
+            ->get();
+
+        $totalAvailable = $batches->sum('quantity');
+
+        if ($totalAvailable < $qtyNeeded) {
+            $namaBarang = \App\Models\Barang::find($barangId)->part_name ?? 'Unknown';
+            throw new \Exception("Stok karantina fisik tidak mencukupi untuk {$namaBarang}. Tersedia: {$totalAvailable}, Dibutuhkan: {$qtyNeeded}. Pastikan barang sudah dipindah ke rak karantina saat penerimaan.");
+        }
+
+        foreach ($batches as $batch) {
+            if ($remaining <= 0) break;
+
+            $take = min($batch->quantity, $remaining);
+            
+            $batch->decrement('quantity', $take);
+            
+            // Catat Kartu Stok
+            StockMovement::create([
+                'barang_id' => $barangId,
+                'lokasi_id' => $lokasiId,
+                'rak_id' => $rakId,
+                'jumlah' => -$take, // Negatif karena keluar (retur)
+                'stok_sebelum' => $batch->quantity + $take,
+                'stok_sesudah' => $batch->quantity,
+                'referensi_type' => get_class($docRef),
+                'referensi_id' => $docRef->id,
+                'keterangan' => 'Retur ke Supplier: ' . ($alasan ?: '-'),
+                'user_id' => Auth::id(),
+            ]);
+
+            $remaining -= $take;
+        }
     }
-
-private function reduceStockFromBatches($barangId, $rakId, $lokasiId, $quantityToReduce, PurchaseReturn $return, $alasan = null)
-     {
-         $batches = InventoryBatch::where('barang_id', $barangId)
-                                  ->where('rak_id', $rakId)
-                                  ->where('lokasi_id', $lokasiId)
-                                  ->where('quantity', '>', 0)
-                                  ->orderBy('created_at', 'asc') // FIFO for reduction source? Maybe not critical for quarantine.
-                                  ->get();
-
-         $remainingQtyToReduce = $quantityToReduce;
-         $stokTotalSebelum = InventoryBatch::where('barang_id', $barangId)->where('lokasi_id', $lokasiId)->sum('quantity');
-
-
-         if ($batches->sum('quantity') < $quantityToReduce) {
-             throw new \Exception("Stok karantina tidak cukup. Tersedia: {$batches->sum('quantity')}, Retur: {$quantityToReduce}");
-         }
-
-         foreach ($batches as $batch) {
-             if ($remainingQtyToReduce <= 0) break;
-
-             $qtyToTake = min($batch->quantity, $remainingQtyToReduce);
-
-             $batch->decrement('quantity', $qtyToTake);
-
-             StockMovement::create([
-                 'barang_id' => $barangId,
-                 'lokasi_id' => $lokasiId,
-                 'rak_id' => $rakId,
-                 'jumlah' => -$qtyToTake,
-                 'stok_sebelum' => $stokTotalSebelum,
-                 'stok_sesudah' => $stokTotalSebelum - $qtyToTake, // Recalculate if needed per batch reduction
-                 'referensi_type' => get_class($return),
-                 'referensi_id' => $return->id,
-                 'keterangan' => 'Retur Pembelian: ' . ($alasan ?: $return->nomor_retur),
-                 'user_id' => Auth::id(),
-             ]);
-
-             $stokTotalSebelum -= $qtyToTake; // Update for next movement record if needed
-
-             // Opsional: Hapus batch jika quantity jadi 0
-             // if ($batch->quantity <= 0) {
-             //     $batch->delete();
-             // }
-
-             $remainingQtyToReduce -= $qtyToTake;
-         }
-
-          if ($remainingQtyToReduce > 0) {
-              // Should not happen if initial check passes, but as a safeguard
-             throw new \Exception('Gagal mengurangi stok karantina sejumlah yang diminta.');
-         }
-     }
 }

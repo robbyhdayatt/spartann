@@ -8,9 +8,22 @@ use Illuminate\Database\Eloquent\Model;
 class SalesReturn extends Model
 {
     use HasFactory;
-    protected $guarded = ['id'];
+    
+    protected $fillable = [
+        'nomor_retur_jual',
+        'penjualan_id',
+        'konsumen_id',
+        'lokasi_id',
+        'tanggal_retur',
+        'catatan',
+        'created_by',
+        'total_retur' // Sekarang berisi murni total harga barang tanpa pajak
+    ];
 
-    protected $casts = ['tanggal_retur' => 'date'];
+    protected $casts = [
+        'tanggal_retur' => 'date',
+        'total_retur' => 'float'
+    ];
 
     public function details() { return $this->hasMany(SalesReturnDetail::class); }
     public function penjualan() { return $this->belongsTo(Penjualan::class); }

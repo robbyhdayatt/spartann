@@ -14,15 +14,12 @@ use App\Http\Controllers\Admin\StockAdjustmentController;
 use App\Http\Controllers\Admin\StockMutationController;
 use App\Http\Controllers\Admin\PenjualanController;
 use App\Http\Controllers\Admin\ReportController;
-use App\Http\Controllers\Admin\CampaignController;
 use App\Http\Controllers\Admin\PurchaseReturnController;
 use App\Http\Controllers\Admin\SalesReturnController;
 use App\Http\Controllers\Admin\ProfileController;
-use App\Http\Controllers\Admin\IncentiveController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Admin\QuarantineStockController;
 use App\Http\Controllers\Admin\MutationReceivingController;
-use App\Http\Controllers\Admin\CustomerDiscountCategoryController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\PdfController;
 use App\Http\Controllers\Admin\ConvertController;
@@ -78,18 +75,10 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('quarantine-stock', [QuarantineStockController::class, 'index'])->name('quarantine-stock.index');
     Route::post('quarantine-stock/process', [QuarantineStockController::class, 'process'])->name('quarantine-stock.process');
 
-    // === PENJUALAN & MARKETING ===
-    Route::resource('campaigns', CampaignController::class);
-    Route::resource('customer-discount-categories', CustomerDiscountCategoryController::class);
+    // === PENJUALAN ===
     Route::resource('penjualans', PenjualanController::class)->except(['edit', 'update', 'destroy']);
     Route::get('penjualans/{penjualan}/print', [PenjualanController::class, 'print'])->name('penjualans.print');
     Route::get('penjualans/{penjualan}/pdf', [PdfController::class, 'penjualan'])->name('penjualans.pdf');
-
-
-    Route::get('incentives/targets', [IncentiveController::class, 'targets'])->name('incentives.targets');
-    Route::post('incentives/targets', [IncentiveController::class, 'storeTarget'])->name('incentives.targets.store');
-    Route::get('incentives/report', [IncentiveController::class, 'report'])->name('incentives.report');
-    Route::post('incentives/{incentive}/mark-as-paid', [IncentiveController::class, 'markAsPaid'])->name('incentives.mark-as-paid');
 
     // === SERVICE ===
     Route::get('services', [ServiceController::class, 'index'])->name('services.index');
@@ -107,7 +96,6 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('reports/sales-journal/export', [ReportController::class, 'exportSalesJournal'])->name('reports.sales-journal.export');
     Route::get('reports/purchase-journal', [ReportController::class, 'purchaseJournal'])->name('reports.purchase-journal');
     Route::get('reports/inventory-value', [ReportController::class, 'inventoryValue'])->name('reports.inventory-value');
-    Route::get('reports/rekomendasi-po', [ReportController::class, 'rekomendasiPo'])->name('reports.rekomendasi-po');
     Route::get('reports/stock-card/export', [ReportController::class, 'exportStockCard'])->name('reports.stock-card.export');
     Route::get('reports/purchase-journal/export', [ReportController::class, 'exportPurchaseJournal'])->name('reports.purchase-journal.export');
     Route::get('reports/inventory-value/export', [ReportController::class, 'exportInventoryValue'])->name('reports.inventory-value.export');
@@ -137,4 +125,5 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
     Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
     Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
+    Route::get('api/check-stock', [StockAdjustmentController::class, 'checkStock'])->name('api.check-stock');
 });
