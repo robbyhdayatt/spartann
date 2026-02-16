@@ -22,7 +22,7 @@
             <div class="row">
                 <div class="col-md-6 form-group">
                     <label>Tanggal Request</label>
-                    <input type="date" class="form-control" name="tanggal_po" value="{{ now()->format('Y-m-d') }}" required>
+                    <input type="date" class="form-control" name="tanggal_po" value="{{ now()->format('Y-m-d') }}" max="{{ date('Y-m-d') }}" required>
                 </div>
                 <div class="col-md-6 form-group">
                     <label>Sumber Barang (Pusat)</label>

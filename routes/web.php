@@ -66,6 +66,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('stock-mutations/{stock_mutation}/reject', [StockMutationController::class, 'reject'])->name('stock-mutations.reject');
 
     Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'create', 'store', 'show']);
+    Route::get('purchase-returns/{purchaseReturn}/pdf', [PurchaseReturnController::class, 'pdf'])->name('purchase-returns.pdf');
     Route::resource('sales-returns', SalesReturnController::class);
 
     Route::get('mutation-receiving', [MutationReceivingController::class, 'index'])->name('mutation-receiving.index');
@@ -126,4 +127,5 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
     Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
     Route::get('api/check-stock', [StockAdjustmentController::class, 'checkStock'])->name('api.check-stock');
+    Route::get('purchase-returns/get-failed-items/{receiving}', [App\Http\Controllers\Admin\PurchaseReturnController::class, 'getFailedItems']);
 });

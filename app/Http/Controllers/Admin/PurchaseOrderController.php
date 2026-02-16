@@ -20,7 +20,16 @@ class PurchaseOrderController extends Controller
 {
     public function index(Request $request)
     {
-        $type = $request->get('type', 'dealer_request'); 
+        // FIX POIN 2: Logika Redirect Default Tab berdasarkan Role
+        $defaultType = 'dealer_request';
+        
+        // Jika user adalah Kepala Gudang (KG) atau Admin Gudang (AG), default tab ke supplier_po
+        // Karena tab dealer_request (request masuk) disembunyikan di view untuk mereka
+        if (Auth::user()->hasRole(['KG', 'AG'])) {
+            $defaultType = 'supplier_po';
+        }
+
+        $type = $request->get('type', $defaultType); 
         
         $purchaseOrders = PurchaseOrder::with(['lokasi', 'supplier', 'createdBy', 'sumberLokasi'])
             ->where('po_type', $type)
@@ -217,8 +226,8 @@ class PurchaseOrderController extends Controller
         if ($purchaseOrder->po_type === 'dealer_request') {
              foreach ($purchaseOrder->details as $detail) {
                  $detail->stok_sumber = InventoryBatch::where('lokasi_id', $purchaseOrder->sumber_lokasi_id)
-                     ->where('barang_id', $detail->barang_id)
-                     ->sum('quantity');
+                      ->where('barang_id', $detail->barang_id)
+                      ->sum('quantity');
              }
         }
 

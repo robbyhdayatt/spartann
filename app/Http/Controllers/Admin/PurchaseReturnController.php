@@ -13,13 +13,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use PDF;
 
 class PurchaseReturnController extends Controller
 {
     public function index()
     {
         $this->authorize('manage-purchase-returns');
-        $returns = PurchaseReturn::with(['supplier', 'receiving'])->latest()->get();
+        $returns = PurchaseReturn::with(['supplier', 'receiving', 'createdBy'])->latest()->get();
         return view('admin.purchase_returns.index', compact('returns'));
     }
 
@@ -27,15 +28,19 @@ class PurchaseReturnController extends Controller
     {
         $this->authorize('manage-purchase-returns');
         
+        // FIX POIN 1: Ubah 'supplier' jadi 'purchaseOrder.supplier'
         // Ambil penerimaan yang memiliki item gagal QC dan belum diretur sepenuhnya
-        $receivings = Receiving::with('supplier')
+        $receivings = Receiving::with(['purchaseOrder.supplier'])
             ->whereHas('details', function ($query) {
                 $query->whereRaw('qty_gagal_qc > qty_diretur');
-            })->latest()->get();
+            })
+            ->latest()
+            ->get();
 
         return view('admin.purchase_returns.create', compact('receivings'));
     }
 
+    // API Helper untuk mengambil item gagal QC via AJAX
     public function getFailedItems(Receiving $receiving)
     {
         $items = $receiving->details()
@@ -166,10 +171,6 @@ class PurchaseReturnController extends Controller
         return view('admin.purchase_returns.show', compact('purchaseReturn'));
     }
 
-    /**
-     * Mengurangi stok karantina menggunakan metode FIFO
-     * Mengunci baris inventory_batch saat proses.
-     */
     private function processQuarantineStockDeduction($barangId, $rakId, $lokasiId, $qtyNeeded, $docRef, $alasan)
     {
         $remaining = $qtyNeeded;
@@ -180,7 +181,7 @@ class PurchaseReturnController extends Controller
             ->where('lokasi_id', $lokasiId)
             ->where('quantity', '>', 0)
             ->orderBy('created_at', 'asc')
-            ->lockForUpdate() // LOCK BATCH AGAR TIDAK DIAMBIL TRANSAKSI LAIN
+            ->lockForUpdate()
             ->get();
 
         $totalAvailable = $batches->sum('quantity');
@@ -213,5 +214,47 @@ class PurchaseReturnController extends Controller
 
             $remaining -= $take;
         }
+    }
+
+    public function pdf(PurchaseReturn $purchaseReturn)
+    {
+        $this->authorize('manage-purchase-returns');
+        
+        $purchaseReturn->load(['supplier', 'receiving.lokasi', 'details.barang', 'createdBy']);
+
+        $data = ['purchaseReturn' => $purchaseReturn];
+
+        // === KONFIGURASI KERTAS (Disamakan dengan Faktur/PO) ===
+        // Ukuran: 24cm x 14cm (Landscape Faktur)
+        $width_cm = 24;
+        $height_cm = 14;
+        $points_per_cm = 28.3465;
+        $widthInPoints = $width_cm * $points_per_cm; // ~680.3
+        $heightInPoints = $height_cm * $points_per_cm; // ~396.8
+        
+        $customPaper = [0, 0, $widthInPoints, $heightInPoints];
+
+        // Load View
+        $pdf = PDF::loadView('admin.purchase_returns.print', $data);
+
+        // Set Paper
+        $pdf->setPaper($customPaper);
+
+        // Set Options (Sama persis dengan PdfController)
+        $pdf->setOptions([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => true,
+            'dpi' => 150,
+            'defaultFont' => 'Arial',
+            'margin-top'    => 0,
+            'margin-right'  => 0,
+            'margin-bottom' => 0,
+            'margin-left'   => 0,
+            'enable-smart-shrinking' => true,
+            'disable-smart-shrinking' => false,
+            'lowquality' => false
+        ]);
+
+        return $pdf->download('Retur-' . $purchaseReturn->nomor_retur . '.pdf');
     }
 }

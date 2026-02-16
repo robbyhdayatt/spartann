@@ -45,6 +45,10 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         // Karantina: Hanya Pusat
+        Gate::define('view-quarantine-stock', function(User $user) {
+             return $user->hasRole(['SA', 'PIC', 'AG', 'KG']);
+        });
+        
         Gate::define('manage-quarantine-stock', function(User $user) {
              return $user->hasRole(['SA', 'PIC', 'AG', 'KG']);
         });

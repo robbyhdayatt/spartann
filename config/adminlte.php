@@ -288,11 +288,6 @@ return [
                     'icon'  => 'fas fa-dolly',
                 ],
                 [
-                    'text' => 'Receiving Mutasi',
-                    'icon' => 'fas fa-fw fa-truck-moving',
-                    'route' => 'admin.mutation-receiving.index',
-                ],
-                [
                     'text'  => 'Quality Control (QC)',
                     'route' => 'admin.qc.index',
                     'icon'  => 'fas fa-check-double',
@@ -303,6 +298,11 @@ return [
                     'route' => 'admin.putaway.index',
                     'icon'  => 'fas fa-box-open',
                 ],
+                // [
+                //     'text' => 'Receiving Mutasi',
+                //     'icon' => 'fas fa-fw fa-truck-moving',
+                //     'route' => 'admin.mutation-receiving.index',
+                // ],
                 [
                     'text'  => 'Stok Karantina',
                     'route' => 'admin.quarantine-stock.index',
@@ -318,12 +318,12 @@ return [
             'icon'    => 'fas fa-exchange-alt',
             'can'     => ['view-stock-mutations-menu', 'view-stock-adjustments-menu'], 
             'submenu' => [
-                [
-                    'text' => 'Mutasi Stok',
-                    'route'  => 'admin.stock-mutations.index',
-                    'icon' => 'fas fa-random',
-                    'can'  => 'view-stock-mutations-menu',
-                ],
+                // [
+                //     'text' => 'Mutasi Stok',
+                //     'route'  => 'admin.stock-mutations.index',
+                //     'icon' => 'fas fa-random',
+                //     'can'  => 'view-stock-mutations-menu',
+                // ],
                 [
                     'text' => 'Penyesuaian Stok',
                     'route'  => 'admin.stock-adjustments.index',

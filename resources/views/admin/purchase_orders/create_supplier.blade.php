@@ -21,7 +21,7 @@
             <div class="row">
                 <div class="col-md-4 form-group">
                     <label>Tanggal PO</label>
-                    <input type="date" class="form-control" name="tanggal_po" value="{{ now()->format('Y-m-d') }}" required>
+                    <input type="date" class="form-control" name="tanggal_po" value="{{ now()->format('Y-m-d') }}" max="{{ date('Y-m-d') }}" required>
                 </div>
                 <div class="col-md-4 form-group">
                     <label>Pilih Supplier</label>

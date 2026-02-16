@@ -4,53 +4,66 @@
 @section('plugins.Datatables', true)
 
 @section('content_header')
-    <h1>Daftar Tunggu Penyimpanan (Putaway)</h1>
+    <div class="row mb-2">
+        <div class="col-sm-6">
+            <h1>Proses Putaway Barang</h1>
+        </div>
+    </div>
 @stop
 
 @section('content')
-<div class="card">
+<div class="card card-outline card-info shadow-sm">
     <div class="card-header">
-        <h3 class="card-title">Barang Lolos QC yang Siap Disimpan</h3>
+        <h3 class="card-title"><i class="fas fa-boxes mr-1"></i> Barang Lolos QC (Siap Simpan)</h3>
     </div>
     <div class="card-body">
-        <table id="putaway-table" class="table table-bordered table-striped">
-            <thead>
+        
+        @if(session('success'))
+            <x-adminlte-alert theme="success" title="Sukses" dismissable>{{ session('success') }}</x-adminlte-alert>
+        @endif
+        @if(session('error'))
+            <x-adminlte-alert theme="danger" title="Error" dismissable>{{ session('error') }}</x-adminlte-alert>
+        @endif
+
+        <table id="putaway-table" class="table table-bordered table-hover table-striped">
+            <thead class="bg-gradient-light">
                 <tr>
-                    <th>No. Penerimaan</th>
-                    <th>No. PO</th>
+                    <th width="15%">No. Penerimaan</th>
+                    <th width="15%">Referensi PO</th>
                     <th>Sumber Asal</th>
                     <th>Lokasi Tujuan</th>
-                    <th style="width: 150px">Aksi</th>
+                    <th width="10%">Lolos QC</th>
+                    <th style="width: 140px" class="text-center">Aksi</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($receivings as $receiving)
                 <tr>
-                    <td>{{ $receiving->nomor_penerimaan }}</td>
-                    <td>{{ $receiving->purchaseOrder->nomor_po ?? '-' }}</td>
+                    <td class="align-middle font-weight-bold text-primary">{{ $receiving->nomor_penerimaan }}</td>
+                    <td class="align-middle">{{ $receiving->purchaseOrder->nomor_po ?? '-' }}</td>
                     
-                    {{-- PERBAIKAN DISINI: Cek Tipe PO --}}
-                    <td>
-                        @if($receiving->purchaseOrder->po_type == 'supplier_po')
-                            <span class="badge badge-warning">SUPPLIER</span><br>
-                            {{ $receiving->purchaseOrder->supplier->nama_supplier ?? 'Supplier Tidak Ditemukan' }}
+                    <td class="align-middle">
+                        @if($receiving->purchaseOrder && $receiving->purchaseOrder->po_type == 'supplier_po')
+                            <span class="badge badge-warning">SUPPLIER</span> 
+                            {{ $receiving->purchaseOrder->supplier->nama_supplier ?? '-' }}
                         @else
-                            <span class="badge badge-info">INTERNAL</span><br>
-                            {{ $receiving->purchaseOrder->sumberLokasi->nama_lokasi ?? 'Gudang Pusat' }}
+                            <span class="badge badge-info">INTERNAL</span> 
+                            {{ $receiving->purchaseOrder->sumberLokasi->nama_lokasi ?? '-' }}
                         @endif
                     </td>
                     
-                    <td>{{ $receiving->lokasi->nama_lokasi ?? '-' }}</td>
-                    <td>
-                        <a href="{{ route('admin.putaway.form', $receiving->id) }}" class="btn btn-primary btn-xs">
-                           <i class="fas fa-dolly-flatbed"></i> Proses Penyimpanan
+                    <td class="align-middle">{{ $receiving->lokasi->nama_lokasi ?? '-' }}</td>
+                    <td class="align-middle text-center">
+                        <span class="badge badge-success">{{ $receiving->qc_at ? $receiving->qc_at->format('d/m H:i') : '-' }}</span>
+                    </td>
+                    <td class="align-middle text-center">
+                        <a href="{{ route('admin.putaway.form', $receiving->id) }}" class="btn btn-info btn-sm shadow-sm">
+                            <i class="fas fa-dolly-flatbed mr-1"></i> Atur Rak
                         </a>
                     </td>
                 </tr>
                 @empty
-                <tr>
-                    <td colspan="5" class="text-center">Tidak ada barang yang menunggu untuk disimpan di lokasi Anda.</td>
-                </tr>
+                
                 @endforelse
             </tbody>
         </table>
@@ -63,7 +76,11 @@
     $(document).ready(function() {
         $('#putaway-table').DataTable({ 
             "responsive": true,
-            "ordering": false // Matikan sorting default agar lebih cepat
+            "autoWidth": false,
+            "ordering": false,
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.21/i18n/Indonesian.json"
+            }
         });
     });
 </script>

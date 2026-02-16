@@ -23,7 +23,7 @@ class PutawayController extends Controller
         $user = Auth::user();
 
         $query = Receiving::where('status', 'PENDING_PUTAWAY')
-            ->with(['purchaseOrder.supplier', 'lokasi']); 
+            ->with(['purchaseOrder.supplier', 'lokasi', 'qcBy']); // Load qcBy untuk tampilan
 
         if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
             $query->where('lokasi_id', $user->lokasi_id);
@@ -53,9 +53,22 @@ class PutawayController extends Controller
             return $d->qty_lolos_qc > 0;
         });
 
+        // Cek Existing Location (Rekomendasi Rak)
+        foreach ($itemsToPutaway as $item) {
+            $existingBatches = InventoryBatch::where('barang_id', $item->barang_id)
+                ->where('lokasi_id', $receiving->lokasi_id)
+                ->where('quantity', '>', 0)
+                ->with('rak')
+                ->get()
+                ->pluck('rak.kode_rak')
+                ->unique();
+            
+            $item->rekomendasi_rak = $existingBatches->implode(', ');
+        }
+
         // Ambil Rak Penyimpanan yang Aktif
         $raks = Rak::where('lokasi_id', $receiving->lokasi_id)
-            ->where('tipe_rak', 'PENYIMPANAN') // Filter tipe rak penting!
+            ->where('tipe_rak', 'PENYIMPANAN') 
             ->where('is_active', true)
             ->orderBy('kode_rak')
             ->get();
@@ -87,32 +100,10 @@ class PutawayController extends Controller
 
                 if ($qtyMasuk <= 0) continue;
 
-                // === LOCK MASTER BARANG UNTUK UPDATE HPP ===
+                // === LOCK MASTER BARANG (Hanya untuk konsistensi, tidak update harga lagi) ===
                 $barang = Barang::where('id', $detail->barang_id)->lockForUpdate()->first();
 
-                // 1. UPDATE HPP (AVERAGE COST)
-                // Hanya jika ini dari Supplier PO (bukan transfer antar cabang)
-                if ($receiving->purchaseOrder && $receiving->purchaseOrder->po_type == 'supplier_po') {
-                    // Ambil harga beli dari PO
-                    $poDetail = PurchaseOrderDetail::where('purchase_order_id', $receiving->purchase_order_id)
-                        ->where('barang_id', $barang->id)
-                        ->first();
-                        
-                    $hargaBeliBaru = $poDetail ? $poDetail->harga_beli : 0;
-                    
-                    if ($hargaBeliBaru > 0) {
-                        // Hitung Weighted Average
-                        $currentTotalStock = InventoryBatch::where('barang_id', $barang->id)->sum('quantity'); // Global stock for HPP? Atau per lokasi? Biasanya Global.
-                        
-                        $nilaiAsetLama = $currentTotalStock * $barang->selling_in; // selling_in = HPP
-                        $nilaiAsetBaru = $qtyMasuk * $hargaBeliBaru;
-                        $totalQtyBaru = $currentTotalStock + $qtyMasuk;
-                        
-                        $newHpp = ($nilaiAsetLama + $nilaiAsetBaru) / $totalQtyBaru;
-                        
-                        $barang->update(['selling_in' => $newHpp]);
-                    }
-                }
+                // --- LOGIKA UPDATE HARGA JUAL/BELI TELAH DIHAPUS (POIN 3) ---
 
                 // 2. CREATE INVENTORY BATCH
                 $batch = InventoryBatch::create([
@@ -121,17 +112,9 @@ class PutawayController extends Controller
                     'lokasi_id'           => $receiving->lokasi_id,
                     'receiving_detail_id' => $detail->id,
                     'quantity'            => $qtyMasuk,
-                    // 'harga_beli'       => $hargaBeliBaru // Jika ingin track harga per batch
                 ]);
 
                 // 3. CATAT STOCK MOVEMENT
-                // Kita perlu snapshot stok sebelumnya di rak tersebut untuk log yang akurat
-                // Tapi karena InventoryBatch baru di-create (bukan update), stok sebelumnya untuk *batch ini* adalah 0.
-                // Namun untuk *Rak tersebut*, stok sebelumnya mungkin ada. 
-                // StockMovement mencatat stok agregat per Rak/Barang atau per Transaksi? 
-                // Standarnya per transaksi (flow).
-                
-                // Hitung stok akumulasi di Rak itu sebelum insert (untuk reporting)
                 $stokRakSebelum = InventoryBatch::where('rak_id', $data['rak_id'])
                     ->where('barang_id', $barang->id)
                     ->where('id', '!=', $batch->id)
@@ -161,7 +144,6 @@ class PutawayController extends Controller
             if ($receiving->purchaseOrder) {
                 $receiving->purchaseOrder->syncStatus();
                 
-                // Cek apakah PO sudah Fully Received, jika ya, tutup semua receiving parsial lain
                 if ($receiving->purchaseOrder->status === 'FULLY_RECEIVED') {
                     Receiving::where('purchase_order_id', $receiving->purchase_order_id)
                         ->where('status', 'PARTIAL_CLOSED')

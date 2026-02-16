@@ -23,6 +23,10 @@ class PurchaseOrder extends Model
     public function createdBy() { return $this->belongsTo(User::class, 'created_by'); }
     public function approvedBy() { return $this->belongsTo(User::class, 'approved_by'); }
 
+    // Fix Error RelationNotFoundException (Poin 1)
+    // Kita aliaskan approvedByHead ke approvedBy karena di database hanya ada kolom approved_by
+    public function approvedByHead() { return $this->belongsTo(User::class, 'approved_by'); }
+
     // Helpers
     public function syncStatus()
     {

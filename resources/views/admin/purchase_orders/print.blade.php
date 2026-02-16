@@ -248,7 +248,6 @@
                 {{-- Kiri: Terbilang / Note --}}
                 <td style="width: 60%; vertical-align: bottom;">
                     @if($purchaseOrder->po_type == 'supplier_po')
-                        <div><strong>Harga belum termasuk PPN (Kecuali disebutkan lain)</strong></div>
                         <div><strong>Terbilang:</strong>
                             <div class="terbilang-box">
                                 # {{ trim(NumberHelper::terbilang($purchaseOrder->total_amount ?? 0)) }} Rupiah #

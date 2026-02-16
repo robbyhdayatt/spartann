@@ -11,8 +11,8 @@ class Rak extends Model
 
     protected $fillable = [
         'lokasi_id', 
-        'kode_rak', // Ini akan digenerate otomatis
-        'nama_rak', // Ini juga digenerate otomatis
+        'kode_rak', 
+        'nama_rak', 
         'zona', 
         'nomor_rak', 
         'level', 
@@ -21,7 +21,6 @@ class Rak extends Model
         'is_active'
     ];
 
-    // Boot function untuk auto-generate kode sebelum simpan
     protected static function boot()
     {
         parent::boot();
@@ -37,7 +36,7 @@ class Rak extends Model
             );
             
             $rak->kode_rak = $fullCode;
-            $rak->nama_rak = $fullCode; // Nama rak disamakan dengan kode biar mudah
+            $rak->nama_rak = $fullCode;
         });
     }
 

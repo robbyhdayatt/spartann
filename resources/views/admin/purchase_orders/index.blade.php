@@ -3,29 +3,33 @@
 @section('title', 'Daftar Transaksi PO')
 
 @section('content_header')
-    <h1>Daftar Transaksi PO</h1>
+    <div class="row mb-2">
+        <div class="col-sm-6">
+            <h1>Daftar Transaksi PO</h1>
+        </div>
+    </div>
 @stop
 
 @section('content')
-<div class="card card-primary card-outline card-tabs">
+<div class="card card-primary card-outline card-tabs shadow-sm">
     <div class="card-header p-0 pt-1 border-bottom-0">
-        <ul class="nav nav-tabs">
+        <ul class="nav nav-tabs" role="tablist">
             {{-- TAB 1: DEALER REQUEST --}}
-            {{-- HIDE KHUSUS UNTUK KEPALA GUDANG (KG) --}}
-            @if(!auth()->user()->hasRole('KG'))
+            {{-- HIDE KHUSUS UNTUK KEPALA GUDANG (KG) & ADMIN GUDANG (AG) --}}
+            @if(!auth()->user()->hasRole(['KG', 'AG']))
             <li class="nav-item">
                 <a class="nav-link {{ $type == 'dealer_request' ? 'active' : '' }}" href="{{ route('admin.purchase-orders.index', ['type' => 'dealer_request']) }}">
-                    <i class="fas fa-store"></i> Request Dealer (Masuk)
+                    <i class="fas fa-store mr-1"></i> Request Dealer (Masuk)
                 </a>
             </li>
             @endif
 
             {{-- TAB 2: SUPPLIER PO --}}
-            {{-- TAMPIL UNTUK: AG, KG, SA --}}
+            {{-- TAMPIL UNTUK: AG, KG, SA, SUPERADMIN --}}
             @if(!auth()->user()->hasRole(['SMD', 'SA', 'PIC', 'DEALER']))
             <li class="nav-item">
                 <a class="nav-link {{ $type == 'supplier_po' ? 'active' : '' }}" href="{{ route('admin.purchase-orders.index', ['type' => 'supplier_po']) }}">
-                    <i class="fas fa-truck"></i> Order ke Supplier (Keluar)
+                    <i class="fas fa-truck mr-1"></i> Order ke Supplier (Keluar)
                 </a>
             </li>
             @endif
@@ -36,48 +40,67 @@
         {{-- TOMBOL BUAT BARU --}}
         @can('create-po')
             {{-- LOGIKA: Sembunyikan tombol jika User adalah Orang Gudang (AG/KG) TAPI sedang melihat Tab Request Dealer (Masuk) --}}
-            {{-- Karena di tab ini, orang gudang tugasnya hanya Approve, bukan buat baru --}}
             @if( ! (auth()->user()->hasRole(['AG', 'KG']) && $type == 'dealer_request') )
-                <div class="mb-2 text-right">
-                    <a href="{{ route('admin.purchase-orders.create') }}" class="btn btn-primary btn-sm">
-                        <i class="fas fa-plus"></i> Buat Transaksi Baru
+                <div class="mb-3 text-right">
+                    <a href="{{ route('admin.purchase-orders.create') }}" class="btn btn-primary shadow-sm">
+                        <i class="fas fa-plus-circle mr-1"></i> Buat Transaksi Baru
                     </a>
                 </div>
             @endif
         @endcan
         
-        <table id="po-table" class="table table-bordered table-striped">
-            <thead>
-                <tr>
-                    <th>Nomor PO</th>
-                    <th>Tanggal</th>
-                    <th>{{ $type == 'supplier_po' ? 'Supplier' : 'Dealer Pengaju' }}</th>
-                    <th>Total Item</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($purchaseOrders as $po)
-                <tr>
-                    <td>{{ $po->nomor_po }}</td>
-                    <td>{{ $po->tanggal_po->format('d/m/Y') }}</td>
-                    <td>
-                        @if($po->po_type == 'supplier_po')
-                            {{ $po->supplier->nama_supplier ?? '-' }}
-                        @else
-                            {{ $po->lokasi->nama_lokasi ?? 'Dealer' }}
-                        @endif
-                    </td>
-                    <td>{{ $po->details->count() }}</td>
-                    <td><span class="badge {{ $po->status_class }}">{{ $po->status }}</span></td>
-                    <td>
-                        <a href="{{ route('admin.purchase-orders.show', $po->id) }}" class="btn btn-xs btn-info">Detail</a>
-                    </td>
-                </tr>
-                @endforeach
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table id="po-table" class="table table-bordered table-striped table-hover">
+                <thead class="bg-gradient-dark">
+                    <tr>
+                        <th style="width: 15%">Nomor PO</th>
+                        <th style="width: 12%">Tanggal</th>
+                        <th>{{ $type == 'supplier_po' ? 'Supplier' : 'Dealer Pengaju' }}</th>
+                        <th style="width: 15%">Dibuat Oleh</th>
+                        <th style="width: 10%" class="text-center">Item</th>
+                        <th style="width: 12%" class="text-center">Status</th>
+                        <th style="width: 10%" class="text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($purchaseOrders as $po)
+                    <tr>
+                        <td class="font-weight-bold align-middle">{{ $po->nomor_po }}</td>
+                        <td class="align-middle">{{ $po->tanggal_po->format('d/m/Y') }}</td>
+                        <td class="align-middle">
+                            @if($po->po_type == 'supplier_po')
+                                <i class="fas fa-building text-secondary mr-1"></i> {{ $po->supplier->nama_supplier ?? '-' }}
+                            @else
+                                <i class="fas fa-store text-info mr-1"></i> {{ $po->lokasi->nama_lokasi ?? 'Dealer' }}
+                            @endif
+                        </td>
+                        <td class="align-middle text-sm text-muted">
+                            {{ $po->createdBy->name ?? 'Admin' }}
+                        </td>
+                        <td class="align-middle text-center">
+                            <span class="badge badge-info badge-pill px-3">{{ $po->details->count() }}</span>
+                        </td>
+                        <td class="align-middle text-center">
+                            @php
+                                $statusColor = 'secondary';
+                                if($po->status == 'PENDING_APPROVAL') $statusColor = 'warning';
+                                elseif($po->status == 'APPROVED') $statusColor = 'primary';
+                                elseif($po->status == 'PARTIALLY_RECEIVED') $statusColor = 'info';
+                                elseif($po->status == 'FULLY_RECEIVED') $statusColor = 'success';
+                                elseif($po->status == 'REJECTED') $statusColor = 'danger';
+                            @endphp
+                            <span class="badge badge-{{ $statusColor }}">{{ str_replace('_', ' ', $po->status) }}</span>
+                        </td>
+                        <td class="align-middle text-center">
+                            <a href="{{ route('admin.purchase-orders.show', $po->id) }}" class="btn btn-sm btn-outline-info" title="Lihat Detail">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 @stop
@@ -86,7 +109,11 @@
 <script>
     $(document).ready(function() {
         $('#po-table').DataTable({
-            "order": [[ 0, "desc" ]]
+            "order": [[ 0, "desc" ]],
+            "responsive": true,
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.21/i18n/Indonesian.json"
+            }
         });
     });
 </script>

@@ -131,7 +131,7 @@ class QuarantineStockController extends Controller
                     'created_by' => Auth::id(),
                 ]);
 
-                $msg = 'Pengajuan Write-Off berhasil dibuat. Menunggu persetujuan Manager.';
+                $msg = 'Pengajuan Write-Off berhasil dibuat. Menunggu persetujuan.';
             }
 
             DB::commit();
