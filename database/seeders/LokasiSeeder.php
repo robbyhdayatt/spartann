@@ -21,7 +21,7 @@ class LokasiSeeder extends Seeder
                 'kode_lokasi' => 'GUDANG PART',
                 'nama_lokasi' => 'MAIN DEALER PART',
                 'singkatan'   => 'MDP',
-                'tipe'        => 'PUSAT',
+                'tipe'        => 'GUDANG',
                 'is_active'   => 1,
                 // Data hierarki kosong untuk pusat sesuai tabel
                 'koadmin' => null, 'asd' => null, 'aom' => null, 'asm' => null, 'gm' => null

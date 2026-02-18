@@ -23,7 +23,7 @@ class ConvertController extends Controller
     {
         try {
             $converts = Convert::orderBy('nama_job')->get();
-            $barangs = Barang::orderBy('part_name')->get();
+            $barangs = Barang::where('is_active', true)->orderBy('part_name')->get();
             return view('admin.converts.index', compact('converts', 'barangs'));
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal memuat data: ' . $e->getMessage());

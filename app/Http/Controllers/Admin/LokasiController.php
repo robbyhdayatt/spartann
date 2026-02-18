@@ -5,29 +5,30 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Lokasi;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
 
 class LokasiController extends Controller
 {
     public function index()
     {
-        $this->authorize('manage-locations');
-        $lokasi = Lokasi::orderBy('tipe', 'asc')->latest()->get();
+        // Poin 4: SA & PIC (View Only)
+        $this->authorize('view-lokasi');
+        $lokasi = Lokasi::orderByRaw("FIELD(tipe, 'PUSAT', 'GUDANG', 'DEALER')")->latest()->get();
         return view('admin.lokasi.index', compact('lokasi'));
     }
 
     public function store(Request $request)
     {
-        $this->authorize('manage-locations');
+        $this->authorize('manage-lokasi');
 
         $validated = $request->validate([
-            'kode_lokasi' => 'required|string|max:20|unique:lokasi', // Update max length to accommodate codes like UDUA001
+            'kode_lokasi' => 'required|string|max:20|unique:lokasi',
             'nama_lokasi' => 'required|string|max:100',
             'singkatan'   => 'nullable|string|max:10',
             'npwp'        => 'nullable|string|max:25',
             'alamat'      => 'nullable|string',
-            'tipe'        => 'required|in:PUSAT,DEALER',
-            // Validasi field struktur
+            // VALIDASI INI PENTING
+            'tipe'        => 'required|in:PUSAT,GUDANG,DEALER', 
+            // Struktur
             'koadmin'     => 'nullable|string|max:50',
             'asd'         => 'nullable|string|max:50',
             'aom'         => 'nullable|string|max:50',
@@ -42,7 +43,7 @@ class LokasiController extends Controller
 
     public function update(Request $request, Lokasi $lokasi)
     {
-        $this->authorize('manage-locations');
+        $this->authorize('manage-lokasi');
 
         $validated = $request->validate([
             'kode_lokasi' => 'required|string|max:20|unique:lokasi,kode_lokasi,' . $lokasi->id,
@@ -50,9 +51,8 @@ class LokasiController extends Controller
             'singkatan'   => 'nullable|string|max:10',
             'npwp'        => 'nullable|string|max:25',
             'alamat'      => 'nullable|string',
-            'tipe'        => 'required|in:PUSAT,DEALER',
+            'tipe'        => 'required|in:PUSAT,GUDANG,DEALER',
             'is_active'   => 'required|boolean',
-            // Validasi field struktur
             'koadmin'     => 'nullable|string|max:50',
             'asd'         => 'nullable|string|max:50',
             'aom'         => 'nullable|string|max:50',
@@ -67,14 +67,14 @@ class LokasiController extends Controller
 
     public function destroy(Lokasi $lokasi)
     {
-        $this->authorize('manage-locations');
+        $this->authorize('manage-lokasi');
 
-        if ($lokasi->tipe === 'PUSAT') {
-            return redirect()->route('admin.lokasi.index')->with('error', 'Gudang Pusat tidak dapat dihapus!');
+        if (in_array($lokasi->tipe, ['PUSAT', 'GUDANG'])) {
+            return redirect()->route('admin.lokasi.index')->with('error', 'Lokasi Pusat/Gudang Utama tidak dapat dihapus!');
         }
 
         if ($lokasi->raks()->exists() || $lokasi->users()->exists()) {
-            return redirect()->route('admin.lokasi.index')->with('error', 'Lokasi tidak dapat dihapus karena masih memiliki relasi dengan rak atau pengguna.');
+            return redirect()->route('admin.lokasi.index')->with('error', 'Lokasi tidak dapat dihapus karena masih memiliki relasi.');
         }
 
         $lokasi->delete();

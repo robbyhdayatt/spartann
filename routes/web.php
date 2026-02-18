@@ -24,6 +24,7 @@ use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\PdfController;
 use App\Http\Controllers\Admin\ConvertController;
 use App\Http\Controllers\Admin\BarangController;
+use App\Http\Controllers\Admin\JabatanController;
 
 Route::get('/', fn() => redirect()->route('login'));
 
@@ -32,13 +33,16 @@ Auth::routes();
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
 
     Route::get('/home', [HomeController::class, 'index'])->name('home');
+
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
+    Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
 
     // === MASTER DATA & PENGATURAN ===
     Route::resource('lokasi', LokasiController::class)->except(['show']);
     Route::resource('raks', RakController::class);
     Route::resource('suppliers', SupplierController::class);
     Route::resource('users', UserController::class);
+    Route::resource('jabatans', JabatanController::class);
     Route::resource('barangs', BarangController::class)->except(['create', 'edit']);
 
     // === TRANSAKSI GUDANG & DEALER ===
@@ -49,13 +53,15 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 
     Route::resource('receivings', ReceivingController::class)->only(['index', 'create', 'store', 'show']);
 
-    Route::get('quality-control', [QcController::class, 'index'])->name('qc.index');
-    Route::get('quality-control/{receiving}/form', [QcController::class, 'showQcForm'])->name('qc.form');
-    Route::post('quality-control/{receiving}', [QcController::class, 'storeQcResult'])->name('qc.store');
+    // QC Routes
+    Route::get('qc', [QcController::class, 'index'])->name('qc.index');
+    Route::get('qc/{receiving}', [QcController::class, 'show'])->name('qc.show');
+    Route::post('qc/{receiving}', [QcController::class, 'store'])->name('qc.store');
 
+    // Putaway Routes
     Route::get('putaway', [PutawayController::class, 'index'])->name('putaway.index');
-    Route::get('putaway/{receiving}/form', [PutawayController::class, 'showPutawayForm'])->name('putaway.form');
-    Route::post('putaway/{receiving}', [PutawayController::class, 'storePutaway'])->name('putaway.store');
+    Route::get('putaway/{receiving}', [PutawayController::class, 'show'])->name('putaway.show');
+    Route::post('putaway/{receiving}', [PutawayController::class, 'store'])->name('putaway.store');
 
     Route::resource('stock-adjustments', StockAdjustmentController::class)->except(['show', 'edit', 'update', 'destroy']);
     Route::post('stock-adjustments/{stockAdjustment}/approve', [StockAdjustmentController::class, 'approve'])->name('stock-adjustments.approve');
@@ -128,4 +134,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
     Route::get('api/check-stock', [StockAdjustmentController::class, 'checkStock'])->name('api.check-stock');
     Route::get('purchase-returns/get-failed-items/{receiving}', [App\Http\Controllers\Admin\PurchaseReturnController::class, 'getFailedItems']);
+    Route::get('stock-adjustments/get-barangs', [StockAdjustmentController::class, 'getBarangs'])->name('stock-adjustments.get-barangs');
+    Route::get('stock-adjustments/get-batches', [StockAdjustmentController::class, 'getBatches'])->name('stock-adjustments.get-batches');
+    Route::get('api/lokasi/{lokasi}/raks', function(App\Models\Lokasi $lokasi) { return $lokasi->raks()->where('is_active', true)->get();
+    });
 });

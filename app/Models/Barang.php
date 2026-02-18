@@ -10,15 +10,16 @@ class Barang extends Model
     use HasFactory;
 
     protected $table = 'barangs';
-    protected $guarded = ['id'];
+    protected $guarded = ['id']; // Aman, is_active otomatis masuk
 
     protected $casts = [
         'selling_in'  => 'decimal:2',
         'selling_out' => 'decimal:2',
         'retail'      => 'decimal:2',
+        'is_active'   => 'boolean', // [BARU] Casting ke boolean
     ];
 
-    // --- Relasi WMS & Transaksi ---
+    // --- Relasi WMS & Transaksi (TETAP SAMA) ---
 
     public function inventoryBatches()
     {
@@ -40,7 +41,7 @@ class Barang extends Model
         return $this->hasMany(PurchaseOrderDetail::class, 'barang_id');
     }
 
-    // --- Helper Methods ---
+    // --- Helper Methods (TETAP SAMA) ---
 
     /**
      * Menghitung total stok aktif (quantity > 0)
@@ -58,5 +59,11 @@ class Barang extends Model
         return $this->inventoryBatches()
                     ->where('lokasi_id', $lokasiId)
                     ->sum('quantity');
+    }
+    
+    // --- Scopes (BARU) ---
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
     }
 }

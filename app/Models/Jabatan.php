@@ -8,8 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 class Jabatan extends Model
 {
     use HasFactory;
+
     protected $fillable = [
         'nama_jabatan',
+        'singkatan',
         'is_active',
     ];
+
+    public function users()
+    {
+        return $this->hasMany(User::class);
+    }
 }

@@ -1,8 +1,6 @@
 @extends('adminlte::page')
 
 @section('title', 'Daftar Penjualan')
-
-{{-- Aktifkan plugin DataTables dan plugin Buttons --}}
 @section('plugins.Datatables', true)
 @section('plugins.DatatablesPlugin', true)
 
@@ -15,6 +13,7 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h3 class="card-title mb-0">Transaksi Penjualan</h3>
         <div class="card-tools ml-auto">
+            {{-- Tombol hanya muncul jika user punya izin create-sale (PC/KSR Dealer) --}}
             @can('create-sale')
             <a href="{{ route('admin.penjualans.create') }}" class="btn btn-primary btn-sm">
                 <i class="fas fa-plus"></i> Buat Penjualan Baru

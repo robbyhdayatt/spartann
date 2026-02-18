@@ -4,13 +4,26 @@
 @section('plugins.Select2', true)
 
 @section('content_header')
-    <h1>Buat Stock Adjustment</h1>
+    <div class="row mb-2">
+        <div class="col-sm-6">
+            <h1><i class="fas fa-sliders-h text-primary mr-2"></i> Buat Stock Adjustment</h1>
+        </div>
+        <div class="col-sm-6">
+            <ol class="breadcrumb float-sm-right">
+                <li class="breadcrumb-item"><a href="{{ route('admin.stock-adjustments.index') }}">Adjustment</a></li>
+                <li class="breadcrumb-item active">Baru</li>
+            </ol>
+        </div>
+    </div>
 @stop
 
 @section('content')
 <div class="row justify-content-center">
     <div class="col-md-8">
-        <div class="card card-outline card-primary">
+        <div class="card card-outline card-primary shadow-sm">
+            <div class="card-header">
+                <h3 class="card-title">Form Penyesuaian Stok (Stock Opname)</h3>
+            </div>
             <form action="{{ route('admin.stock-adjustments.store') }}" method="POST">
                 @csrf
                 <div class="card-body">
@@ -23,11 +36,12 @@
                         </x-adminlte-alert>
                     @endif
 
+                    {{-- Lokasi & Rak --}}
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Lokasi</label>
-                                <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
+                                <label>Lokasi Gudang</label>
+                                <select name="lokasi_id" id="lokasi_id" class="form-control select2" required style="width: 100%;">
                                     @if(count($lokasis) > 1)
                                         <option value="" selected disabled>-- Pilih Lokasi --</option>
                                     @endif
@@ -41,25 +55,31 @@
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Rak</label>
-                                <select name="rak_id" id="rak_id" class="form-control select2" required disabled>
+                                <label>Rak Penyimpanan</label>
+                                <select name="rak_id" id="rak_id" class="form-control select2" required disabled style="width: 100%;">
                                     <option value="">-- Pilih Lokasi Dulu --</option>
                                 </select>
                             </div>
                         </div>
                     </div>
 
+                    {{-- Barang --}}
                     <div class="form-group">
-                        <label>Barang</label>
-                        {{-- Select2 Ajax untuk Barang bisa lebih efisien jika data banyak, 
-                             disini saya gunakan Select2 standar dengan helper API --}}
-                        <select name="barang_id" id="barang_id" class="form-control select2" required disabled>
+                        <label>Barang / Sparepart</label>
+                        <select name="barang_id" id="barang_id" class="form-control select2" required disabled style="width: 100%;">
                              <option value="">-- Pilih Rak Dulu --</option>
                         </select>
                     </div>
 
-                    <div class="alert alert-info d-none" id="stock-info">
-                        <i class="fas fa-info-circle"></i> Stok saat ini di Rak tersebut: <strong id="stock-val">0</strong> unit.
+                    {{-- Pilihan Batch (Fitur Baru) --}}
+                    <div class="form-group d-none" id="batch-container">
+                        <label><i class="fas fa-layer-group text-info"></i> Pilih Batch (Opsional)</label>
+                        <select name="inventory_batch_id" id="inventory_batch_id" class="form-control select2" style="width: 100%;">
+                             <option value="">-- Buat Batch Baru / General --</option>
+                        </select>
+                        <small class="form-text text-muted" id="batch-help-text">
+                            Jika dipilih, stok akan ditambahkan/dikurangkan pada batch ini. Jika kosong, sistem akan FIFO.
+                        </small>
                     </div>
 
                     <div class="row">
@@ -81,14 +101,14 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Alasan</label>
-                        <textarea name="alasan" class="form-control" rows="2" required placeholder="Contoh: Selisih SO bulan Juni..."></textarea>
+                        <label>Alasan / Keterangan</label>
+                        <textarea name="alasan" class="form-control" rows="2" required placeholder="Contoh: Selisih SO bulan Juni, barang fisik lebih banyak..."></textarea>
                     </div>
 
                 </div>
                 <div class="card-footer text-right">
-                    <a href="{{ route('admin.stock-adjustments.index') }}" class="btn btn-secondary">Batal</a>
-                    <button type="submit" class="btn btn-primary" id="btn-submit">Simpan</button>
+                    <a href="{{ route('admin.stock-adjustments.index') }}" class="btn btn-default mr-2">Batal</a>
+                    <button type="submit" class="btn btn-primary" id="btn-submit"><i class="fas fa-save mr-1"></i> Ajukan Adjustment</button>
                 </div>
             </form>
         </div>
@@ -99,23 +119,22 @@
 @section('js')
 <script>
 $(document).ready(function() {
+    // Init Select2 Global
     $('.select2').select2({ theme: 'bootstrap4' });
 
     const lokasiSelect = $('#lokasi_id');
     const rakSelect    = $('#rak_id');
     const barangSelect = $('#barang_id');
-    const stockInfo    = $('#stock-info');
-    const stockVal     = $('#stock-val');
-    const jumlahInput  = $('#jumlah');
-    const tipeSelect   = $('#tipe');
-    const btnSubmit    = $('#btn-submit');
-    let currentStock = 0;
+    const batchSelect  = $('#inventory_batch_id');
+    const batchContainer = $('#batch-container');
 
     // 1. Load Rak saat Lokasi berubah
     function loadRaks(lokasiId) {
         if(!lokasiId) return;
         rakSelect.prop('disabled', true).html('<option>Loading...</option>');
         
+        // Asumsi route API Lokasi sudah ada, atau buat helper di controller
+        // Jika belum ada route API khusus, ganti URL ini
         $.get("{{ url('admin/api/lokasi') }}/" + lokasiId + "/raks", function(data){
             rakSelect.empty().append('<option value="" selected disabled>-- Pilih Rak --</option>');
             data.forEach(function(rak){
@@ -125,85 +144,62 @@ $(document).ready(function() {
         });
     }
 
-    // 2. Load Barang saat Rak berubah (Hanya barang yang ada stok di lokasi itu? 
-    //    Untuk adjustment TAMBAH, harusnya semua barang bisa. 
-    //    Disini kita load semua barang aktif via API getBarangItems umum atau API khusus)
-    //    Untuk efisiensi, mari gunakan endpoint yang sudah kita buat di Penjualan/Mutation.
-    function loadBarangs(lokasiId) {
-        // Kita gunakan endpoint dari StockMutationController yang sudah ada: getPartsWithStock
-        // Atau ambil semua barang master. Agar aman (bisa TAMBAH barang yang stok 0), ambil master barang.
-        barangSelect.prop('disabled', true).html('<option>Loading...</option>');
+    // 2. Load Barang via Select2 AJAX
+    function initBarangSelect() {
+        barangSelect.prop('disabled', false).empty().append('<option value="">-- Cari Barang --</option>');
         
-        // Kita panggil API master barang
-        // Asumsi route: admin.barangs.index (json) atau buat helper baru.
-        // Agar cepat, kita gunakan data dari Mutation logic: Parts yang ada di lokasi ini. 
-        // TAPI: Adjustment TAMBAH bisa untuk barang yang stoknya 0.
-        // Solusi: Kita gunakan search select2 ajax ke endpoint general barang.
-        barangSelect.prop('disabled', false).empty(); // Reset dan enable agar select2 ajax jalan
+        barangSelect.select2({
+            theme: 'bootstrap4',
+            placeholder: 'Ketik Nama/Kode Part...',
+            ajax: {
+                url: "{{ route('admin.stock-adjustments.get-barangs') }}", 
+                dataType: 'json',
+                delay: 250,
+                data: function (params) { return { q: params.term }; },
+                processResults: function (data) { return { results: data }; },
+                cache: true
+            }
+        });
     }
-    
-    // Inisialisasi Select2 Ajax untuk Barang
-    barangSelect.select2({
-        theme: 'bootstrap4',
-        placeholder: 'Cari Barang...',
-        ajax: {
-            url: "{{ route('admin.api.penjualan.items') }}", // Gunakan endpoint penjualan yang return semua barang aktif
-            dataType: 'json',
-            delay: 250,
-            data: function (params) {
-                return { 
-                    q: params.term, 
-                    lokasi_id: lokasiSelect.val() // Kirim lokasi agar backend bisa kasih info stok (optional)
-                };
-            },
-            processResults: function (data) {
-                return { results: data };
-            },
-            cache: true
-        }
-    });
 
-    // 3. Cek Stok saat Barang/Rak Dipilih
-    function checkStock() {
-        let l_id = lokasiSelect.val();
-        let r_id = rakSelect.val();
+    // 3. Load Batch saat Barang Dipilih
+    function loadBatches() {
         let b_id = barangSelect.val();
+        let r_id = rakSelect.val();
 
-        if(l_id && r_id && b_id) {
-            // Kita butuh endpoint khusus di StockAdjustmentController untuk cek stok spesifik Rak
-            // Tambahkan route ini di web.php: Route::get('api/check-stock', ...)
-            $.get("{{ url('admin/api/check-stock') }}", { lokasi_id: l_id, rak_id: r_id, barang_id: b_id }, function(res) {
-                currentStock = parseInt(res.stock);
-                stockVal.text(currentStock);
-                stockInfo.removeClass('d-none');
-                validateInput();
+        if (b_id && r_id) {
+            batchSelect.prop('disabled', true).html('<option>Loading...</option>');
+            batchContainer.removeClass('d-none');
+
+            $.get("{{ route('admin.stock-adjustments.get-batches') }}", { barang_id: b_id, rak_id: r_id }, function(data) {
+                batchSelect.empty();
+                
+                // Opsi Default
+                batchSelect.append(new Option('-- Buat Batch Baru / Otomatis --', ''));
+
+                if (data.length > 0) {
+                    data.forEach(function(batch) {
+                        batchSelect.append(new Option(batch.text, batch.id));
+                    });
+                }
+                
+                batchSelect.prop('disabled', false);
             });
-        }
-    }
-
-    function validateInput() {
-        let val = parseInt(jumlahInput.val()) || 0;
-        let tipe = tipeSelect.val();
-
-        if (tipe === 'KURANG' && val > currentStock) {
-            jumlahInput.addClass('is-invalid');
-            btnSubmit.prop('disabled', true);
-            Swal.fire('Stok Tidak Cukup', 'Jumlah pengurangan melebihi stok yang ada di rak ini.', 'warning');
         } else {
-            jumlahInput.removeClass('is-invalid');
-            btnSubmit.prop('disabled', false);
+            batchContainer.addClass('d-none');
         }
     }
 
+    // Event Listeners
     lokasiSelect.on('change', function() { loadRaks($(this).val()); });
+    
     rakSelect.on('change', function() { 
-        barangSelect.prop('disabled', false); 
-        checkStock(); 
+        initBarangSelect(); 
     });
-    barangSelect.on('change', checkStock);
-    jumlahInput.on('input', validateInput);
-    tipeSelect.on('change', validateInput);
+    
+    barangSelect.on('change', loadBatches);
 
+    // Initial Load jika edit mode atau validasi error
     if(lokasiSelect.val()) loadRaks(lokasiSelect.val());
 });
 </script>

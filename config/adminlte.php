@@ -202,76 +202,113 @@ return [
 
         // Sidebar items:
         [
-            'text' => 'Dashboard',
-            'route'  => 'admin.home',
-            'icon' => 'fas fa-fw fa-tachometer-alt',
+            'text'  => 'Dashboard',
+            'route' => 'admin.home',
+            'icon'  => 'fas fa-fw fa-tachometer-alt',
         ],
         [
-            'text' => 'Profil Saya',
-            'route'  => 'admin.profile.show',
-            'icon' => 'fas fa-fw fa-user-circle',
+            'text'  => 'Profil Saya',
+            'route' => 'admin.profile.show',
+            'icon'  => 'fas fa-fw fa-user-circle',
         ],
 
         // ================== MASTER & PENGATURAN ==================
         [
             'header' => 'MASTER & PENGATURAN',
-            'can'    => ['manage-locations', 'view-master-data', 'manage-users', 'manage-converts', 'manage-barangs'],
+            'can'    => ['manage-users', 'view-lokasi', 'view-raks', 'view-supplier', 'view-convert', 'view-barang'],
         ],
-        // 1. MANAJEMEN LOKASI
+        
+        // 1. MANAJEMEN PENGGUNA (Hanya SA)
+        [
+            'text'  => 'Pengguna',
+            'route' => 'admin.users.index',
+            'icon'  => 'fas fa-fw fa-users-cog',
+            'can'   => 'manage-users', // Gate Poin 3
+        ],
+        [
+            'text'  => 'Jabatan / Role',
+            'route' => 'admin.jabatans.index',
+            'icon'  => 'fas fa-fw fa-id-badge',
+            'can'   => 'manage-jabatans', // Sesuai Gate
+        ],
+
+        // 2. MANAJEMEN LOKASI (Poin 4 & 5)
         [
             'text' => 'Manajemen Lokasi',
             'icon' => 'fas fa-fw fa-map-marked-alt',
-            'can'  => 'manage-locations-sa-only',
+            'can'  => ['view-lokasi', 'view-raks'], 
             'submenu' => [
-                ['text' => 'Lokasi', 'icon' => 'fas fa-fw fa-warehouse', 'route' => 'admin.lokasi.index'],
-                ['text' => 'Rak', 'icon' => 'fas fa-fw fa-pallet', 'route' => 'admin.raks.index'],
+                [
+                    'text'  => 'Lokasi', 
+                    'icon'  => 'fas fa-fw fa-warehouse', 
+                    'route' => 'admin.lokasi.index',
+                    'can'   => 'view-lokasi' // Poin 4
+                ],
+                [
+                    'text'  => 'Rak', 
+                    'icon'  => 'fas fa-fw fa-pallet', 
+                    'route' => 'admin.raks.index',
+                    'can'   => 'view-raks' // Poin 5
+                ],
             ],
         ],
+
+        // 3. MASTER DATA LAINNYA (Poin 6, 7, 8)
         [
             'text'    => 'Master Data',
             'icon'    => 'fas fa-fw fa-database',
-            'can'     => ['view-master-data', 'manage-converts', 'manage-barangs',],
+            'can'     => ['view-barang', 'view-supplier', 'view-convert'],
             'submenu' => [
-                ['text' => 'Supplier', 'icon' => 'fas fa-fw fa-people-carry', 'route' => 'admin.suppliers.index', 'can' => 'view-master-data'],
-                ['text' => 'Master Convert','route'=> 'admin.converts.index','icon' => 'fas fa-fw fa-exchange-alt','can'  => 'manage-converts',],
-                ['text' => 'Item','icon' => 'fas fa-fw fa-box-open','route' => 'admin.barangs.index','can'  => 'manage-barangs'],
+                [
+                    'text'  => 'Supplier', 
+                    'icon'  => 'fas fa-fw fa-people-carry', 
+                    'route' => 'admin.suppliers.index', 
+                    'can'   => 'view-supplier' // Poin 6
+                ],
+                [
+                    'text'  => 'Master Convert',
+                    'route' => 'admin.converts.index',
+                    'icon'  => 'fas fa-fw fa-exchange-alt',
+                    'can'   => 'view-convert', // Poin 7
+                ],
+                [
+                    'text'  => 'Item / Barang',
+                    'icon'  => 'fas fa-fw fa-box-open',
+                    'route' => 'admin.barangs.index',
+                    'can'   => 'view-barang' // Poin 8
+                ],
             ],
-        ],
-        [
-            'text' => 'Pengguna',
-            'route'  => 'admin.users.index',
-            'icon' => 'fas fa-fw fa-users-cog',
-            'can' => 'manage-users',
         ],
 
         // ================== OPERASIONAL ==================
         [
             'header' => 'OPERASIONAL',
-            'can' => ['is-pusat-staff', 'is-dealer-staff', 'is-pic'],
+            'can'    => ['view-po', 'view-receiving', 'view-adjustment', 'view-service', 'view-penjualan'],
         ],
 
         // --- PEMBELIAN (PO) ---
         [
             'text'    => 'Pembelian (PO)',
             'icon'    => 'fas fa-shopping-cart',
-            'can'     => 'view-po-module',
+            'can'     => 'view-po', // Gate Poin 9
             'submenu' => [
                 [
-                    'text' => 'Buat Request PO',
-                    'url'  => 'admin/purchase-orders/create',
+                    'text' => 'Buat Transaksi PO', // Nama generik karena bisa Request Dealer / Supplier PO
+                    'url'  => 'admin/purchase-orders/create', 
                     'icon' => 'fas fa-plus',
-                    'can'  => 'create-po',
+                    'can'  => 'create-po', // Cek AuthProvider: create-po merangkum create-po-supplier & dealer
                 ],
                 [
                     'text' => 'Daftar PO',
                     'url'  => 'admin/purchase-orders',
                     'icon' => 'fas fa-list',
+                    'can'  => 'view-po',
                 ],
                 [
-                    'text' => 'Retur Pembelian',
-                    'icon' => 'fas fa-fw fa-undo-alt',
+                    'text'  => 'Retur Pembelian',
+                    'icon'  => 'fas fa-fw fa-undo-alt',
                     'route' => 'admin.purchase-returns.index',
-                    'can' => 'manage-purchase-returns'
+                    'can'   => 'view-retur-pembelian' // Poin 10
                 ],
             ],
         ],
@@ -280,34 +317,32 @@ return [
         [
             'text'    => 'Penerimaan (Inbound)',
             'icon'    => 'fas fa-truck-loading',
-            'can'     => 'perform-warehouse-ops-exclude-kg', 
+            // Poin 11, 12, 13, 14
+            'can'     => ['view-receiving', 'view-qc', 'view-putaway', 'view-karantina'], 
             'submenu' => [
                 [
                     'text'  => 'Receiving PO', 
                     'route' => 'admin.receivings.index',
                     'icon'  => 'fas fa-dolly',
+                    'can'   => 'view-receiving', // Poin 11
                 ],
                 [
                     'text'  => 'Quality Control (QC)',
                     'route' => 'admin.qc.index',
                     'icon'  => 'fas fa-check-double',
-                    'can'   => 'view-qc-menu',
+                    'can'   => 'view-qc', // Poin 12
                 ],
                 [
                     'text'  => 'Putaway (Rak)',
                     'route' => 'admin.putaway.index',
                     'icon'  => 'fas fa-box-open',
+                    'can'   => 'view-putaway', // Poin 13
                 ],
-                // [
-                //     'text' => 'Receiving Mutasi',
-                //     'icon' => 'fas fa-fw fa-truck-moving',
-                //     'route' => 'admin.mutation-receiving.index',
-                // ],
                 [
                     'text'  => 'Stok Karantina',
                     'route' => 'admin.quarantine-stock.index',
                     'icon'  => 'fas fa-ban',
-                    'can'   => 'manage-quarantine-stock',
+                    'can'   => 'view-karantina', // Poin 14
                 ],
             ],
         ],
@@ -316,45 +351,46 @@ return [
         [
             'text'    => 'Transaksi Stok',
             'icon'    => 'fas fa-exchange-alt',
-            'can'     => ['view-stock-mutations-menu', 'view-stock-adjustments-menu'], 
+            'can'     => ['view-adjustment', 'view-stock-mutation'], 
             'submenu' => [
+                [
+                    'text'  => 'Penyesuaian Stok',
+                    'route' => 'admin.stock-adjustments.index',
+                    'icon'  => 'fas fa-sliders-h',
+                    'can'   => 'view-adjustment', // Poin 15
+                ],
                 // [
                 //     'text' => 'Mutasi Stok',
-                //     'route'  => 'admin.stock-mutations.index',
+                //     'route' => 'admin.stock-mutations.index',
                 //     'icon' => 'fas fa-random',
-                //     'can'  => 'view-stock-mutations-menu',
+                //     'can'  => 'view-stock-mutation',
                 // ],
-                [
-                    'text' => 'Penyesuaian Stok',
-                    'route'  => 'admin.stock-adjustments.index',
-                    'icon' => 'fas fa-sliders-h',
-                    'can'  => 'view-stock-adjustments-menu',
-                ],
             ],
         ],
+
         // --- SERVICE & PENJUALAN (DEALER ONLY) ---
         [
-            'text' => 'Service & Penjualan',
-            'icon' => 'fas fa-fw fa-store-alt',
-            'can'  => ['view-sales', 'view-service'],
+            'text'    => 'Service & Penjualan',
+            'icon'    => 'fas fa-fw fa-store-alt',
+            'can'     => ['view-penjualan', 'view-service'], // Poin 16 & 17
             'submenu' => [
                  [
-                    'text' => 'Data Service',
-                    'icon' => 'fas fa-fw fa-wrench',
+                    'text'  => 'Data Service',
+                    'icon'  => 'fas fa-fw fa-wrench',
                     'route' => 'admin.services.index',
-                    'can' => 'view-service'
+                    'can'   => 'view-service'
                  ],
                  [
-                    'text' => 'Buat Penjualan',
-                    'icon' => 'fas fa-fw fa-plus-circle',
+                    'text'  => 'Buat Penjualan',
+                    'icon'  => 'fas fa-fw fa-plus-circle',
                     'route' => 'admin.penjualans.create',
-                    'can' => 'create-sale'
+                    'can'   => 'manage-penjualan' // Hanya PC (Manage) yg bisa buat
                  ],
                  [
-                    'text' => 'Riwayat Penjualan',
-                    'icon' => 'fas fa-fw fa-history',
+                    'text'  => 'Riwayat Penjualan',
+                    'icon'  => 'fas fa-fw fa-history',
                     'route' => 'admin.penjualans.index',
-                    'can' => 'view-sales'
+                    'can'   => 'view-penjualan'
                  ],
             ],
         ],
@@ -362,54 +398,54 @@ return [
         // ================== ANALISIS & MARKETING ==================
         [
             'header' => 'ANALISIS LAPORAN',
-            'can' => ['view-reports'],
+            // Gate Umum Laporan (Gate spesifik per menu dihandle submenu 'can')
+            'can' => ['view-stock-card', 'view-stock-location-report', 'view-sales-report'],
         ],
         [
             'text'    => 'Laporan',
             'icon'    => 'fas fa-fw fa-chart-pie',
-            'can'     => 'view-reports',
             'submenu' => [
                 [
-                    'text' => 'Kartu Stok', 
-                    'icon' => 'fas fa-fw fa-clipboard-list', 
+                    'text'  => 'Kartu Stok', 
+                    'icon'  => 'fas fa-fw fa-clipboard-list', 
                     'route' => 'admin.reports.stock-card',
-                    'can'  => 'view-stock-card'
+                    'can'   => 'view-stock-card' // Poin 18
                 ],
                 [
-                    'text' => 'Stok Per Lokasi', 
-                    'icon' => 'fas fa-fw fa-boxes', 
+                    'text'  => 'Stok Per Lokasi', 
+                    'icon'  => 'fas fa-fw fa-boxes', 
                     'route' => 'admin.reports.stock-by-warehouse', 
-                    'can'  => 'view-stock-by-warehouse'
+                    'can'   => 'view-stock-location-report' // Poin 19
                 ],
                 [
-                    'text' => 'Laporan Stok Total', 
-                    'icon' => 'fas fa-fw fa-archive', 
+                    'text'  => 'Laporan Stok Total', 
+                    'icon'  => 'fas fa-fw fa-archive', 
                     'route' => 'admin.reports.stock-report', 
-                    'can'  => 'view-stock-report-global'
+                    'can'   => 'view-stock-total-report' // Poin 20
                 ],
                 [
-                    'text' => 'Laporan Penjualan', 
-                    'icon' => 'fas fa-fw fa-chart-line', 
+                    'text'  => 'Laporan Penjualan', 
+                    'icon'  => 'fas fa-fw fa-chart-line', 
                     'route' => 'admin.reports.sales-summary',
-                    'can'  => 'view-sales-summary'
+                    'can'   => 'view-sales-report' // Poin 21
                 ],
                 [
-                    'text' => 'Laporan Service', 
-                    'icon' => 'fas fa-fw fa-wrench', 
+                    'text'  => 'Laporan Service', 
+                    'icon'  => 'fas fa-fw fa-wrench', 
                     'route' => 'admin.reports.service-summary',
-                    'can'  => 'view-service-summary'
+                    'can'   => 'view-service-report' // Poin 22
                 ],
                 [
-                    'text' => 'Jurnal Pembelian', 
-                    'icon' => 'fas fa-fw fa-book', 
+                    'text'  => 'Jurnal Pembelian', 
+                    'icon'  => 'fas fa-fw fa-book', 
                     'route' => 'admin.reports.purchase-journal',
-                    'can'  => 'view-purchase-journal'
+                    'can'   => 'view-purchase-journal' // Poin 23
                 ],
                 [
-                    'text' => 'Nilai Persediaan', 
-                    'icon' => 'fas fa-fw fa-dollar-sign', 
+                    'text'  => 'Nilai Persediaan', 
+                    'icon'  => 'fas fa-fw fa-dollar-sign', 
                     'route' => 'admin.reports.inventory-value',
-                    'can'  => 'view-inventory-value'
+                    'can'   => 'view-inventory-value-report' // Poin 24
                 ],
             ],
         ],

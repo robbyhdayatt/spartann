@@ -18,7 +18,6 @@ class QuarantineStockController extends Controller
     {
         $this->authorize('view-quarantine-stock');
         
-        /** @var \App\Models\User $user */
         $user = Auth::user();
         $lokasiFilterId = null;
 
@@ -26,7 +25,7 @@ class QuarantineStockController extends Controller
             $lokasiFilterId = $user->lokasi_id;
         }
 
-        // Ambil stok karantina (quantity > 0)
+        // 1. Ambil Stok Fisik di Rak Karantina
         $quarantineQuery = InventoryBatch::whereHas('rak', function ($query) {
             $query->where('tipe_rak', 'KARANTINA');
         })->where('quantity', '>', 0);
@@ -35,12 +34,24 @@ class QuarantineStockController extends Controller
             $quarantineQuery->where('lokasi_id', $lokasiFilterId);
         }
 
-        // Group by Barang & Lokasi & Rak untuk tampilan ringkas
         $quarantineItems = $quarantineQuery
             ->select('barang_id', 'rak_id', 'lokasi_id', DB::raw('SUM(quantity) as total_quantity'))
             ->groupBy('barang_id', 'rak_id', 'lokasi_id')
             ->with(['barang', 'rak', 'lokasi'])
             ->get();
+
+        // 2. MODIFIKASI POIN 1: Hitung Stok Pending (Sedang diajukan Write-Off tapi belum approve)
+        foreach ($quarantineItems as $item) {
+            $pendingQty = StockAdjustment::where('barang_id', $item->barang_id)
+                ->where('lokasi_id', $item->lokasi_id)
+                ->where('rak_id', $item->rak_id) // Pastikan pending di rak yang sama
+                ->where('status', 'PENDING_APPROVAL')
+                ->where('tipe', 'KURANG') // Write-off pasti pengurangan
+                ->sum('jumlah');
+
+            $item->pending_quantity = $pendingQty;
+            $item->available_quantity = $item->total_quantity - $pendingQty;
+        }
 
         // Ambil data rak penyimpanan untuk dropdown modal
         $storageRaksQuery = Rak::where('tipe_rak', 'PENYIMPANAN')->where('is_active', true);
@@ -59,7 +70,7 @@ class QuarantineStockController extends Controller
 
         $validated = $request->validate([
             'barang_id' => 'required|exists:barangs,id',
-            'rak_id'    => 'required|exists:raks,id', // Rak Asal (Karantina)
+            'rak_id'    => 'required|exists:raks,id',
             'lokasi_id' => 'required|exists:lokasi,id',
             'action'    => 'required|in:return_to_stock,write_off',
             'quantity'  => 'required|integer|min:1',
@@ -69,23 +80,33 @@ class QuarantineStockController extends Controller
 
         DB::beginTransaction();
         try {
-            // 1. Ambil Batch Karantina dengan Locking (FIFO)
-            // lockForUpdate() MENCEGAH RACE CONDITION
+            // A. Cek Stok Fisik (Existing Logic)
             $batches = InventoryBatch::where('barang_id', $validated['barang_id'])
                 ->where('rak_id', $validated['rak_id'])
                 ->where('lokasi_id', $validated['lokasi_id'])
                 ->where('quantity', '>', 0)
-                ->orderBy('created_at', 'asc') // FIFO
+                ->orderBy('created_at', 'asc')
                 ->lockForUpdate() 
                 ->get();
 
-            $totalAvailable = $batches->sum('quantity');
+            $totalPhysical = $batches->sum('quantity');
 
-            if ($validated['quantity'] > $totalAvailable) {
-                throw new \Exception("Stok tidak mencukupi atau sedang diproses user lain. (Tersedia: {$totalAvailable})");
+            // B. MODIFIKASI POIN 1: Cek Stok Pending lagi (Double Check saat submit)
+            $pendingQty = StockAdjustment::where('barang_id', $validated['barang_id'])
+                ->where('lokasi_id', $validated['lokasi_id'])
+                ->where('rak_id', $validated['rak_id'])
+                ->where('status', 'PENDING_APPROVAL')
+                ->lockForUpdate()
+                ->sum('jumlah');
+
+            $availableQty = $totalPhysical - $pendingQty;
+
+            if ($validated['quantity'] > $availableQty) {
+                throw new \Exception("Gagal! Sebagian stok sedang menunggu persetujuan Write-Off. Stok tersedia: {$availableQty} unit.");
             }
 
-            // Logic berdasarkan Aksi
+            // --- PROSES AKSI ---
+
             if ($validated['action'] === 'return_to_stock') {
                 $destRak = Rak::findOrFail($validated['destination_rak_id']);
                 
@@ -93,33 +114,21 @@ class QuarantineStockController extends Controller
                     throw new \Exception('Rak tujuan harus berada di lokasi yang sama.');
                 }
 
-                // A. Kurangi Stok Karantina (FIFO)
-                $this->processFifoStockReduction(
-                    $batches, 
-                    $validated['quantity'], 
-                    $validated['barang_id'], 
-                    $validated['lokasi_id'], 
-                    $validated['rak_id'], // Rak Asal
-                    "Pindah dari Karantina ke {$destRak->kode_rak}"
-                );
-
-                // B. Tambah Stok ke Rak Tujuan (Sales)
-                $this->addStockToSalesRak(
-                    $validated['barang_id'],
-                    $destRak->id,
-                    $validated['lokasi_id'],
+                // MODIFIKASI POIN 2: Transfer dengan Backdating (Clone Tanggal)
+                $this->transferWithBackdating(
+                    $batches,
                     $validated['quantity'],
-                    "Terima dari Karantina"
+                    $validated['barang_id'],
+                    $validated['lokasi_id'],
+                    $validated['rak_id'],       // Dari Rak Karantina
+                    $destRak->id,               // Ke Rak Penyimpanan
+                    "Restock dari Karantina"
                 );
 
-                $msg = 'Barang berhasil dikembalikan ke stok penjualan.';
+                $msg = 'Barang berhasil dikembalikan ke stok penjualan (Batch date dipertahankan).';
 
             } elseif ($validated['action'] === 'write_off') {
-                // Untuk Write Off, kita buat Adjustment Request (Pending Approval)
-                // Kita TIDAK langsung potong stok di sini, tapi tunggu approval Adjustment.
-                // ATAU: Bisa langsung potong jika user punya hak akses.
-                // Sesuai kode Anda sebelumnya -> Buat StockAdjustment.
-                
+                // Buat Adjustment Request (Pending Approval)
                 StockAdjustment::create([
                     'barang_id'  => $validated['barang_id'],
                     'lokasi_id'  => $validated['lokasi_id'],
@@ -127,11 +136,11 @@ class QuarantineStockController extends Controller
                     'tipe'       => 'KURANG',
                     'jumlah'     => $validated['quantity'],
                     'alasan'     => "[Write-Off Karantina] " . $validated['reason'],
-                    'status'     => 'PENDING_APPROVAL',
+                    'status'     => 'PENDING_APPROVAL', // Status Pending
                     'created_by' => Auth::id(),
                 ]);
 
-                $msg = 'Pengajuan Write-Off berhasil dibuat. Menunggu persetujuan.';
+                $msg = 'Pengajuan Write-Off berhasil dibuat. Stok ditahan menunggu persetujuan.';
             }
 
             DB::commit();
@@ -144,78 +153,62 @@ class QuarantineStockController extends Controller
     }
 
     /**
-     * Mengurangi stok dari kumpulan batch secara FIFO
+     * MODIFIKASI POIN 2: Transfer Stok dengan Mempertahankan Tanggal Batch (Backdating)
+     * Agar logika FIFO (First In First Out) tetap akurat.
      */
-    private function processFifoStockReduction($batches, $qtyNeeded, $barangId, $lokasiId, $rakId, $keterangan)
+    private function transferWithBackdating($sourceBatches, $qtyNeeded, $barangId, $lokasiId, $sourceRakId, $destRakId, $keterangan)
     {
-        $sisa = $qtyNeeded;
+        $sisaButuh = $qtyNeeded;
 
-        foreach ($batches as $batch) {
-            if ($sisa <= 0) break;
+        foreach ($sourceBatches as $batch) {
+            if ($sisaButuh <= 0) break;
 
-            $ambil = min($batch->quantity, $sisa);
+            $ambil = min($batch->quantity, $sisaButuh);
             
-            // Catat Log Stok (Movement)
-            $stokAwal = $batch->quantity;
-            $stokAkhir = $stokAwal - $ambil;
-
+            // 1. Kurangi Batch Karantina
+            $stokAwalSumber = $batch->quantity;
             $batch->decrement('quantity', $ambil);
             
+            // Log Keluar
             StockMovement::create([
-                'barang_id' => $barangId,
-                'lokasi_id' => $lokasiId,
-                'rak_id'    => $rakId,
-                'jumlah'    => -$ambil,
-                'stok_sebelum' => $stokAwal,
-                'stok_sesudah' => $stokAkhir,
-                'referensi_type' => 'App\Models\User', // Atau tipe lain yang relevan
-                'referensi_id'   => Auth::id(),
-                'keterangan'     => $keterangan,
-                'user_id'        => Auth::id(),
-                'created_at'     => now(),
+                'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $sourceRakId,
+                'jumlah' => -$ambil,
+                'stok_sebelum' => $stokAwalSumber, 'stok_sesudah' => $stokAwalSumber - $ambil,
+                'referensi_type' => 'App\Models\InventoryBatch', 'referensi_id' => $batch->id,
+                'keterangan' => $keterangan . " (OUT)",
+                'user_id' => Auth::id(),
+                'created_at' => now() 
             ]);
 
-            // Hapus batch kosong untuk kebersihan database (opsional)
-            // if ($batch->quantity == 0) $batch->delete();
+            // 2. Buat Batch Baru di Rak Tujuan TAPI PAKAI TANGGAL LAMA ($batch->created_at)
+            // Ini inti dari solusi Backdating FIFO
+            $newBatch = InventoryBatch::create([
+                'barang_id' => $barangId,
+                'rak_id'    => $destRakId,
+                'lokasi_id' => $lokasiId,
+                'quantity'  => $ambil,
+                'receiving_detail_id' => $batch->receiving_detail_id, // Copy referensi receiving asal jika ada
+                'created_at' => $batch->created_at, // <--- COPY TIMESTAMP LAMA
+                'updated_at' => now()
+            ]);
 
-            $sisa -= $ambil;
+            // Hitung snapshot stok rak tujuan untuk log
+            // (Query ini agak berat di loop, tapi perlu untuk akurasi kartu stok)
+            $stokRakTujuanSebelum = InventoryBatch::where('barang_id', $barangId)
+                ->where('rak_id', $destRakId)->where('id', '!=', $newBatch->id)->sum('quantity');
+
+            // Log Masuk
+            StockMovement::create([
+                'barang_id' => $barangId, 'lokasi_id' => $lokasiId, 'rak_id' => $destRakId,
+                'jumlah' => $ambil,
+                'stok_sebelum' => $stokRakTujuanSebelum, 'stok_sesudah' => $stokRakTujuanSebelum + $ambil,
+                'referensi_type' => 'App\Models\InventoryBatch', 'referensi_id' => $newBatch->id,
+                'keterangan' => $keterangan . " (IN - Backdated)",
+                'user_id' => Auth::id(),
+                'created_at' => now()
+            ]);
+
+            $sisaButuh -= $ambil;
         }
-    }
-
-    /**
-     * Menambah stok ke Rak Penjualan (Membuat Batch Baru)
-     */
-    private function addStockToSalesRak($barangId, $rakId, $lokasiId, $qty, $keterangan)
-    {
-        // 1. Snapshot stok sebelumnya di rak tujuan (untuk log)
-        // Kita hitung manual karena batch baru stok awalnya 0
-        $stokRakSebelum = InventoryBatch::where('barang_id', $barangId)
-            ->where('rak_id', $rakId)
-            ->where('lokasi_id', $lokasiId)
-            ->sum('quantity');
-
-        // 2. Buat Batch Baru
-        InventoryBatch::create([
-            'barang_id' => $barangId,
-            'rak_id'    => $rakId,
-            'lokasi_id' => $lokasiId,
-            'quantity'  => $qty,
-            'receiving_detail_id' => null // Barang pindahan, bukan receiving baru
-        ]);
-
-        // 3. Catat Log Stok
-        StockMovement::create([
-            'barang_id' => $barangId,
-            'lokasi_id' => $lokasiId,
-            'rak_id'    => $rakId,
-            'jumlah'    => $qty,
-            'stok_sebelum' => $stokRakSebelum,
-            'stok_sesudah' => $stokRakSebelum + $qty,
-            'referensi_type' => 'App\Models\User',
-            'referensi_id'   => Auth::id(),
-            'keterangan'     => $keterangan,
-            'user_id'        => Auth::id(),
-            'created_at'     => now(),
-        ]);
     }
 }

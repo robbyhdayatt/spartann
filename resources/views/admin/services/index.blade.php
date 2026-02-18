@@ -27,6 +27,7 @@
             </div>
         @endif
 
+        {{-- IMPORT SECTION: HANYA PC DEALER (manage-service) --}}
         @can('manage-service')
         <div class="card card-outline card-secondary">
             <div class="card-header">
@@ -63,6 +64,7 @@
             <div class="card-body">
                 <form action="{{ route('admin.services.index') }}" method="GET" id="filter-form">
                     <div class="row">
+                        {{-- Dropdown Dealer Hanya Muncul Jika User Punya Akses (SA/PIC/Pusat) --}}
                         @if($canFilterByDealer && $listDealer->isNotEmpty())
                             <div class="col-md-3">
                                 <div class="form-group">
@@ -106,6 +108,7 @@
                     </div>
                 </form>
 
+                {{-- Tombol Export Excel (Sesuai Hak Akses) --}}
                 @can('export-service-report')
                 <div class="mt-2">
                     <button type="button" class="btn btn-success" id="export-excel-btn">

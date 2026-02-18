@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Lokasi;
 use App\Models\Receiving;
 use App\Models\PurchaseOrder;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -15,10 +14,13 @@ class ReceivingController extends Controller
 {
     public function index()
     {
+        $this->authorize('view-receiving');
+        
         $user = Auth::user();
-        $query = Receiving::with(['purchaseOrder', 'lokasi', 'receivedBy']);
+        $query = Receiving::with(['purchaseOrder.supplier', 'purchaseOrder.sumberLokasi', 'lokasi', 'receivedBy']);
 
-        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
+        // Filter Lokasi: User hanya melihat receiving di lokasinya sendiri
+        if (!$user->isGlobal()) {
             $query->where('lokasi_id', $user->lokasi_id);
         }
 
@@ -28,16 +30,23 @@ class ReceivingController extends Controller
 
     public function create()
     {
-        $this->authorize('perform-warehouse-ops');
+        // Cek Hak Akses Create (Gudang atau Dealer)
+        if (Auth::user()->can('process-receiving-gudang') || Auth::user()->can('process-receiving-dealer')) {
+            // Lanjut
+        } else {
+            abort(403, 'Anda tidak memiliki akses mencatat penerimaan.');
+        }
+
         $user = Auth::user();
 
-        // Hanya PO yang sudah APPROVE atau PARTIAL yang bisa diterima
+        // Cari PO yang ditujukan ke lokasi user ini dan statusnya APPROVED/PARTIAL
         $query = PurchaseOrder::whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED']);
 
-        if (!$user->hasRole(['SA', 'PIC', 'MA'])) {
+        if (!$user->isGlobal()) {
             $query->where('lokasi_id', $user->lokasi_id);
         }
 
+        // Eager load relasi
         $purchaseOrders = $query->with(['supplier', 'sumberLokasi'])
             ->orderBy('tanggal_po', 'desc')
             ->get();
@@ -47,99 +56,96 @@ class ReceivingController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorize('perform-warehouse-ops');
         $user = Auth::user();
+        
+        // Validasi Gate Manual
+        if (! ($user->can('process-receiving-gudang') || $user->can('process-receiving-dealer'))) {
+            abort(403);
+        }
 
         $request->validate([
             'purchase_order_id' => 'required|exists:purchase_orders,id',
-            'tanggal_terima' => 'required|date',
-            'items' => 'required|array|min:1',
-            'items.*.qty_terima' => 'required|integer|min:0',
+            'tanggal_terima'    => 'required|date',
+            'items'             => 'required|array|min:1',
+            'items.*.qty_terima'=> 'required|integer|min:0',
         ]);
 
-        // Cek total input
         if (collect($request->items)->sum('qty_terima') <= 0) {
             return back()->with('error', 'Jumlah terima tidak boleh kosong semua.')->withInput();
         }
 
         DB::beginTransaction();
         try {
-            // 1. LOCK PO UNTUK MENCEGAH DOUBLE RECEIVE
+            // 1. LOCK PO
             $po = PurchaseOrder::with('details')->lockForUpdate()->findOrFail($request->purchase_order_id);
 
-            // Validasi Lokasi Penerima
+            // Validasi Lokasi (Prevent Inspect Element)
             if ($user->lokasi_id && $user->lokasi_id != $po->lokasi_id) {
-                throw new \Exception("Anda tidak berhak menerima barang untuk lokasi ini.");
+                throw new \Exception("PO ini bukan untuk lokasi Anda.");
             }
 
-            // Validasi Status PO
-            if (!in_array($po->status, ['APPROVED', 'PARTIALLY_RECEIVED'])) {
-                throw new \Exception("PO ini tidak dalam status siap diterima (Status: {$po->status}).");
-            }
-
-            // Tentukan Flow: Dealer langsung Putaway, Pusat masuk QC
-            // Sesuaikan logic ini dengan kebutuhan bisnis Anda
-            $isDealer = $user->hasRole(['PC', 'KC', 'KSR', 'AD']) || optional($po->lokasi)->tipe === 'DEALER';
+            // 2. Tentukan Flow Berdasarkan Tipe Lokasi
+            $isDealer = $user->isDealer(); // Helper function di Model User
+            
+            // Dealer: Skip QC -> Langsung Pending Putaway
+            // Gudang: Masuk QC -> Pending QC
             $initialStatus = $isDealer ? 'PENDING_PUTAWAY' : 'PENDING_QC';
-            $qcBy = $isDealer ? $user->id : null; // Auto QC pass for Dealer
+            $qcBy = $isDealer ? $user->id : null; 
             $qcAt = $isDealer ? now() : null;
 
-            // Buat Header Receiving
+            // 3. Buat Header Receiving
             $receiving = Receiving::create([
                 'purchase_order_id' => $po->id,
-                'lokasi_id' => $po->lokasi_id,
-                'nomor_penerimaan' => Receiving::generateReceivingNumber(),
-                'tanggal_terima' => $request->tanggal_terima,
-                'status' => $initialStatus,
-                'catatan' => $request->catatan,
-                'received_by' => $user->id,
-                'qc_by' => $qcBy,
-                'qc_at' => $qcAt
+                'lokasi_id'         => $po->lokasi_id,
+                // Generate Nomor: REC/KODE_LOKASI/TGL/SEQ
+                'nomor_penerimaan'  => $this->generateReceivingNumber($po->lokasi_id),
+                'tanggal_terima'    => $request->tanggal_terima,
+                'status'            => $initialStatus,
+                'catatan'           => $request->catatan,
+                'received_by'       => $user->id,
+                'qc_by'             => $qcBy,
+                'qc_at'             => $qcAt
             ]);
 
-            $totalDiterimaSesiIni = 0;
-
-            // Proses Setiap Item
             foreach ($request->items as $barangId => $itemData) {
                 $qtyTerima = (int)$itemData['qty_terima'];
                 if ($qtyTerima <= 0) continue;
 
                 $poDetail = $po->details->firstWhere('barang_id', $barangId);
 
-                if (!$poDetail) {
-                    throw new \Exception("Item ID {$barangId} tidak ada dalam PO ini.");
-                }
+                if (!$poDetail) throw new \Exception("Item ID {$barangId} tidak ada dalam PO ini.");
 
-                // VALIDASI OVER-RECEIVING
-                $sisaBolehDiterima = $poDetail->qty_pesan - $poDetail->qty_diterima;
-                if ($qtyTerima > $sisaBolehDiterima) {
-                    throw new \Exception("Over-Receiving pada {$poDetail->barang->part_name}. Sisa: {$sisaBolehDiterima}, Input: {$qtyTerima}.");
+                // Validasi Over-Receiving
+                $sisa = $poDetail->qty_pesan - $poDetail->qty_diterima;
+                if ($qtyTerima > $sisa) {
+                    throw new \Exception("Over-Receiving pada item {$poDetail->barang_id}. Sisa: $sisa, Input: $qtyTerima");
                 }
 
                 // Update PO Detail
                 $poDetail->increment('qty_diterima', $qtyTerima);
-                $totalDiterimaSesiIni += $qtyTerima;
 
                 // Buat Receiving Detail
                 $receiving->details()->create([
                     'barang_id' => $barangId,
                     'qty_terima' => $qtyTerima,
                     'qty_pesan_referensi' => $poDetail->qty_pesan,
-                    'qty_lolos_qc' => $isDealer ? $qtyTerima : 0, // Dealer auto lolos
+                    // Jika Dealer, otomatis lolos QC semua
+                    'qty_lolos_qc' => $isDealer ? $qtyTerima : 0, 
                     'qty_gagal_qc' => 0
                 ]);
             }
 
-            // Sync Status PO (Partial / Full)
-            $po->syncStatus(); // Panggil method di model PO
+            // Sync Status PO
+            $po->syncStatus();
 
             DB::commit();
 
             $msg = $isDealer 
-                ? 'Penerimaan berhasil (Auto QC). Lanjut ke Putaway.' 
-                : 'Penerimaan berhasil. Lanjut ke QC.';
-                
-            $route = $isDealer ? 'admin.putaway.index' : 'admin.receivings.index';
+                ? 'Penerimaan berhasil. Barang siap disimpan ke Rak (Putaway).' 
+                : 'Penerimaan berhasil. Silakan lanjut ke proses QC.';
+            
+            // Redirect sesuai flow
+            $route = $isDealer ? 'admin.putaway.index' : 'admin.qc.index'; // Asumsi route QC ada
 
             return redirect()->route($route)->with('success', $msg);
 
@@ -151,26 +157,41 @@ class ReceivingController extends Controller
 
     public function show(Receiving $receiving)
     {
+        $this->authorize('view-receiving');
+        
+        // Security Check Lokasi
+        if (!Auth::user()->isGlobal() && Auth::user()->lokasi_id != $receiving->lokasi_id) {
+            abort(403);
+        }
+
         $receiving->load(['purchaseOrder.supplier', 'details.barang', 'createdBy', 'receivedBy', 'lokasi']);
-        $stockMovements = $receiving->stockMovements()->with(['rak', 'user', 'barang'])->get();
-        return view('admin.receivings.show', compact('receiving', 'stockMovements'));
+        return view('admin.receivings.show', compact('receiving'));
     }
-    
-    // API Helper untuk mengisi form create via AJAX
+
+    // Helper Generate Number
+    private function generateReceivingNumber($lokasiId)
+    {
+        $lokasi = Lokasi::find($lokasiId);
+        $kode = $lokasi ? $lokasi->kode_lokasi : 'GEN';
+        $date = now()->format('ymd');
+        $seq = Receiving::whereDate('created_at', today())->count() + 1;
+        return "REC/{$kode}/{$date}/" . str_pad($seq, 3, '0', STR_PAD_LEFT);
+    }
+
+    // API Helper untuk Form Create
     public function getPurchaseOrderDetails(PurchaseOrder $purchaseOrder)
     {
-        $this->authorize('perform-warehouse-ops');
-        
-        $details = $purchaseOrder->details()->with('barang')->get()
-            ->map(function($d) {
-                $d->sisa = $d->qty_pesan - $d->qty_diterima;
-                return $d;
-            })
-            ->filter(function($d) {
-                return $d->sisa > 0;
-            })
-            ->values();
-
-        return response()->json($details);
+        // Pastikan user punya akses
+        if (Auth::user()->can('process-receiving-gudang') || Auth::user()->can('process-receiving-dealer')) {
+             $details = $purchaseOrder->details()->with('barang')->get()
+                ->map(function($d) {
+                    $d->sisa = $d->qty_pesan - $d->qty_diterima;
+                    return $d;
+                })
+                ->filter(fn($d) => $d->sisa > 0)
+                ->values();
+            return response()->json($details);
+        }
+        abort(403);
     }
 }

@@ -56,8 +56,5 @@ class ModifyPriceColumnsInBarangsTable extends Migration
             $table->renameColumn('selling_out', 'harga_modal');
             $table->renameColumn('retail', 'harga_jual');
         });
-
-        // Re-create view old version (simplified for down)
-        // ... (optional logic for down)
     }
 }

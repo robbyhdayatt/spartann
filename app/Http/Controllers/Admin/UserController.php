@@ -19,6 +19,7 @@ class UserController extends Controller
 
     public function index()
     {
+        $this->authorize('manage-users');
         $users = User::with(['jabatan', 'lokasi'])->latest()->get();
         $jabatans = Jabatan::where('is_active', true)->orderBy('nama_jabatan')->get();
         $lokasi = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
@@ -28,6 +29,7 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorize('manage-users');
         $validated = $request->validate([
             'nama' => 'required|string|max:255',
             'nik' => 'required|string|max:50|unique:users',
@@ -51,6 +53,8 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        $this->authorize('manage-users');
+        
         $validated = $request->validate([
             'nama' => 'required|string|max:255',
             'nik' => 'required|string|max:50|unique:users,nik,' . $user->id,
@@ -73,6 +77,7 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        $this->authorize('manage-users');
         if ($user->id === auth()->id()) {
             return back()->with('error', 'Anda tidak dapat menghapus akun Anda sendiri.');
         }

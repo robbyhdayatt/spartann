@@ -14,22 +14,25 @@
 <div class="card card-primary card-outline card-tabs shadow-sm">
     <div class="card-header p-0 pt-1 border-bottom-0">
         <ul class="nav nav-tabs" role="tablist">
-            {{-- TAB 1: DEALER REQUEST --}}
-            {{-- HIDE KHUSUS UNTUK KEPALA GUDANG (KG) & ADMIN GUDANG (AG) --}}
-            @if(!auth()->user()->hasRole(['KG', 'AG']))
+            
+            {{-- TAB 1: DEALER REQUEST (Internal Distribution) --}}
+            {{-- VIEW: PUSAT (IMS, ASD, ACC), DEALER (PC, KC), SA/PIC --}}
+            {{-- HIDE: GUDANG (AG, KG) -> Mereka handle ini di menu Receiving --}}
+            @if(auth()->user()->isGlobal() || auth()->user()->isPusat() || auth()->user()->isDealer())
             <li class="nav-item">
                 <a class="nav-link {{ $type == 'dealer_request' ? 'active' : '' }}" href="{{ route('admin.purchase-orders.index', ['type' => 'dealer_request']) }}">
-                    <i class="fas fa-store mr-1"></i> Request Dealer (Masuk)
+                    <i class="fas fa-store mr-1"></i> Request Dealer (Internal)
                 </a>
             </li>
             @endif
 
-            {{-- TAB 2: SUPPLIER PO --}}
-            {{-- TAMPIL UNTUK: AG, KG, SA, SUPERADMIN --}}
-            @if(!auth()->user()->hasRole(['SMD', 'SA', 'PIC', 'DEALER']))
+            {{-- TAB 2: SUPPLIER PO (External Purchase) --}}
+            {{-- VIEW: GUDANG (AG, KG), SA/PIC --}}
+            {{-- HIDE: PUSAT (IMS, ASD), DEALER --}}
+            @if(auth()->user()->isGlobal() || auth()->user()->isGudang())
             <li class="nav-item">
                 <a class="nav-link {{ $type == 'supplier_po' ? 'active' : '' }}" href="{{ route('admin.purchase-orders.index', ['type' => 'supplier_po']) }}">
-                    <i class="fas fa-truck mr-1"></i> Order ke Supplier (Keluar)
+                    <i class="fas fa-truck mr-1"></i> Order ke Supplier (Eksternal)
                 </a>
             </li>
             @endif
@@ -38,15 +41,13 @@
     <div class="card-body">
         
         {{-- TOMBOL BUAT BARU --}}
+        {{-- Gate 'create-po' sudah diperbaiki di AuthServiceProvider --}}
         @can('create-po')
-            {{-- LOGIKA: Sembunyikan tombol jika User adalah Orang Gudang (AG/KG) TAPI sedang melihat Tab Request Dealer (Masuk) --}}
-            @if( ! (auth()->user()->hasRole(['AG', 'KG']) && $type == 'dealer_request') )
-                <div class="mb-3 text-right">
-                    <a href="{{ route('admin.purchase-orders.create') }}" class="btn btn-primary shadow-sm">
-                        <i class="fas fa-plus-circle mr-1"></i> Buat Transaksi Baru
-                    </a>
-                </div>
-            @endif
+            <div class="mb-3 text-right">
+                <a href="{{ route('admin.purchase-orders.create') }}" class="btn btn-primary shadow-sm">
+                    <i class="fas fa-plus-circle mr-1"></i> Buat Transaksi Baru
+                </a>
+            </div>
         @endcan
         
         <div class="table-responsive">
@@ -75,19 +76,21 @@
                             @endif
                         </td>
                         <td class="align-middle text-sm text-muted">
-                            {{ $po->createdBy->name ?? 'Admin' }}
+                            {{ $po->createdBy->nama ?? 'Admin' }}
                         </td>
                         <td class="align-middle text-center">
                             <span class="badge badge-info badge-pill px-3">{{ $po->details->count() }}</span>
                         </td>
                         <td class="align-middle text-center">
                             @php
-                                $statusColor = 'secondary';
-                                if($po->status == 'PENDING_APPROVAL') $statusColor = 'warning';
-                                elseif($po->status == 'APPROVED') $statusColor = 'primary';
-                                elseif($po->status == 'PARTIALLY_RECEIVED') $statusColor = 'info';
-                                elseif($po->status == 'FULLY_RECEIVED') $statusColor = 'success';
-                                elseif($po->status == 'REJECTED') $statusColor = 'danger';
+                                $colors = [
+                                    'PENDING_APPROVAL' => 'warning',
+                                    'APPROVED'         => 'primary',
+                                    'PARTIALLY_RECEIVED' => 'info',
+                                    'FULLY_RECEIVED'   => 'success',
+                                    'REJECTED'         => 'danger',
+                                ];
+                                $statusColor = $colors[$po->status] ?? 'secondary';
                             @endphp
                             <span class="badge badge-{{ $statusColor }}">{{ str_replace('_', ' ', $po->status) }}</span>
                         </td>
@@ -111,9 +114,7 @@
         $('#po-table').DataTable({
             "order": [[ 0, "desc" ]],
             "responsive": true,
-            "language": {
-                "url": "//cdn.datatables.net/plug-ins/1.10.21/i18n/Indonesian.json"
-            }
+            "language": { "url": "//cdn.datatables.net/plug-ins/1.10.21/i18n/Indonesian.json" }
         });
     });
 </script>

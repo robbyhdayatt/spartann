@@ -18,12 +18,6 @@
         <div class="card-body">
             <form action="{{ route('admin.reports.stock-card') }}" method="GET">
 
-                @php
-                    $user = Auth::user();
-                    // Cek apakah user BISA mem-filter lokasi (SA, PIC, MA, ACC, SMD)
-                    $canFilterLokasi = $user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'SMD']);
-                @endphp
-
                 <div class="row align-items-end">
                     {{-- Filter Barang --}}
                     <div class="col-md-4">
@@ -44,12 +38,13 @@
                     <div class="col-md-3">
                         <div class="form-group">
                             <label>Lokasi</label>
-                            @if(!$canFilterLokasi && $user->lokasi_id)
-                                <input type="text" class="form-control" value="{{ $user->lokasi->nama_lokasi ?? '-' }}" readonly>
-                                <input type="hidden" name="lokasi_id" value="{{ $user->lokasi_id }}">
+                            @if($lokasis->count() == 1)
+                                {{-- Jika user terkunci di 1 lokasi, tampilkan readonly --}}
+                                <input type="text" class="form-control" value="{{ $lokasis->first()->nama_lokasi }}" readonly>
+                                <input type="hidden" name="lokasi_id" value="{{ $lokasis->first()->id }}">
                             @else
                                 <select name="lokasi_id" id="lokasi_id" class="form-control select2">
-                                    <option value="">Semua lokasi</option>
+                                    <option value="">Semua Lokasi</option>
                                     @foreach($lokasis as $lokasi)
                                         <option value="{{ $lokasi->id }}" {{ $selectedLokasiId == $lokasi->id ? 'selected' : '' }}>
                                             [{{ $lokasi->tipe }}] {{ $lokasi->nama_lokasi }}
@@ -138,7 +133,6 @@
 
 @push('css')
 <style>
-    /* CSS untuk merapikan ukuran Select2 agar sama dengan input form Bootstrap 4 */
     .select2-container .select2-selection--single {
         height: calc(2.25rem + 2px) !important;
     }

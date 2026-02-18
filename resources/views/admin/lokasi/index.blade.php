@@ -40,7 +40,10 @@
                         <td>
                             @if($item->tipe == 'PUSAT')
                                 <span class="badge badge-primary">PUSAT</span>
+                            @elseif($item->tipe == 'GUDANG')
+                                <span class="badge badge-info">GUDANG</span>
                             @else
+                            
                                 <span class="badge badge-secondary">DEALER</span>
                             @endif
                         </td>
@@ -108,9 +111,10 @@
                                 <hr>
                                 <div class="form-group">
                                     <label>Tipe Lokasi</label>
-                                    <select class="form-control" name="tipe" required>
-                                        <option value="DEALER">Dealer</option>
-                                        <option value="PUSAT">Gudang Pusat</option>
+                                    <select name="tipe" class="form-control" required>
+                                        <option value="DEALER">DEALER (Cabang)</option>
+                                        <option value="GUDANG">GUDANG (Main Dealer Part)</option>
+                                        <option value="PUSAT">PUSAT (Main Dealer Office)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -188,8 +192,9 @@
                                 <div class="form-group">
                                     <label>Tipe Lokasi</label>
                                     <select class="form-control" id="edit_tipe" name="tipe" required>
-                                        <option value="DEALER">Dealer</option>
-                                        <option value="PUSAT">Gudang Pusat</option>
+                                        <option value="DEALER">DEALER (Cabang)</option>
+                                        <option value="GUDANG">GUDANG (Main Dealer Part)</option>
+                                        <option value="PUSAT">PUSAT (Main Dealer Office)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">

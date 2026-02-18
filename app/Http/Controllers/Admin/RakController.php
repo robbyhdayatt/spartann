@@ -7,20 +7,52 @@ use App\Models\Lokasi;
 use App\Models\Rak;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
 
 class RakController extends Controller
 {
     public function index()
     {
-        $this->authorize('manage-locations');
-        $raks = Rak::with('lokasi')->latest()->get();
-        $lokasi = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
+        $this->authorize('view-raks');
+        $user = Auth::user();
+        
+        $query = Rak::with('lokasi');
+
+        // Logic Filter View
+        if ($user->isGlobal()) {
+            // Lihat Semua (SA, PIC)
+        } 
+        elseif ($user->isPusat()) {
+            // PUSAT (ASD, IMS, ACC) -> View Seluruh Dealer
+            // (Asumsi: Pusat tidak perlu lihat rak Gudang Part? Sesuai request: "View seluruh dealer")
+            // Jika mau lihat Dealer + Gudang, sesuaikan whereHas
+            $query->whereHas('lokasi', fn($q) => $q->where('tipe', 'DEALER'));
+        }
+        elseif ($user->isGudang()) {
+            // GUDANG (AG, KG) -> View Lokasi Gudang (Self)
+            $query->where('lokasi_id', $user->lokasi_id);
+        }
+        elseif ($user->isDealer()) {
+            // DEALER (KC, PC) -> View Dealer Sendiri
+            $query->where('lokasi_id', $user->lokasi_id);
+        }
+
+        $raks = $query->latest()->get();
+        
+        // Filter Dropdown Lokasi untuk Modal Create (Hanya SA yg bisa create full)
+        $lokasiQuery = Lokasi::where('is_active', true);
+        if (!$user->isGlobal()) {
+             // Jika user lain boleh create rak (misal PC buat rak sendiri), filter disini
+             $lokasiQuery->where('id', $user->lokasi_id);
+        }
+        $lokasi = $lokasiQuery->orderBy('nama_lokasi')->get();
+
         return view('admin.raks.index', compact('raks', 'lokasi'));
     }
 
     public function store(Request $request)
     {
-        $this->authorize('manage-locations');
+        $this->authorize('manage-raks');
         
         $validated = $request->validate([
             'lokasi_id' => 'required|exists:lokasi,id',
@@ -48,7 +80,7 @@ class RakController extends Controller
 
     public function update(Request $request, Rak $rak)
     {
-        $this->authorize('manage-locations');
+        $this->authorize('manage-raks');
         // Logika update mirip store, pastikan validasi unique ignore ID saat ini
         // Implementasi disederhanakan untuk brevity
         $rak->update($request->all()); 
@@ -57,7 +89,7 @@ class RakController extends Controller
 
     public function destroy(Rak $rak)
     {
-        $this->authorize('manage-locations');
+        $this->authorize('manage-raks');
         if ($rak->inventoryBatches()->sum('quantity') > 0) {
             return back()->with('error', 'Gagal hapus! Rak masih berisi barang.');
         }

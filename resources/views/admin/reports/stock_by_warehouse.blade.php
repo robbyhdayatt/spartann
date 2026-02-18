@@ -9,12 +9,6 @@
 @stop
 
 @section('content')
-@php
-    $user = Auth::user();
-    $canFilter = $user->hasRole(['SA', 'PIC', 'MA', 'ACC', 'SMD']);
-@endphp
-
-@if($canFilter)
 <div class="card card-outline card-primary">
     <div class="card-header">
         <h3 class="card-title">Filter Laporan</h3>
@@ -25,14 +19,19 @@
                 <div class="col-md-4">
                     <div class="form-group">
                         <label for="lokasi_id">Pilih Lokasi</label>
-                        <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
-                            <option value="">-- Pilih Lokasi --</option>
-                            @foreach ($lokasis as $lokasi)
-                                <option value="{{ $lokasi->id }}" {{ $selectedLokasiId == $lokasi->id ? 'selected' : '' }}>
-                                    [{{ $lokasi->tipe }}] - {{ $lokasi->nama_lokasi }} ({{ $lokasi->kode_lokasi }})
-                                </option>
-                            @endforeach
-                        </select>
+                        @if($lokasis->count() == 1)
+                            <input type="text" class="form-control" value="{{ $lokasis->first()->nama_lokasi }}" readonly>
+                            <input type="hidden" name="lokasi_id" value="{{ $lokasis->first()->id }}">
+                        @else
+                            <select name="lokasi_id" id="lokasi_id" class="form-control select2" required>
+                                <option value="">-- Pilih Lokasi --</option>
+                                @foreach ($lokasis as $lokasi)
+                                    <option value="{{ $lokasi->id }}" {{ $selectedLokasiId == $lokasi->id ? 'selected' : '' }}>
+                                        [{{ $lokasi->tipe }}] - {{ $lokasi->nama_lokasi }} ({{ $lokasi->kode_lokasi }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        @endif
                     </div>
                 </div>
                 <div class="col-md-2">
@@ -44,9 +43,8 @@
         </form>
     </div>
 </div>
-@endif
 
-@if($inventoryItems->isNotEmpty() || !$canFilter)
+@if($inventoryItems->isNotEmpty())
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">
@@ -68,10 +66,17 @@
                     <th>Nama Barang</th>
                     <th>Merk</th>
                     <th>Rak</th>
-                    {{-- TAMBAHAN KOLOM HARGA --}}
-                    <th class="text-right">Selling In</th>
-                    <th class="text-right">Selling Out</th>
-                    <th class="text-right">Retail</th>
+                    
+                    {{-- KOLOM HARGA DINAMIS SESUAI GATE --}}
+                    @can('report-show-selling-in')
+                        <th class="text-right">Selling In</th>
+                    @endcan
+                    
+                    @can('report-show-selling-out-retail')
+                        <th class="text-right">Selling Out</th>
+                        <th class="text-right">Retail</th>
+                    @endcan
+                    
                     <th class="text-right">Qty</th>
                 </tr>
             </thead>
@@ -82,10 +87,16 @@
                         <td>{{ $item->barang->part_name ?? '-' }}</td>
                         <td>{{ $item->barang->merk ?? '-' }}</td>
                         <td>{{ $item->rak->kode_rak ?? '-' }}</td>
+                        
                         {{-- DATA HARGA --}}
-                        <td class="text-right">Rp {{ number_format($item->barang->selling_in ?? 0, 0, ',', '.') }}</td>
-                        <td class="text-right">Rp {{ number_format($item->barang->selling_out ?? 0, 0, ',', '.') }}</td>
-                        <td class="text-right">Rp {{ number_format($item->barang->retail ?? 0, 0, ',', '.') }}</td>
+                        @can('report-show-selling-in')
+                            <td class="text-right">Rp {{ number_format($item->barang->selling_in ?? 0, 0, ',', '.') }}</td>
+                        @endcan
+                        
+                        @can('report-show-selling-out-retail')
+                            <td class="text-right">Rp {{ number_format($item->barang->selling_out ?? 0, 0, ',', '.') }}</td>
+                            <td class="text-right">Rp {{ number_format($item->barang->retail ?? 0, 0, ',', '.') }}</td>
+                        @endcan
 
                         <td class="text-right font-weight-bold">{{ $item->quantity }}</td>
                     </tr>
@@ -99,9 +110,7 @@
 
 @push('css')
 <style>
-    .select2-container .select2-selection--single {
-        height: calc(2.25rem + 2px) !important;
-    }
+    .select2-container .select2-selection--single { height: calc(2.25rem + 2px) !important; }
     .select2-container--default .select2-selection--single .select2-selection__rendered {
         line-height: 1.5 !important;
         padding-top: 0.375rem !important;
@@ -117,13 +126,8 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        $('.select2').select2({
-            theme: 'bootstrap4'
-        });
-        $('#stock-table').DataTable({
-            "responsive": true,
-            "autoWidth": false
-        });
+        $('.select2').select2({ theme: 'bootstrap4' });
+        $('#stock-table').DataTable({ "responsive": true, "autoWidth": false });
     });
 </script>
 @stop

@@ -33,8 +33,11 @@
                     <th>Barang / Part</th>
                     <th>Lokasi Gudang</th>
                     <th>Posisi Rak</th>
-                    <th class="text-right">Total Qty</th>
-                    <th class="text-center" style="width: 150px">Aksi</th>
+                    {{-- MODIFIKASI POIN 1: Kolom Detail Stok --}}
+                    <th class="text-center" width="10%">Fisik</th>
+                    <th class="text-center" width="10%">Pending</th>
+                    <th class="text-center" width="10%">Tersedia</th>
+                    <th class="text-center" style="width: 120px">Aksi</th>
                 </tr>
             </thead>
             <tbody>
@@ -47,23 +50,42 @@
                     </td>
                     <td>{{ $item->lokasi->nama_lokasi }}</td>
                     <td><span class="badge badge-warning">{{ $item->rak->kode_rak }}</span></td>
-                    <td class="text-right font-weight-bold" style="font-size: 1.1em">{{ $item->total_quantity }}</td>
+                    
+                    {{-- Detail Stok --}}
+                    <td class="text-center font-weight-bold">{{ $item->total_quantity }}</td>
+                    <td class="text-center text-danger">
+                        @if($item->pending_quantity > 0)
+                            <span data-toggle="tooltip" title="Menunggu Approval Write-Off">
+                                -{{ $item->pending_quantity }}
+                            </span>
+                        @else
+                            -
+                        @endif
+                    </td>
+                    <td class="text-center font-weight-bold text-success" style="font-size: 1.1em">
+                        {{ $item->available_quantity }}
+                    </td>
+
                     <td class="text-center">
                         @can('manage-quarantine-stock')
-                        <button type="button" class="btn btn-primary btn-sm btn-process"
-                            data-barang-id="{{ $item->barang_id }}"
-                            data-rak-id="{{ $item->rak_id }}"
-                            data-lokasi-id="{{ $item->lokasi_id }}"
-                            data-max-qty="{{ $item->total_quantity }}"
-                            data-barang-name="{{ $item->barang->part_name }}">
-                            <i class="fas fa-cog"></i> Proses
-                        </button>
+                            @if($item->available_quantity > 0)
+                                <button type="button" class="btn btn-primary btn-sm btn-process"
+                                    data-barang-id="{{ $item->barang_id }}"
+                                    data-rak-id="{{ $item->rak_id }}"
+                                    data-lokasi-id="{{ $item->lokasi_id }}"
+                                    data-available-qty="{{ $item->available_quantity }}" 
+                                    data-barang-name="{{ $item->barang->part_name }}">
+                                    <i class="fas fa-cog"></i> Proses
+                                </button>
+                            @else
+                                <button class="btn btn-secondary btn-sm" disabled>Locked</button>
+                            @endif
                         @endcan
                     </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="text-center text-muted py-4">Tidak ada stok di rak karantina saat ini.</td>
+                    <td colspan="7" class="text-center text-muted py-4">Tidak ada stok di rak karantina saat ini.</td>
                 </tr>
                 @endforelse
             </tbody>
@@ -84,7 +106,6 @@
             <form action="{{ route('admin.quarantine-stock.process') }}" method="POST">
                 @csrf
                 <div class="modal-body">
-                    {{-- Hidden Inputs --}}
                     <input type="hidden" name="barang_id" id="modal_barang_id">
                     <input type="hidden" name="rak_id" id="modal_rak_id">
                     <input type="hidden" name="lokasi_id" id="modal_lokasi_id">
@@ -95,8 +116,9 @@
 
                     <div class="form-group">
                         <label>Jumlah Diproses <span class="text-danger">*</span></label>
+                        {{-- Batasi input hanya sampai available qty --}}
                         <input type="number" name="quantity" id="modal_quantity" class="form-control" required min="1">
-                        <small class="text-muted">Maksimal: <span id="modal_max_qty">0</span></small>
+                        <small class="text-muted">Tersedia untuk diproses: <strong><span id="modal_max_qty">0</span></strong></small>
                     </div>
 
                     <div class="form-group">
@@ -108,7 +130,6 @@
                         </select>
                     </div>
 
-                    {{-- Form Dinamis: Rak Tujuan --}}
                     <div class="form-group d-none" id="group_destination">
                         <label>Pilih Rak Tujuan (Sales) <span class="text-danger">*</span></label>
                         <select name="destination_rak_id" id="modal_destination_rak" class="form-control select2" style="width: 100%;">
@@ -116,7 +137,6 @@
                         </select>
                     </div>
 
-                    {{-- Form Dinamis: Alasan --}}
                     <div class="form-group d-none" id="group_reason">
                         <label>Alasan Pemusnahan <span class="text-danger">*</span></label>
                         <textarea name="reason" id="modal_reason" class="form-control" rows="2" placeholder="Contoh: Barang rusak total terkena air..."></textarea>
@@ -136,43 +156,35 @@
 @section('js')
 <script>
 $(document).ready(function() {
-    // Init Datatable
     $('#quarantine-table').DataTable({ 
         "responsive": true, 
         "autoWidth": false,
-        "ordering": false // Matikan sorting default agar grouping tidak berantakan visualnya
+        "ordering": false 
     });
 
-    // Init Select2 di dalam Modal
     $('.select2').select2({
         dropdownParent: $('#processModal'),
         theme: 'bootstrap4'
     });
 
-    // Data Rak dari Controller (Grouped by Lokasi ID)
     const storageRaksMap = @json($storageRaks);
 
-    // Handle Klik Tombol Proses
     $('.btn-process').on('click', function() {
         let btn = $(this);
-        let barangId = btn.data('barang-id');
-        let rakId = btn.data('rak-id');
-        let lokasiId = btn.data('lokasi-id');
-        let maxQty = btn.data('max-qty');
-        let name = btn.data('barang-name');
+        let availableQty = btn.data('available-qty'); // Ambil Data Tersedia
 
-        // Isi Modal
-        $('#modal_barang_id').val(barangId);
-        $('#modal_rak_id').val(rakId);
-        $('#modal_lokasi_id').val(lokasiId);
-        $('#modal_barang_name').text(name);
-        $('#modal_quantity').val(maxQty).attr('max', maxQty);
-        $('#modal_max_qty').text(maxQty);
+        $('#modal_barang_id').val(btn.data('barang-id'));
+        $('#modal_rak_id').val(btn.data('rak-id'));
+        $('#modal_lokasi_id').val(btn.data('lokasi-id'));
+        $('#modal_barang_name').text(btn.data('barang-name'));
+        
+        // Set Max Input ke Available Qty, bukan Total Fisik
+        $('#modal_quantity').val(availableQty).attr('max', availableQty);
+        $('#modal_max_qty').text(availableQty);
 
-        // Reset Form Dinamis
         $('#modal_action').val('').trigger('change');
         
-        // Isi Dropdown Rak Tujuan sesuai Lokasi item
+        let lokasiId = btn.data('lokasi-id');
         let rakSelect = $('#modal_destination_rak');
         rakSelect.empty().append('<option value="">-- Pilih Rak --</option>');
         
@@ -185,25 +197,19 @@ $(document).ready(function() {
         $('#processModal').modal('show');
     });
 
-    // Handle Perubahan Dropdown Aksi
     $('#modal_action').on('change', function() {
         let action = $(this).val();
-        
         if (action === 'return_to_stock') {
             $('#group_destination').removeClass('d-none');
             $('#modal_destination_rak').prop('required', true);
-            
             $('#group_reason').addClass('d-none');
             $('#modal_reason').prop('required', false);
-        } 
-        else if (action === 'write_off') {
+        } else if (action === 'write_off') {
             $('#group_destination').addClass('d-none');
             $('#modal_destination_rak').prop('required', false);
-            
             $('#group_reason').removeClass('d-none');
             $('#modal_reason').prop('required', true);
-        } 
-        else {
+        } else {
             $('#group_destination, #group_reason').addClass('d-none');
         }
     });

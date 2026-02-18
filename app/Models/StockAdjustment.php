@@ -29,6 +29,12 @@ class StockAdjustment extends Model
     {
         return $this->belongsTo(Rak::class, 'rak_id');
     }
+    
+    // TAMBAHAN: Relasi ke Batch Spesifik
+    public function inventoryBatch()
+    {
+        return $this->belongsTo(InventoryBatch::class, 'inventory_batch_id');
+    }
 
     public function createdBy()
     {

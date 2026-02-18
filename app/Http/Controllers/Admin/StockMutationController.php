@@ -247,7 +247,7 @@ class StockMutationController extends Controller
     public function getPartsWithStock(Lokasi $lokasi)
     {
         // Hanya ambil barang yang punya stok positif di lokasi tersebut
-        $barangs = Barang::whereHas('inventoryBatches', function($q) use ($lokasi) {
+        $barangs = Barang::where('is_active', true)->whereHas('inventoryBatches', function($q) use ($lokasi) {
                 $q->where('lokasi_id', $lokasi->id)->where('quantity', '>', 0);
             })
             ->select('id', 'part_name', 'part_code')

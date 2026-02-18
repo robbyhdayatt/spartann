@@ -23,6 +23,7 @@ class ServiceController extends Controller
 {
     public function index(Request $request)
     {
+        // [MODIFIKASI] Gate Poin 16: view-service
         $this->authorize('view-service');
 
         $user = Auth::user();
@@ -46,7 +47,11 @@ class ServiceController extends Controller
         $endDate = $request->input('end_date', session('service.end_date', now()->toDateString()));
         // -------------------------------------------------------
 
-        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC', 'ASD', 'ACC']);
+        // [MODIFIKASI] Logika Filter Dealer sesuai Poin 16
+        // SA, PIC, ASD, ACC -> Bisa lihat semua / filter
+        // PC, KC, KSR -> Terkunci di dealer sendiri
+        $canFilterByDealer = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
+        
         $selectedDealer = null;
 
         if ($canFilterByDealer) {
@@ -57,10 +62,12 @@ class ServiceController extends Controller
                 $query->where('dealer_code', $selectedDealer);
             }
         } else {
+            // [MODIFIKASI] User Dealer (PC, KC, KSR) -> Lock ke kode lokasi user
             if ($user->lokasi && $user->lokasi->kode_lokasi) {
                 $query->where('dealer_code', $user->lokasi->kode_lokasi);
                 $selectedDealer = $user->lokasi->kode_lokasi;
             } else {
+                // Safety: Jika user tidak punya lokasi, jangan tampilkan data
                 $query->whereRaw('1 = 0');
             }
         }
@@ -97,7 +104,9 @@ class ServiceController extends Controller
 
     public function import(Request $request)
     {
+        // [MODIFIKASI] Gate Poin 16: manage-service (Hanya PC/KSR Dealer)
         $this->authorize('manage-service');
+        
         $request->validate([
             'file' => 'required|mimes:xls,xlsx,csv'
         ]);
@@ -140,6 +149,7 @@ class ServiceController extends Controller
 
     public function exportExcel(Request $request)
     {
+        // [MODIFIKASI] Gate Export
         $this->authorize('export-service-report');
         
         $user = Auth::user();
@@ -149,8 +159,8 @@ class ServiceController extends Controller
         $endDate = $request->input('end_date') ?? session('service.end_date') ?? now()->toDateString();
         $selectedDealer = $request->input('dealer_code') ?? session('service.dealer_code');
 
-        // PERBAIKAN KRUSIAL: Tentukan dealer berdasarkan role user
-        $canFilterByDealer = $user->jabatan && in_array($user->jabatan->singkatan, ['SA', 'PIC', 'ASD', 'ACC']);
+        // [MODIFIKASI] Logika Filter Dealer Sama dengan Index
+        $canFilterByDealer = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
         
         if (!$canFilterByDealer) {
             // User biasa: paksa gunakan dealer mereka sendiri
@@ -174,9 +184,6 @@ class ServiceController extends Controller
             return redirect()->back()->with('error', 'Format tanggal export tidak valid.');
         }
 
-        // DEBUGGING - Hapus setelah fix
-        \Log::info("Export Request - Dealer: {$selectedDealer}, Start: {$validStartDate}, End: {$validEndDate}");
-
         return Excel::download(
             new ServiceDailyReportExport($selectedDealer, $validStartDate, $validEndDate), 
             'Laporan_Service_' . $selectedDealer . '_' . $validStartDate . '.xlsx'
@@ -185,29 +192,37 @@ class ServiceController extends Controller
 
     public function show(Service $service)
     {
+        // [MODIFIKASI] Gate View Service
+        $this->authorize('view-service');
+        
         $user = Auth::user();
-        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC', 'ASD']);
+        
+        // [MODIFIKASI] Cek Kepemilikan Data (Jika Dealer)
+        // Jika bukan Global/Pusat, pastikan dealer_code cocok
+        $isGlobalOrPusat = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
 
-        if (!$isSuperAdminOrPic) {
+        if (!$isGlobalOrPusat) {
             if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
                 abort(403, 'Anda tidak diizinkan melihat detail service ini.');
             }
         }
 
-        $this->authorize('view-service');
         $service->load('details.barang', 'lokasi'); 
         return view('admin.services.show', compact('service'));
     }
 
     public function downloadPDF($id)
     {
+        // [MODIFIKASI] Gate View Service
         $this->authorize('view-service');
+        
         $service = Service::with('details.barang', 'lokasi')->findOrFail($id); 
-
         $user = Auth::user();
-        $isSuperAdminOrPic = $user->hasRole(['SA', 'PIC', 'ASD']);
+        
+        // [MODIFIKASI] Cek Kepemilikan Data (Sama seperti show)
+        $isGlobalOrPusat = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
 
-        if (!$isSuperAdminOrPic) {
+        if (!$isGlobalOrPusat) {
             if (!$user->lokasi || $service->dealer_code !== $user->lokasi->kode_lokasi) {
                 abort(403, 'Anda tidak diizinkan mengunduh PDF service ini.');
             }
@@ -235,6 +250,7 @@ class ServiceController extends Controller
 
     public function update(Request $request, Service $service)
     {
+        // [MODIFIKASI] Gate Manage (Update Stok) - Hanya PC
         $this->authorize('manage-service');
 
         $validated = $request->validate([
@@ -269,6 +285,7 @@ class ServiceController extends Controller
                     ->where('lokasi_id', $lokasiId)
                     ->where('quantity', '>', 0)
                     ->orderBy('created_at', 'asc')
+                    ->lockForUpdate()
                     ->get();
 
                 $sisaQty = $qtyKeluar;
@@ -278,7 +295,7 @@ class ServiceController extends Controller
                     if ($sisaQty <= 0) break;
 
                     $potong = min($batch->quantity, $sisaQty);
-                    $costPerUnit = $barang->selling_out;
+                    $costPerUnit = $barang->selling_out; // Asumsi harga modal dealer
                     $totalHpp += ($costPerUnit * $potong);
                     $batch->decrement('quantity', $potong);
 

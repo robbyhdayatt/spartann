@@ -10,6 +10,11 @@ class Lokasi extends Model
     use HasFactory;
 
     protected $table = 'lokasi';
+    
+    // Konstanta Tipe
+    const TIPE_PUSAT  = 'PUSAT';
+    const TIPE_GUDANG = 'GUDANG';
+    const TIPE_DEALER = 'DEALER';
 
     protected $fillable = [
         'kode_lokasi',
@@ -35,4 +40,9 @@ class Lokasi extends Model
     {
         return $this->hasMany(User::class, 'lokasi_id');
     }
+    
+    // Scope Helpers
+    public function scopePusat($query) { return $query->where('tipe', self::TIPE_PUSAT); }
+    public function scopeGudang($query) { return $query->where('tipe', self::TIPE_GUDANG); }
+    public function scopeDealer($query) { return $query->where('tipe', self::TIPE_DEALER); }
 }

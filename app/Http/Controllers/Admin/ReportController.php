@@ -26,30 +26,34 @@ use App\Exports\StockReportExport;
 class ReportController extends Controller
 {
     // =================================================================
-    // 1. KARTU STOK
+    // 1. KARTU STOK (Poin 18)
     // =================================================================
     public function stockCard(Request $request)
     {
+        $this->authorize('view-stock-card');
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $movements = collect();
         $lokasis = collect();
         $selectedLokasiId = $request->input('lokasi_id');
         
-        // Ganti Role Lama
-        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS']);
-
-        if ($isRestrictedUser && $user->lokasi_id) {
+        // --- LOGIKA FILTER LOKASI ---
+        if ($user->isGlobal()) {
+            // SA & PIC: Semua Lokasi
+            $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
+        } 
+        elseif ($user->isPusat()) {
+            // PUSAT: Hanya Dealer (Monitoring)
+            $lokasis = Lokasi::where('tipe', 'DEALER')->where('is_active', true)->orderBy('nama_lokasi')->get();
+        } 
+        elseif ($user->isGudang() || $user->isDealer()) {
+            // GUDANG & DEALER: Lock Lokasi Sendiri
             $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
-            $selectedLokasiId = $user->lokasi_id;
-        } else {
-            $lokasis = Lokasi::where('is_active', true)
-                             ->where('tipe', '!=', 'PUSAT')
-                             ->orderBy('nama_lokasi')
-                             ->get();
+            $selectedLokasiId = $user->lokasi_id; // Paksa select
         }
 
-        $barangs = Barang::orderBy('part_name')->get();
+        $barangs = Barang::where('is_active', true)->orderBy('part_name')->get();
 
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
@@ -60,8 +64,15 @@ class ReportController extends Controller
                 ->whereDate('created_at', '>=', $startDate)
                 ->whereDate('created_at', '<=', $endDate);
 
+            // Filter Query Berdasarkan Lokasi yang Dipilih / Hak Akses
             if ($selectedLokasiId) {
                 $query->where('lokasi_id', $selectedLokasiId);
+            } else {
+                // Jika Pusat tidak pilih lokasi, default tampilkan semua Dealer (Exclude Gudang Pusat)
+                if ($user->isPusat()) {
+                    $query->whereHas('lokasi', fn($q) => $q->where('tipe', 'DEALER'));
+                }
+                // Jika Global tidak pilih lokasi, tampilkan semua (No Filter)
             }
 
             $movements = $query->oldest()->get();
@@ -72,12 +83,22 @@ class ReportController extends Controller
 
     public function exportStockCard(Request $request)
     {
+        $this->authorize('view-stock-card');
+
         $request->validate([
             'barang_id' => 'required|exists:barangs,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date',
             'lokasi_id' => 'nullable|exists:lokasi,id'
         ]);
+
+        // Validasi Lokasi User (Security)
+        $user = Auth::user();
+        if (!$user->isGlobal()) {
+            if (($user->isGudang() || $user->isDealer()) && $request->lokasi_id != $user->lokasi_id) {
+                abort(403, 'Akses Ditolak');
+            }
+        }
 
         $barang = Barang::findOrFail($request->barang_id);
         $fileName = 'Kartu Stok - ' . $barang->part_code . ' - ' . $request->start_date . ' sampai ' . $request->end_date . '.xlsx';
@@ -91,40 +112,40 @@ class ReportController extends Controller
     }
 
     // =================================================================
-    // 2. STOK PER LOKASI
+    // 2. STOK PER LOKASI (Poin 19)
     // =================================================================
     public function stockByWarehouse(Request $request)
     {
+        $this->authorize('view-stock-location-report');
+
         /** @var \App\Models\User $user */
-        $this->authorize('view-stock-by-warehouse');
         $user = Auth::user();
         $inventoryItems = collect();
         $lokasis = collect();
         $selectedLokasiId = null;
         $selectedLokasiName = null;
         
-        // Ganti Role Lama: Jika user adalah Staff Dealer
-        $isDealerUser = $user->hasRole(['KC', 'AG', 'PC', 'KSR']) && $user->lokasi_id;
-
-        if ($isDealerUser) {
-            $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
-
-            if (!$request->filled('lokasi_id')) {
-                $request->merge(['lokasi_id' => $user->lokasi_id]);
-            }
+        // --- LOGIKA FILTER LOKASI (Sama dengan Stock Card) ---
+        if ($user->isGlobal()) {
+            $lokasis = Lokasi::where('is_active', true)->orderBy('nama_lokasi')->get();
+        } elseif ($user->isPusat()) {
+            $lokasis = Lokasi::where('tipe', 'DEALER')->orderBy('nama_lokasi')->get();
         } else {
-            $lokasis = Lokasi::where('is_active', true)
-                             ->where('tipe', '!=', 'PUSAT')
-                             ->orderBy('nama_lokasi')
-                             ->get();
+            $lokasis = Lokasi::where('id', $user->lokasi_id)->get();
+            $request->merge(['lokasi_id' => $user->lokasi_id]); // Force Input
         }
 
-        $barangs = Barang::orderBy('part_name')->get();
+        $barangs = Barang::where('is_active', true)->orderBy('part_name')->get();
 
         if ($request->filled('lokasi_id')) {
             $selectedLokasiId = $request->lokasi_id;
-            $lokasiObj = Lokasi::find($selectedLokasiId);
-            $selectedLokasiName = $lokasiObj ? $lokasiObj->nama_lokasi : '-';
+            
+            // Security Check Manual
+            $targetLokasi = Lokasi::find($selectedLokasiId);
+            if ($user->isPusat() && $targetLokasi->tipe !== 'DEALER') abort(403);
+            if (($user->isGudang() || $user->isDealer()) && $selectedLokasiId != $user->lokasi_id) abort(403);
+
+            $selectedLokasiName = $targetLokasi ? $targetLokasi->nama_lokasi : '-';
 
             $inventoryItems = InventoryBatch::select(
                     'barang_id',
@@ -155,7 +176,13 @@ class ReportController extends Controller
 
     public function exportStockByWarehouse(Request $request)
     {
+        $this->authorize('view-stock-location-report');
         $request->validate(['lokasi_id' => 'required|exists:lokasi,id']);
+        
+        // Security Check
+        $user = Auth::user();
+        if (($user->isGudang() || $user->isDealer()) && $request->lokasi_id != $user->lokasi_id) abort(403);
+
         $lokasi = Lokasi::find($request->lokasi_id);
         $fileName = 'Laporan Stok - ' . $lokasi->kode_lokasi . ' - ' . now()->format('d-m-Y') . '.xlsx';
 
@@ -163,12 +190,16 @@ class ReportController extends Controller
     }
 
     // =================================================================
-    // 3. LAPORAN STOK TOTAL (GLOBAL)
+    // 3. LAPORAN STOK TOTAL (GLOBAL) (Poin 20)
     // =================================================================
     public function stockReport()
     {
+        $this->authorize('view-stock-total-report'); // Hanya SA & PIC
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
+        
+        // Query Global (Tidak ada filter lokasi karena hanya SA/PIC yang akses)
         $query = InventoryBatch::select(
                 'barang_id',
                 'lokasi_id',
@@ -179,11 +210,6 @@ class ReportController extends Controller
             ->with(['barang', 'lokasi', 'rak'])
             ->groupBy('barang_id', 'lokasi_id', 'rak_id');
 
-        // Ganti Role Lama
-        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'AG', 'ASD', 'IMS']) && $user->lokasi_id) {
-             $query->where('lokasi_id', $user->lokasi_id);
-        }
-
         $inventoryDetails = $query->get()->sortBy(['barang.part_name', 'lokasi.nama_lokasi']);
 
         return view('admin.reports.stock_report', compact('inventoryDetails'));
@@ -191,15 +217,18 @@ class ReportController extends Controller
 
     public function exportStockReport()
     {
+        $this->authorize('view-stock-total-report');
         $fileName = 'Laporan Stok Total (Semua Lokasi) - ' . now()->format('d-m-Y') . '.xlsx';
         return Excel::download(new StockReportExport(), $fileName);
     }
 
     // =================================================================
-    // 4. JURNAL PENJUALAN
+    // 4. JURNAL PENJUALAN (Poin 21)
     // =================================================================
     public function salesJournal(Request $request)
     {
+        $this->authorize('view-sales-report');
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
@@ -209,8 +238,18 @@ class ReportController extends Controller
             ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $user) {
                 $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
 
-                if (!$user->hasRole(['SA', 'PIC', 'ACC', 'ASD', 'IMS']) && $user->lokasi_id) {
+                // Filter Lokasi
+                if ($user->isGlobal()) {
+                    // All
+                } elseif ($user->isPusat()) {
+                    // All Dealers
+                    $q->whereHas('lokasi', fn($l) => $l->where('tipe', 'DEALER'));
+                } elseif ($user->isDealer()) {
+                    // Own Dealer
                     $q->where('lokasi_id', $user->lokasi_id);
+                } else {
+                    // Gudang (Block)
+                    $q->whereRaw('1=0');
                 }
             });
 
@@ -221,6 +260,7 @@ class ReportController extends Controller
 
     public function exportSalesJournal(Request $request)
     {
+        $this->authorize('view-sales-report');
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         $fileName = 'Jurnal Penjualan - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
@@ -229,7 +269,7 @@ class ReportController extends Controller
     }
 
     // =================================================================
-    // 5. JURNAL PEMBELIAN
+    // 5. JURNAL PEMBELIAN (Poin 23)
     // =================================================================
     public function purchaseJournal(Request $request)
     {
@@ -244,7 +284,18 @@ class ReportController extends Controller
             ->whereHas('receiving', function ($q) use ($startDate, $endDate, $user) {
                 $q->whereBetween('tanggal_terima', [$startDate, $endDate]);
 
-                if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS']) && $user->lokasi_id) {
+                // Filter Lokasi
+                if ($user->isGlobal()) {
+                    // All
+                } elseif ($user->isPusat()) {
+                    // Pusat view Dealer Request (Masuk ke Dealer)
+                    $q->whereHas('lokasi', fn($l) => $l->where('tipe', 'DEALER'));
+                } elseif ($user->isGudang()) {
+                    // Gudang view Supplier PO (Masuk ke Gudang)
+                    $q->where('lokasi_id', $user->lokasi_id);
+                } else {
+                    // Dealer biasanya tidak akses jurnal pembelian detail (lebih ke stok masuk)
+                    // Tapi jika perlu, filter own location
                     $q->where('lokasi_id', $user->lokasi_id);
                 }
             });
@@ -256,6 +307,7 @@ class ReportController extends Controller
 
     public function exportPurchaseJournal(Request $request)
     {
+        $this->authorize('view-purchase-journal');
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
         $fileName = 'Jurnal Pembelian - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
@@ -264,10 +316,12 @@ class ReportController extends Controller
     }
 
     // =================================================================
-    // 6. NILAI PERSEDIAAN
+    // 6. NILAI PERSEDIAAN (Poin 24)
     // =================================================================
     public function inventoryValue()
     {
+        $this->authorize('view-inventory-value-report');
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
@@ -281,15 +335,30 @@ class ReportController extends Controller
             ->with(['barang', 'lokasi', 'rak'])
             ->groupBy('barang_id', 'lokasi_id', 'rak_id');
 
-        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS']) && $user->lokasi_id) {
+        // Filter Data
+        if ($user->isGlobal()) {
+            // All
+        } elseif ($user->isPusat()) {
+            $inventoryQuery->whereHas('lokasi', fn($q) => $q->where('tipe', 'DEALER'));
+        } elseif ($user->isGudang()) {
+            $inventoryQuery->where('lokasi_id', $user->lokasi_id);
+        } elseif ($user->isDealer()) {
             $inventoryQuery->where('lokasi_id', $user->lokasi_id);
         }
 
         $inventoryDetails = $inventoryQuery->get();
 
-        $totalValue = $inventoryDetails->sum(function($item) {
+        // Hitung Total Value sesuai Poin 24 (Masking Harga)
+        $totalValue = $inventoryDetails->sum(function($item) use ($user) {
             if ($item->barang) {
-                return $item->quantity * $item->barang->selling_out;
+                // Gudang & Global -> Hitung pakai Selling In (Harga Beli)
+                if ($user->isGlobal() || $user->isGudang()) {
+                    return $item->quantity * $item->barang->selling_in;
+                } 
+                // Pusat & Dealer -> Hitung pakai Selling Out (Harga Modal Dealer)
+                else {
+                    return $item->quantity * $item->barang->selling_out;
+                }
             }
             return 0;
         });
@@ -299,15 +368,18 @@ class ReportController extends Controller
 
     public function exportInventoryValue()
     {
+        $this->authorize('view-inventory-value-report');
         $fileName = 'Laporan Nilai Persediaan - ' . now()->format('d-m-Y') . '.xlsx';
         return Excel::download(new InventoryValueExport(), $fileName);
     }
 
     // =================================================================
-    // 7. SALES SUMMARY
+    // 7. SALES SUMMARY (Poin 21)
     // =================================================================
     public function salesSummary(Request $request)
     {
+        $this->authorize('view-sales-report');
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
@@ -315,23 +387,23 @@ class ReportController extends Controller
         $selectedLokasiId = $request->input('dealer_id');
 
         $dealerList = collect();
-        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS']) && $user->lokasi_id;
-
-        if ($isRestrictedUser) {
+        
+        // Filter Dropdown
+        if ($user->isGlobal() || $user->isPusat()) {
+            $dealerList = Lokasi::where('tipe', 'DEALER')->orderBy('nama_lokasi')->get();
+        } else {
             $dealerList = Lokasi::where('id', $user->lokasi_id)->get();
             $selectedLokasiId = $user->lokasi_id;
-        } else {
-            $dealerList = Lokasi::where('is_active', true)
-                            ->where('tipe', '!=', 'PUSAT')
-                            ->orderBy('nama_lokasi')
-                            ->get();
         }
 
         $query = PenjualanDetail::with(['penjualan.lokasi', 'penjualan.konsumen', 'barang'])
             ->whereHas('penjualan', function ($q) use ($startDate, $endDate, $selectedLokasiId, $user) {
                 $q->whereBetween('tanggal_jual', [$startDate, $endDate]);
+                
                 if ($selectedLokasiId) {
                     $q->where('lokasi_id', $selectedLokasiId);
+                } elseif ($user->isPusat()) {
+                    $q->whereHas('lokasi', fn($l) => $l->where('tipe', 'DEALER'));
                 }
             })
             ->orderByDesc('created_at');
@@ -369,29 +441,23 @@ class ReportController extends Controller
 
     public function exportSalesSummary(Request $request)
     {
-        /** @var \App\Models\User $user */
-        $user = Auth::user();
-        
+        $this->authorize('view-sales-report');
+        // ... Logic export sama dengan index ...
         $startDate = $request->input('start_date', now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', now()->endOfMonth()->toDateString());
-        
         $dealerId = $request->input('dealer_id');
-        $isRestrictedUser = !$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS']) && $user->lokasi_id;
         
-        if ($isRestrictedUser) {
-            $dealerId = $user->lokasi_id;
-        }
-
         $fileName = 'Laporan Penjualan - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
-
         return Excel::download(new SalesSummaryExport($startDate, $endDate, $dealerId), $fileName);
     }
 
     // =================================================================
-    // 8. SERVICE SUMMARY
+    // 8. SERVICE SUMMARY (Poin 22)
     // =================================================================
     public function serviceSummary(Request $request)
     {
+        $this->authorize('view-service-report');
+
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
@@ -425,7 +491,16 @@ class ReportController extends Controller
             ->whereBetween('services.reg_date', [$startDate, $endDate])
             ->groupBy('barangs.id', 'barangs.part_code', 'barangs.part_name');
 
-        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS', 'ASD']) && $user->lokasi_id) {
+        // Filter Lokasi Service
+        if ($user->isGlobal()) {
+            // All
+        } elseif ($user->isPusat()) {
+            // Filter by dealer code logic (Service table has dealer_code usually)
+            // Assuming services table has dealer_code or lokasi_id
+            $query->join('lokasi', 'services.lokasi_id', '=', 'lokasi.id')
+                  ->where('lokasi.tipe', 'DEALER');
+        } else {
+            // Dealer Own Data
             $query->where('services.lokasi_id', $user->lokasi_id);
         }
 
@@ -457,20 +532,18 @@ class ReportController extends Controller
 
     public function exportServiceSummary(Request $request)
     {
-        /** @var \App\Models\User $user */
-        $user = Auth::user();
-
+        $this->authorize('view-service-report');
+        // ... (Export Logic same as index filter)
         $startDate = $request->input('start_date') ?? session('report.service.start_date') ?? now()->startOfMonth()->toDateString();
         $endDate = $request->input('end_date') ?? session('report.service.end_date') ?? now()->endOfMonth()->toDateString();
         $invoiceNo = $request->input('invoice_no');
-
+        
         $lokasiId = null;
-        if (!$user->hasRole(['SA', 'PIC', 'ACC', 'IMS', 'ASD'])) {
-            $lokasiId = $user->lokasi_id;
+        if (!Auth::user()->isGlobal() && !Auth::user()->isPusat()) {
+            $lokasiId = Auth::user()->lokasi_id;
         }
 
         $fileName = 'Laporan Service Summary (Parts) - ' . $startDate . ' sampai ' . $endDate . '.xlsx';
-
         return Excel::download(new ServiceSummaryExport($startDate, $endDate, $invoiceNo, $lokasiId), $fileName);
     }
 

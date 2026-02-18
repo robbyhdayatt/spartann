@@ -16,12 +16,12 @@
     <div class="card-header">
         <h3 class="card-title"><i class="fas fa-list mr-1"></i> Data Transaksi Masuk</h3>
         <div class="card-tools">
-            @can('perform-warehouse-ops')
-            <a href="{{ route('admin.receivings.create') }}" class="btn btn-success btn-sm">
-                <i class="fas fa-plus"></i> Catat Penerimaan Baru
-            </a>
-            @endcan
-        </div>
+        @if(auth()->user()->can('process-receiving-gudang') || auth()->user()->can('process-receiving-dealer'))
+        <a href="{{ route('admin.receivings.create') }}" class="btn btn-success btn-sm">
+            <i class="fas fa-plus"></i> Catat Penerimaan Baru
+        </a>
+        @endif
+    </div>
     </div>
     <div class="card-body">
         <table id="receivings-table" class="table table-bordered table-striped table-hover">

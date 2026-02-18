@@ -18,13 +18,17 @@ class PurchaseOrder extends Model
     // Relations
     public function details() { return $this->hasMany(PurchaseOrderDetail::class); }
     public function supplier() { return $this->belongsTo(Supplier::class); }
+    
+    // Lokasi Peminta (Dealer yang minta barang)
     public function lokasi() { return $this->belongsTo(Lokasi::class, 'lokasi_id'); }
+    
+    // Sumber Barang (Gudang Pusat)
     public function sumberLokasi() { return $this->belongsTo(Lokasi::class, 'sumber_lokasi_id'); }
+    
     public function createdBy() { return $this->belongsTo(User::class, 'created_by'); }
     public function approvedBy() { return $this->belongsTo(User::class, 'approved_by'); }
 
-    // Fix Error RelationNotFoundException (Poin 1)
-    // Kita aliaskan approvedByHead ke approvedBy karena di database hanya ada kolom approved_by
+    // Fix Error RelationNotFoundException: Alias approvedByHead ke approvedBy
     public function approvedByHead() { return $this->belongsTo(User::class, 'approved_by'); }
 
     // Helpers
