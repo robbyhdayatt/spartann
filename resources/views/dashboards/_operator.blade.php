@@ -127,13 +127,6 @@
                     </tbody>
                 </table>
             </div>
-            @if($data['stockData']->isNotEmpty())
-            <div class="card-footer text-center bg-white">
-                <a href="{{ route('admin.purchase-orders.create') }}" class="btn btn-primary btn-sm">
-                    <i class="fas fa-plus-circle mr-1"></i> Buat Request PO ke Pusat
-                </a>
-            </div>
-            @endif
         </div>
     </div>
 </div>

@@ -34,7 +34,12 @@ class UserController extends Controller
             'nama' => 'required|string|max:255',
             'nik' => 'required|string|max:50|unique:users',
             'username' => 'required|string|max:100|unique:users',
-            'jabatan_id' => 'required|exists:jabatans,id',
+            'jabatan_id' => [
+                'required',
+                Rule::exists('jabatans', 'id')->where(function ($query) {
+                    $query->where('is_active', true);
+                }),
+            ],
             'lokasi_id' => 'nullable|exists:lokasi,id',
             'password' => 'required|string|min:8|confirmed',
         ]);
@@ -59,7 +64,12 @@ class UserController extends Controller
             'nama' => 'required|string|max:255',
             'nik' => 'required|string|max:50|unique:users,nik,' . $user->id,
             'username' => 'required|string|max:100|unique:users,username,' . $user->id,
-            'jabatan_id' => 'required|exists:jabatans,id',
+            'jabatan_id' => [
+                'required',
+                Rule::exists('jabatans', 'id')->where(function ($query) {
+                    $query->where('is_active', true);
+                }),
+            ],
             'lokasi_id' => 'nullable|exists:lokasi,id',
             'password' => 'nullable|string|min:8|confirmed',
             'is_active' => 'required|boolean',

@@ -32,7 +32,6 @@ class ConvertController extends Controller
 
     public function store(Request $request)
     {
-        // PENTING: Bungkus Validasi dalam Try-Catch untuk menangkap error database saat cek 'exists' atau 'unique'
         try {
             $validator = Validator::make($request->all(), [
                 'nama_job' => 'required|string|max:255',
@@ -41,7 +40,6 @@ class ConvertController extends Controller
                 'part_code' => [
                     'required',
                     'string',
-                    // Pastikan tabel 'barangs' dan kolom 'part_code' benar-benar ada
                     'exists:barangs,part_code',
                     Rule::unique($this->convertsMainTable)->where(function ($query) use ($request) {
                         return $query->where('nama_job', $request->nama_job);
@@ -56,7 +54,6 @@ class ConvertController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            // Insert Data
             DB::table($this->convertsMainTable)->insert([
                 'nama_job' => $request->nama_job,
                 'quantity' => $request->quantity,
@@ -69,10 +66,8 @@ class ConvertController extends Controller
             return response()->json(['success' => 'Data convert berhasil ditambahkan.']);
 
         } catch (\Illuminate\Database\QueryException $e) {
-            // Error SQL (Tabel tidak ada, kolom salah, dll)
             return response()->json(['error' => 'SQL Error: ' . $e->getMessage()], 500);
         } catch (\Exception $e) {
-            // Error Umum
             return response()->json(['error' => 'System Error: ' . $e->getMessage()], 500);
         }
     }
@@ -80,7 +75,6 @@ class ConvertController extends Controller
     public function getEditData($id)
     {
         try {
-            // Gunakan findOrFail pada Model View
             $convert = Convert::findOrFail($id);
             return response()->json($convert);
         } catch (\Exception $e) {

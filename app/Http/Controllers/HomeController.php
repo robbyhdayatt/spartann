@@ -45,8 +45,8 @@ class HomeController extends Controller
                 $data = $this->getAsdData($user);
                 break;
 
-            case 'SMD':
-                $viewName = 'dashboards._smd';
+            case 'IMS':
+                $viewName = 'dashboards._ims';
                 $data = $this->getServiceMdData($user);
                 break;
 
@@ -56,15 +56,18 @@ class HomeController extends Controller
                 break;
 
             case 'PIC':
-            case 'MA':
                 $viewName = 'dashboards._pic';
                 $data = $this->getPicData();
                 break;
 
             case 'KG':
-            case 'KC':
                 $viewName = 'dashboards._approver';
                 $data = $this->getApproverData($user);
+                break;
+
+            case 'KC':
+                $viewName = 'dashboards._kepala_cabang';
+                $data = $this->getKepalaCabangData($user);
                 break;
 
             case 'AG':
@@ -80,11 +83,6 @@ class HomeController extends Controller
             case 'KSR':
                 $viewName = 'dashboards._kasir';
                 $data = $this->getKasirData($user);
-                break;
-
-            case 'SLS':
-                $viewName = 'dashboards._sales';
-                $data = $this->getSalesData($user);
                 break;
         }
 
@@ -147,7 +145,7 @@ class HomeController extends Controller
         return array_merge($itData, $opsData, $finData, $picData);
     }
 
-    // --- ACCOUNTING (PERBAIKAN LOGIKA: SAMA DENGAN LAPORAN SERVICE) ---
+    // --- ACCOUNTING  ---
     private function getAccountingData()
     {
         $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code')->toArray();
@@ -359,6 +357,31 @@ class HomeController extends Controller
         return compact('taskCounts', 'lokasi', 'isPusat', 'stockData', 'totalItemsSoldMonth');
     }
 
+    private function getKepalaCabangData($user)
+    {
+        $lokasiId = $user->lokasi_id;
+        $lokasi = Lokasi::find($lokasiId);
+
+        // 1. Statistik Harian
+        $salesToday = Penjualan::where('lokasi_id', $lokasiId)->whereDate('tanggal_jual', today())->count();
+        $serviceToday = DB::table('services')->where('lokasi_id', $lokasiId)->whereDate('created_at', today())->count();
+
+        // 2. Approval Tasks
+        // KC menyetujui Adjustment (Stok Opname) dari PC/Mekanik di cabangnya
+        $pendingAdjustments = StockAdjustment::where('status', 'PENDING_APPROVAL')
+            ->where('lokasi_id', $lokasiId)
+            ->with('barang')
+            ->latest()->take(5)->get();
+        
+        // KC menyetujui Mutasi Keluar (Jika ada permintaan dari cabang lain)
+        $pendingMutations = StockMutation::where('status', 'PENDING_APPROVAL')
+            ->where('lokasi_asal_id', $lokasiId) // Mutasi Keluar
+            ->with('barang', 'lokasiTujuan')
+            ->latest()->take(5)->get();
+
+        return compact('lokasi', 'salesToday', 'serviceToday', 'pendingAdjustments', 'pendingMutations');
+    }
+
     private function getAdminGudangData($user)
     {
         $lokasiId = $user->lokasi_id;
@@ -540,16 +563,5 @@ class HomeController extends Controller
         $pendingAdjustments = StockAdjustment::where('status', 'PENDING_APPROVAL')->where('lokasi_id', $lokasiId)->with('barang')->latest()->take(5)->get();
         $pendingMutations = StockMutation::where('status', 'PENDING_APPROVAL')->where('lokasi_asal_id', $lokasiId)->with('barang', 'lokasiTujuan')->latest()->take(5)->get();
         return compact('pendingSupplierPOs', 'pendingAdjustments', 'pendingMutations', 'lokasi');
-    }
-
-    private function getSalesData($user)
-    {
-        $salesTarget = SalesTarget::where('user_id', $user->id)->where('bulan', now()->month)->where('tahun', now()->year)->first();
-        $targetAmount = $salesTarget ? $salesTarget->target_amount : 0;
-        $achievedAmount = Penjualan::where('sales_id', $user->id)->whereMonth('tanggal_jual', now()->month)->whereYear('tanggal_jual', now()->year)->sum('total_harga');
-        $achievementPercentage = ($targetAmount > 0) ? (($achievedAmount / $targetAmount) * 100) : 0;
-        $jumlahInsentif = ($achievementPercentage >= 100) ? $achievedAmount * 0.02 : (($achievementPercentage >= 80) ? $achievedAmount * 0.01 : 0);
-        $recentSales = Penjualan::where('sales_id', $user->id)->latest()->limit(5)->get();
-        return ['targetAmount' => $targetAmount, 'achievedAmount' => $achievedAmount, 'achievementPercentage' => $achievementPercentage, 'jumlahInsentif' => $jumlahInsentif, 'recentSales' => $recentSales, 'isSMD' => false];
     }
 }

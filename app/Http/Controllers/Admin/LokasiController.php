@@ -10,7 +10,6 @@ class LokasiController extends Controller
 {
     public function index()
     {
-        // Poin 4: SA & PIC (View Only)
         $this->authorize('view-lokasi');
         $lokasi = Lokasi::orderByRaw("FIELD(tipe, 'PUSAT', 'GUDANG', 'DEALER')")->latest()->get();
         return view('admin.lokasi.index', compact('lokasi'));
@@ -26,9 +25,7 @@ class LokasiController extends Controller
             'singkatan'   => 'nullable|string|max:10',
             'npwp'        => 'nullable|string|max:25',
             'alamat'      => 'nullable|string',
-            // VALIDASI INI PENTING
             'tipe'        => 'required|in:PUSAT,GUDANG,DEALER', 
-            // Struktur
             'koadmin'     => 'nullable|string|max:50',
             'asd'         => 'nullable|string|max:50',
             'aom'         => 'nullable|string|max:50',
@@ -59,6 +56,14 @@ class LokasiController extends Controller
             'asm'         => 'nullable|string|max:50',
             'gm'          => 'nullable|string|max:50',
         ]);
+        
+        if ($validated['is_active'] == 0 && $lokasi->is_active == 1) {
+            $totalStokDiLokasi = \App\Models\InventoryBatch::where('lokasi_id', $lokasi->id)->sum('quantity');
+
+            if ($totalStokDiLokasi > 0) {
+                return back()->with('error', "Gagal menonaktifkan! Lokasi ini masih memiliki total sisa stok {$totalStokDiLokasi} unit. Lakukan mutasi keluar atau adjustment terlebih dahulu.")->withInput();
+            }
+        }
 
         $lokasi->update($validated);
 

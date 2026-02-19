@@ -19,22 +19,17 @@ class PenjualanController extends Controller
 {
     public function index()
     {
-        // [MODIFIKASI] Gate Poin 17: view-sales
-        $this->authorize('view-sales');
+        $this->authorize('view-penjualan');
         
         $user = Auth::user();
         $query = Penjualan::with(['konsumen', 'sales', 'lokasi', 'details'])->latest();
 
-        // [MODIFIKASI] Filter Lokasi sesuai Poin 17
-        // User Global (SA/PIC) atau Pusat (ASD/ACC) bisa lihat semua data dealer
         $isGlobalOrPusat = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
 
         if (!$isGlobalOrPusat) {
-            // User Dealer (KC, PC, KSR) hanya lihat datanya sendiri
             if ($user->lokasi_id) {
                 $query->where('lokasi_id', $user->lokasi_id);
             } else {
-                // Safety: Jika user tidak punya lokasi dan bukan admin, tidak bisa lihat apa-apa
                 $query->whereRaw('1 = 0');
             }
         }
@@ -45,21 +40,17 @@ class PenjualanController extends Controller
 
     public function create()
     {
-        // [MODIFIKASI] Gate Poin 17: create-sale (Hanya PC & KSR)
-        $this->authorize('create-sale');
+        $this->authorize('manage-penjualan');
         
         $user = Auth::user();
 
-        // Validasi Lokasi User
         if (!$user->lokasi_id && !$user->isGlobal()) {
              return redirect()->route('admin.home')
                 ->with('error', 'Akun Anda tidak terasosiasi dengan lokasi/cabang manapun. Hubungi Admin.');
         }
 
-        // Ambil lokasi aktif (Dealer user)
         $lokasi = $user->lokasi;
         
-        // Fallback untuk SA saat testing (ambil sembarang dealer)
         if (!$lokasi && $user->isGlobal()) {
             $lokasi = Lokasi::where('tipe', 'DEALER')->first();
         }
@@ -71,8 +62,7 @@ class PenjualanController extends Controller
 
     public function store(Request $request)
     {
-        // [MODIFIKASI] Gate create-sale
-        $this->authorize('create-sale');
+        $this->authorize('manage-penjualan');
         
         $user = Auth::user();
 
@@ -97,7 +87,6 @@ class PenjualanController extends Controller
             return back()->withErrors($validator)->withInput();
         }
 
-        // [MODIFIKASI] Lock Lokasi ke User
         $lokasiId = $user->lokasi_id;
         
         if (!$lokasiId && $user->isGlobal()) {
@@ -131,7 +120,7 @@ class PenjualanController extends Controller
                 ]);
             }
 
-            // 3. Buat Header Penjualan (Draft Awal)
+            // 3. Buat Header Penjualan
             $penjualan = Penjualan::create([
                 'nomor_faktur' => Penjualan::generateNomorFaktur(),
                 'tanggal_jual' => $request->tanggal_jual,
@@ -141,10 +130,10 @@ class PenjualanController extends Controller
                 'created_by'   => $user->id,
                 'status'       => 'COMPLETED',
                 'keterangan_diskon' => $request->nama_diskon,
-                'diskon'       => 0, // Dihitung ulang nanti
-                'subtotal'     => 0, // Dihitung ulang nanti
-                'pajak'        => 0, // Dihitung ulang nanti
-                'total_harga'  => 0, // Dihitung ulang nanti
+                'diskon'       => 0,
+                'subtotal'     => 0,
+                'pajak'        => 0,
+                'total_harga'  => 0,
             ]);
 
             $subtotalGlobal = 0;
@@ -156,7 +145,13 @@ class PenjualanController extends Controller
                 
                 // Ambil data barang untuk harga saat ini
                 $barang = Barang::find($barangId);
-                $hargaJualSatuan = $barang->retail; // Harga master
+
+                // [MODIFIKASI] VALIDASI BARANG AKTIF
+                if (!$barang->is_active) {
+                    throw new \Exception("Transaksi Dibatalkan! Barang '{$barang->part_name}' ({$barang->part_code}) berstatus NONAKTIF dan tidak dapat dijual.");
+                }
+
+                $hargaJualSatuan = $barang->retail;
 
                 // Ambil stok dari inventory_batch (FIFO)
                 $batches = InventoryBatch::where('barang_id', $barangId)
@@ -186,7 +181,7 @@ class PenjualanController extends Controller
                     
                     $penjualan->details()->create([
                         'barang_id'   => $barang->id,
-                        'rak_id'      => $batch->rak_id, // Penting untuk pelacakan
+                        'rak_id'      => $batch->rak_id,
                         'qty_jual'    => $qtyDiambil,
                         'harga_jual'  => $hargaJualSatuan,
                         'subtotal'    => $subtotalItem,
@@ -202,7 +197,7 @@ class PenjualanController extends Controller
                         'barang_id'      => $barang->id,
                         'lokasi_id'      => $lokasiId,
                         'rak_id'         => $batch->rak_id,
-                        'jumlah'         => -$qtyDiambil, // Keluar = Negatif
+                        'jumlah'         => -$qtyDiambil,
                         'stok_sebelum'   => $stokAwalBatch,
                         'stok_sesudah'   => $stokAwalBatch - $qtyDiambil,
                         'referensi_type' => get_class($penjualan),
@@ -218,7 +213,6 @@ class PenjualanController extends Controller
 
             // 5. Kalkulasi Final (Diskon & Pajak)
             $inputDiskon = (float) $request->nilai_diskon;
-            // Pastikan diskon tidak melebihi subtotal
             $finalDiskon = min($inputDiskon, $subtotalGlobal);
             
             $dpp = $subtotalGlobal - $finalDiskon;
@@ -252,12 +246,8 @@ class PenjualanController extends Controller
 
     public function show(Penjualan $penjualan)
     {
-        // [MODIFIKASI] Gate view-sales
-        $this->authorize('view-sales');
-        
-        $user = Auth::user();
-        
-        // [MODIFIKASI] Security Check: Dealer hanya boleh lihat penjualan di lokasinya
+        $this->authorize('view-penjualan');        
+        $user = Auth::user();   
         $isGlobalOrPusat = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
         
         if (!$isGlobalOrPusat) {
@@ -272,10 +262,7 @@ class PenjualanController extends Controller
 
     public function print(Penjualan $penjualan)
     {
-        $this->authorize('view-sales');
-        
-        // (Optional) Security Check same as show method here
-        
+        $this->authorize('view-penjualan');
         return view('admin.penjualans.print', compact('penjualan'));
     }
 
@@ -297,7 +284,6 @@ class PenjualanController extends Controller
 
         $results = [];
         foreach ($barangs as $barang) {
-            // Hitung total stok real-time di lokasi tersebut
             $stok = InventoryBatch::where('barang_id', $barang->id)
                 ->where('lokasi_id', $lokasiId)
                 ->sum('quantity');
@@ -307,7 +293,7 @@ class PenjualanController extends Controller
                     'id' => $barang->id,
                     'text' => $barang->part_name . ' (' . $barang->part_code . ') - Stok: ' . $stok,
                     'price' => $barang->retail,
-                    'stock' => $stok // Kirim stok ke frontend untuk validasi JS
+                    'stock' => $stok
                 ];
             }
         }
@@ -315,7 +301,6 @@ class PenjualanController extends Controller
         return response()->json($results);
     }
     
-    // API Hitung Diskon (Opsional)
     public function calculateDiscount(Request $request)
     {
         return response()->json(['discount' => 0]);

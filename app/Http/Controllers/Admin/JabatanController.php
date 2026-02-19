@@ -57,6 +57,14 @@ class JabatanController extends Controller
             'is_active' => 'required|boolean'
         ]);
 
+        // [MODIFIKASI] VALIDASI: Cek user aktif sebelum nonaktifkan jabatan
+        if ($validated['is_active'] == 0) {
+            $userCount = $jabatan->users()->where('is_active', true)->count();
+            if ($userCount > 0) {
+                return back()->with('error', "Gagal menonaktifkan! Masih ada {$userCount} user aktif yang menggunakan jabatan ini. Nonaktifkan user terkait terlebih dahulu.")->withInput();
+            }
+        }
+
         $jabatan->update([
             'nama_jabatan' => $validated['nama_jabatan'],
             'singkatan'    => strtoupper($validated['singkatan']),

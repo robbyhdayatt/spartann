@@ -24,6 +24,10 @@
         #togglePassword { cursor: pointer; }
         .footer-credit { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 8px 20px; background-color: rgba(0, 0, 0, 0.3); border-radius: 50px; color: rgba(255, 255, 255, 0.9); font-size: 0.9rem; white-space: nowrap; z-index: 10; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.1); }
 
+        /* Custom Alert Style */
+        .custom-alert { border-radius: 8px; font-size: 0.9rem; border: none; box-shadow: 0 2px 5px rgba(220, 53, 69, 0.2); }
+        .custom-alert .close { outline: none; }
+
         @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @media (max-width: 768px) { .login-branding { display: none; } .login-form-wrapper { width: 100%; } .login-box { max-width: 350px; } .footer-credit { color: #888; text-shadow: none; background: transparent; border: none; } }
@@ -40,22 +44,47 @@
     <div class="login-form-wrapper">
         <div class="login-box">
             <p class="login-box-msg">Login ke Akun Anda</p>
+
+            {{-- [MODIFIKASI] MENAMPILKAN PESAN ERROR DENGAN ALERT --}}
+            @if($errors->any() || session('error'))
+                <div class="alert alert-danger alert-dismissible fade show custom-alert mb-4" role="alert">
+                    <div class="d-flex align-items-start">
+                        <div class="mr-3 mt-1">
+                            <i class="fas fa-exclamation-triangle fa-lg"></i>
+                        </div>
+                        <div>
+                            <strong>Gagal Masuk!</strong>
+                            <div class="mt-1">
+                                @if(session('error'))
+                                    {{ session('error') }}
+                                @else
+                                    {{-- Menampilkan error pertama dari Bag (biasanya dari Controller Login) --}}
+                                    {{ $errors->first() }}
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            @endif
+            {{-- [AKHIR MODIFIKASI] --}}
+
             <form action="{{ route('login') }}" method="post">
                 @csrf
                 <div class="input-group mb-3">
                     <input type="text" name="username" class="form-control @error('username') is-invalid @enderror" value="{{ old('username') }}" placeholder="Username" autofocus>
                     <div class="input-group-append"><div class="input-group-text"><span class="fas fa-user"></span></div></div>
-                    @error('username') <span class="invalid-feedback" role="alert"><strong>{{ $message }}</strong></span> @enderror
+                    {{-- Kita tetap biarkan highlight merah di input, tapi pesan teksnya sudah diwakili Alert di atas --}}
                 </div>
                 <div class="input-group mb-3">
                     <input type="password" name="password" id="password" class="form-control @error('password') is-invalid @enderror" placeholder="Password">
                     <div class="input-group-append">
                         <div class="input-group-text" id="togglePassword">
-                            {{-- Memberikan ID pada ikonnya langsung --}}
                             <span id="toggleIcon" class="fas fa-eye-slash"></span>
                         </div>
                     </div>
-                    @error('password') <span class="invalid-feedback" role="alert"><strong>{{ $message }}</strong></span> @enderror
                 </div>
                 <div class="row mt-4"><div class="col-12"><button type=submit class="btn btn-primary btn-block">Sign In</button></div></div>
             </form>
@@ -67,13 +96,12 @@
 </div>
 @stop
 
-{{-- Memindahkan JavaScript ke @section('adminlte_js') --}}
 @section('adminlte_js')
 <script>
     $(document).ready(function() {
         $('#togglePassword').on('click', function() {
             const passwordField = $('#password');
-            const passwordIcon = $('#toggleIcon'); // Memilih ikon dengan ID-nya langsung
+            const passwordIcon = $('#toggleIcon');
             const passwordFieldType = passwordField.attr('type');
 
             if (passwordFieldType === 'password') {

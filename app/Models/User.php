@@ -38,33 +38,33 @@ class User extends Authenticatable
 
     public function hasRole($roles)
     {
-        if (is_string($roles)) {
-            return optional($this->jabatan)->singkatan === $roles;
+        if (!$this->jabatan || !$this->jabatan->is_active) {
+            return false;
         }
-        return in_array(optional($this->jabatan)->singkatan, $roles);
+
+        if (is_string($roles)) {
+            return $this->jabatan->singkatan === $roles;
+        }
+        return in_array($this->jabatan->singkatan, $roles);
     }
 
     // --- NEW CORE HELPERS ---
 
-    // 1. GLOBAL (SA, PIC) -> Dewa / Auditor
     public function isGlobal()
     {
         return $this->hasRole(['SA', 'PIC']);
     }
 
-    // 2. PUSAT (Main Dealer Office)
     public function isPusat()
     {
         return $this->lokasi && $this->lokasi->tipe === 'PUSAT';
     }
 
-    // 3. GUDANG (Part Center / Fisik)
     public function isGudang()
     {
         return $this->lokasi && $this->lokasi->tipe === 'GUDANG';
     }
 
-    // 4. DEALER (Cabang)
     public function isDealer()
     {
         return $this->lokasi && $this->lokasi->tipe === 'DEALER';

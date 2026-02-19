@@ -18,31 +18,21 @@ class RakController extends Controller
         
         $query = Rak::with('lokasi');
 
-        // Logic Filter View
         if ($user->isGlobal()) {
-            // Lihat Semua (SA, PIC)
         } 
         elseif ($user->isPusat()) {
-            // PUSAT (ASD, IMS, ACC) -> View Seluruh Dealer
-            // (Asumsi: Pusat tidak perlu lihat rak Gudang Part? Sesuai request: "View seluruh dealer")
-            // Jika mau lihat Dealer + Gudang, sesuaikan whereHas
             $query->whereHas('lokasi', fn($q) => $q->where('tipe', 'DEALER'));
         }
         elseif ($user->isGudang()) {
-            // GUDANG (AG, KG) -> View Lokasi Gudang (Self)
             $query->where('lokasi_id', $user->lokasi_id);
         }
         elseif ($user->isDealer()) {
-            // DEALER (KC, PC) -> View Dealer Sendiri
             $query->where('lokasi_id', $user->lokasi_id);
         }
 
         $raks = $query->latest()->get();
-        
-        // Filter Dropdown Lokasi untuk Modal Create (Hanya SA yg bisa create full)
         $lokasiQuery = Lokasi::where('is_active', true);
         if (!$user->isGlobal()) {
-             // Jika user lain boleh create rak (misal PC buat rak sendiri), filter disini
              $lokasiQuery->where('id', $user->lokasi_id);
         }
         $lokasi = $lokasiQuery->orderBy('nama_lokasi')->get();
@@ -55,7 +45,12 @@ class RakController extends Controller
         $this->authorize('manage-raks');
         
         $validated = $request->validate([
-            'lokasi_id' => 'required|exists:lokasi,id',
+            'lokasi_id' => [
+                'required',
+                Rule::exists('lokasi', 'id')->where(function ($query) {
+                    $query->where('is_active', true);
+                }),
+            ],
             'zona'      => 'required|string|max:5',
             'nomor_rak' => 'required|string|max:5',
             'level'     => 'required|string|max:5',
@@ -63,7 +58,6 @@ class RakController extends Controller
             'tipe_rak'  => 'required|in:PENYIMPANAN,KARANTINA',
         ]);
 
-        // Cek duplikasi manual karena kode rak digenerate di Model boot()
         $generatedCode = sprintf("%s-%s-%s-%s", 
             strtoupper($request->zona), strtoupper($request->nomor_rak), 
             strtoupper($request->level), strtoupper($request->bin)
@@ -73,7 +67,7 @@ class RakController extends Controller
             return back()->with('error', "Rak $generatedCode sudah ada di lokasi ini.")->withInput();
         }
 
-        Rak::create($validated); // Model event akan handle penggabungan string
+        Rak::create($validated);
 
         return redirect()->route('admin.raks.index')->with('success', 'Rak berhasil ditambahkan dengan format Zona-Rak-Level-Bin!');
     }
@@ -81,9 +75,43 @@ class RakController extends Controller
     public function update(Request $request, Rak $rak)
     {
         $this->authorize('manage-raks');
-        // Logika update mirip store, pastikan validasi unique ignore ID saat ini
-        // Implementasi disederhanakan untuk brevity
-        $rak->update($request->all()); 
+        
+        $validated = $request->validate([
+            'lokasi_id' => 'required|exists:lokasi,id',
+            'zona'      => 'required|string|max:5',
+            'nomor_rak' => 'required|string|max:5',
+            'level'     => 'required|string|max:5',
+            'bin'       => 'required|string|max:5',
+            'tipe_rak'  => 'required|in:PENYIMPANAN,KARANTINA',
+            'is_active' => 'required|boolean', // Pastikan kolom ini divalidasi
+        ]);
+
+        // [MODIFIKASI] VALIDASI LOGIKA: Cek isi rak sebelum dinonaktifkan
+        if ($request->is_active == 0 && $rak->is_active == 1) {
+            // Hitung total stok di rak ini
+            $totalStok = $rak->inventoryBatches()->sum('quantity');
+            
+            if ($totalStok > 0) {
+                return back()->with('error', "Gagal menonaktifkan! Rak ini masih menyimpan stok sebanyak {$totalStok} unit. Pindahkan stok terlebih dahulu (Mutasi/Putaway).")->withInput();
+            }
+        }
+
+        // Generate ulang kode rak jika ada perubahan struktur
+        $generatedCode = sprintf("%s-%s-%s-%s", 
+            strtoupper($request->zona), strtoupper($request->nomor_rak), 
+            strtoupper($request->level), strtoupper($request->bin)
+        );
+
+        // Cek duplikasi kode rak (kecuali rak ini sendiri)
+        if (Rak::where('lokasi_id', $request->lokasi_id)
+                ->where('kode_rak', $generatedCode)
+                ->where('id', '!=', $rak->id)
+                ->exists()) {
+            return back()->with('error', "Rak $generatedCode sudah ada di lokasi ini.")->withInput();
+        }
+
+        $rak->update($validated); 
+        
         return redirect()->route('admin.raks.index')->with('success', 'Rak diperbarui!');
     }
 

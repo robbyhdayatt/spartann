@@ -23,14 +23,12 @@ class ServiceController extends Controller
 {
     public function index(Request $request)
     {
-        // [MODIFIKASI] Gate Poin 16: view-service
         $this->authorize('view-service');
 
         $user = Auth::user();
         $query = Service::query();
         $dealers = collect();
 
-        // --- LOGIKA STICKY FILTER (Simpan Filter ke Session) ---
         if ($request->filled('start_date') || $request->filled('end_date')) {
             session([
                 'service.start_date' => $request->input('start_date'),
@@ -42,14 +40,8 @@ class ServiceController extends Controller
             session(['service.dealer_code' => $request->input('dealer_code')]);
         }
 
-        // Ambil Data (Prioritas: Request -> Session -> Default Hari Ini)
         $startDate = $request->input('start_date', session('service.start_date', now()->toDateString()));
         $endDate = $request->input('end_date', session('service.end_date', now()->toDateString()));
-        // -------------------------------------------------------
-
-        // [MODIFIKASI] Logika Filter Dealer sesuai Poin 16
-        // SA, PIC, ASD, ACC -> Bisa lihat semua / filter
-        // PC, KC, KSR -> Terkunci di dealer sendiri
         $canFilterByDealer = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
         
         $selectedDealer = null;
@@ -62,32 +54,26 @@ class ServiceController extends Controller
                 $query->where('dealer_code', $selectedDealer);
             }
         } else {
-            // [MODIFIKASI] User Dealer (PC, KC, KSR) -> Lock ke kode lokasi user
             if ($user->lokasi && $user->lokasi->kode_lokasi) {
                 $query->where('dealer_code', $user->lokasi->kode_lokasi);
                 $selectedDealer = $user->lokasi->kode_lokasi;
             } else {
-                // Safety: Jika user tidak punya lokasi, jangan tampilkan data
                 $query->whereRaw('1 = 0');
             }
         }
 
-        // KEMBALI KE FILTER TANGGAL IMPORT (created_at)
         if ($startDate && $endDate) {
             try {
-                // Karena created_at ada jam-nya, kita harus set startOfDay dan endOfDay
                 $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
                 $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
                 
                 $query->whereBetween('services.created_at', [$start, $end]);
 
             } catch (\Exception $e) {
-                // Fallback jika error
                 $query->whereDate('services.created_at', today());
             }
         }
 
-        // Sorting default kembali ke created_at
         $services = $query->orderBy('created_at', 'desc')
                           ->paginate(1000)
                           ->withQueryString();
@@ -104,7 +90,6 @@ class ServiceController extends Controller
 
     public function import(Request $request)
     {
-        // [MODIFIKASI] Gate Poin 16: manage-service (Hanya PC/KSR Dealer)
         $this->authorize('manage-service');
         
         $request->validate([
@@ -131,8 +116,6 @@ class ServiceController extends Controller
                 $message = "Sukses! {$importedCount} data baru ditambahkan.";
                 if ($updatedCount > 0) $message .= " {$updatedCount} data KSG diperbarui.";
                 if ($skippedDuplicate > 0) $message .= " {$skippedDuplicate} data duplikat dilewati.";
-                
-                // Jika ada error spesifik, tampilkan di session flash
                 if (!empty($errors)) {
                     return redirect()->back()->with('success', $message)->with('import_errors', $errors);
                 }
@@ -149,34 +132,26 @@ class ServiceController extends Controller
 
     public function exportExcel(Request $request)
     {
-        // [MODIFIKASI] Gate Export
         $this->authorize('export-service-report');
         
         $user = Auth::user();
-        
-        // Ambil parameter filter
         $startDate = $request->input('start_date') ?? session('service.start_date') ?? now()->toDateString();
         $endDate = $request->input('end_date') ?? session('service.end_date') ?? now()->toDateString();
         $selectedDealer = $request->input('dealer_code') ?? session('service.dealer_code');
-
-        // [MODIFIKASI] Logika Filter Dealer Sama dengan Index
         $canFilterByDealer = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
         
         if (!$canFilterByDealer) {
-            // User biasa: paksa gunakan dealer mereka sendiri
             if ($user->lokasi && $user->lokasi->kode_lokasi) {
                 $selectedDealer = $user->lokasi->kode_lokasi;
             } else {
                 return redirect()->back()->with('error', 'Akun Anda tidak memiliki dealer yang terkait.');
             }
         } else {
-            // Super Admin/PIC: Jika tidak pilih dealer, default ke 'all'
             if (empty($selectedDealer)) {
                 $selectedDealer = 'all';
             }
         }
 
-        // Validasi format tanggal
         try {
             $validStartDate = Carbon::createFromFormat('Y-m-d', $startDate)->format('Y-m-d');
             $validEndDate = Carbon::createFromFormat('Y-m-d', $endDate)->format('Y-m-d');
@@ -192,13 +167,9 @@ class ServiceController extends Controller
 
     public function show(Service $service)
     {
-        // [MODIFIKASI] Gate View Service
         $this->authorize('view-service');
         
         $user = Auth::user();
-        
-        // [MODIFIKASI] Cek Kepemilikan Data (Jika Dealer)
-        // Jika bukan Global/Pusat, pastikan dealer_code cocok
         $isGlobalOrPusat = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
 
         if (!$isGlobalOrPusat) {
@@ -213,13 +184,10 @@ class ServiceController extends Controller
 
     public function downloadPDF($id)
     {
-        // [MODIFIKASI] Gate View Service
         $this->authorize('view-service');
         
         $service = Service::with('details.barang', 'lokasi')->findOrFail($id); 
         $user = Auth::user();
-        
-        // [MODIFIKASI] Cek Kepemilikan Data (Sama seperti show)
         $isGlobalOrPusat = $user->isGlobal() || ($user->isPusat() && $user->hasRole(['ASD', 'ACC']));
 
         if (!$isGlobalOrPusat) {
@@ -250,7 +218,6 @@ class ServiceController extends Controller
 
     public function update(Request $request, Service $service)
     {
-        // [MODIFIKASI] Gate Manage (Update Stok) - Hanya PC
         $this->authorize('manage-service');
 
         $validated = $request->validate([
@@ -270,6 +237,12 @@ class ServiceController extends Controller
         try {
             foreach ($validated['items'] as $item) {
                 $barang = Barang::find($item['part_id']);
+
+                // [MODIFIKASI] VALIDASI BARANG AKTIF
+                if (!$barang->is_active) {
+                    throw new \Exception("Gagal Tambah Part! '{$barang->part_name}' statusnya NONAKTIF.");
+                }
+
                 $qtyKeluar = $item['quantity'];
                 $hargaJual = $item['price'];
 
