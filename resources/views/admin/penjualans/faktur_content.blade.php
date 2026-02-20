@@ -238,7 +238,16 @@ html, body {
     <table style="margin-top: 10px;">
         <tr>
             <td style="width: 60%; vertical-align: bottom;">
-                <div><strong>Harga sudah termasuk PPN 11%</strong></div>
+                {{-- [PERBAIKAN] Logika PPN Dinamis --}}
+                <div>
+                    <strong>
+                        @if(($penjualan->pajak ?? 0) > 0)
+                            Harga sudah termasuk PPN 11%
+                        @else
+                            Harga tidak termasuk PPN 11%
+                        @endif
+                    </strong>
+                </div>
                 @if($penjualan->keterangan_diskon)
                     <div style="font-size: 0.9em; color: #555;">Catatan Diskon: {{ $penjualan->keterangan_diskon }}</div>
                 @endif
@@ -260,6 +269,17 @@ html, body {
                             <td>Diskon:</td>
                             <td class="text-right text-danger">- Rp {{ number_format($penjualan->diskon, 0, ',', '.') }}</td>
                         </tr>
+                    @endif
+                    
+                    {{-- [PERBAIKAN] Tampilkan PPN jika ada --}}
+                    @if(($penjualan->pajak ?? 0) > 0)
+                        <tr>
+                            <td>PPN 11%:</td>
+                            <td class="text-right">Rp {{ number_format($penjualan->pajak, 0, ',', '.') }}</td>
+                        </tr>
+                    @endif
+
+                    @if(($penjualan->diskon ?? 0) > 0 || ($penjualan->pajak ?? 0) > 0)
                         <tr><td colspan="2"><hr style="margin: 2px 0;"></td></tr>
                     @endif
                     
