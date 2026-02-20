@@ -10,8 +10,9 @@
 @stop
 
 @section('content')
-    <div class="card">
+    <div class="card card-outline card-primary shadow-sm">
         <div class="card-body">
+            {{-- FORM FILTER --}}
             <form action="{{ route('admin.reports.sales-summary') }}" method="GET">
                 <div class="row align-items-end">
                     <div class="col-md-3">
@@ -43,10 +44,9 @@
                     </div>
                     <div class="col-md-3">
                         <div class="form-group">
-                            <button type="submit" class="btn btn-primary mr-2">Filter</button>
-                            <a href="{{ route('admin.reports.sales-summary.export', request()->query()) }}" class="btn btn-success">
-                                <i class="fa fa-download"></i> Export
-                            </a>
+                            <button type="submit" class="btn btn-primary w-100 shadow-sm">
+                                <i class="fas fa-search mr-1"></i> Terapkan Filter
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -54,18 +54,29 @@
 
             <hr>
 
+            {{-- HEADER TABEL & TOMBOL EXPORT --}}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="m-0 text-secondary"><i class="fas fa-list mr-2"></i>Hasil Laporan Penjualan</h5>
+                
+                {{-- Tombol Export Dipindah ke Sini --}}
+                <a href="{{ route('admin.reports.sales-summary.export', request()->query()) }}" class="btn btn-success shadow-sm">
+                    <i class="fas fa-file-excel mr-1"></i> Export ke Excel
+                </a>
+            </div>
+
+            {{-- TABEL DATA --}}
             <div class="table-responsive">
-                <table class="table table-bordered table-striped" id="reportTable">
-                    <thead class="thead-light">
+                <table class="table table-bordered table-striped table-hover" id="reportTable">
+                    <thead class="bg-gradient-dark">
                         <tr>
                             <th>Tanggal</th>
                             <th>Faktur</th>
                             <th>Dealer</th>
                             <th>Barang</th>
-                            <th>Qty</th>
-                            <th>Total Jual</th>
-                            <th>Total HPP</th>
-                            <th>Profit</th>
+                            <th class="text-center">Qty</th>
+                            <th class="text-right">Total Jual</th>
+                            <th class="text-right">Total HPP</th>
+                            <th class="text-right">Profit</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -76,24 +87,26 @@
                                 $profit = $data->subtotal - $total_modal;
                             @endphp
                             <tr>
-                                <td>{{ $data->penjualan->tanggal_jual->format('d-m-Y') }}</td>
-                                <td>{{ $data->penjualan->nomor_faktur }}</td>
-                                <td>{{ $data->penjualan->lokasi->nama_lokasi ?? '-' }}</td>
-                                <td>{{ $data->barang->part_name ?? '-' }}</td>
-                                <td>{{ $data->qty_jual }}</td>
-                                <td>Rp {{ number_format($data->subtotal, 0, ',', '.') }}</td>
-                                <td>Rp {{ number_format($total_modal, 0, ',', '.') }}</td>
-                                <td>Rp {{ number_format($profit, 0, ',', '.') }}</td>
+                                <td class="align-middle">{{ $data->penjualan->tanggal_jual->format('d-m-Y') }}</td>
+                                <td class="align-middle font-weight-bold">{{ $data->penjualan->nomor_faktur }}</td>
+                                <td class="align-middle">{{ $data->penjualan->lokasi->nama_lokasi ?? '-' }}</td>
+                                <td class="align-middle">{{ $data->barang->part_name ?? '-' }}</td>
+                                <td class="align-middle text-center font-weight-bold">{{ $data->qty_jual }}</td>
+                                <td class="align-middle text-right">Rp {{ number_format($data->subtotal, 0, ',', '.') }}</td>
+                                <td class="align-middle text-right text-muted">Rp {{ number_format($total_modal, 0, ',', '.') }}</td>
+                                <td class="align-middle text-right font-weight-bold {{ $profit > 0 ? 'text-success' : ($profit < 0 ? 'text-danger' : '') }}">
+                                    Rp {{ number_format($profit, 0, ',', '.') }}
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
                     <tfoot class="bg-light font-weight-bold">
                         <tr>
-                            <th colspan="4" class="text-right">GRAND TOTAL</th>
-                            <th>{{ number_format($grandTotalQty, 0, ',', '.') }}</th>
-                            <th>Rp {{ number_format($grandTotalPenjualan, 0, ',', '.') }}</th>
-                            <th>Rp {{ number_format($grandTotalModal, 0, ',', '.') }}</th>
-                            <th>Rp {{ number_format($grandTotalKeuntungan, 0, ',', '.') }}</th>
+                            <th colspan="4" class="text-right text-uppercase">Grand Total Keseluruhan</th>
+                            <th class="text-center text-primary" style="font-size: 1.1rem;">{{ number_format($grandTotalQty, 0, ',', '.') }}</th>
+                            <th class="text-right text-primary" style="font-size: 1.1rem;">Rp {{ number_format($grandTotalPenjualan, 0, ',', '.') }}</th>
+                            <th class="text-right text-secondary" style="font-size: 1.1rem;">Rp {{ number_format($grandTotalModal, 0, ',', '.') }}</th>
+                            <th class="text-right text-success" style="font-size: 1.1rem;">Rp {{ number_format($grandTotalKeuntungan, 0, ',', '.') }}</th>
                         </tr>
                     </tfoot>
                 </table>
@@ -126,9 +139,13 @@
         $('.select2').select2({
             theme: 'bootstrap4'
         });
+        
         $('#reportTable').DataTable({
             "responsive": true,
-            "order": [[ 0, "desc" ]]
+            "order": [[ 0, "desc" ]], // Urutkan dari tanggal terbaru
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.21/i18n/Indonesian.json"
+            }
         });
     });
 </script>

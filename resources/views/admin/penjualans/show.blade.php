@@ -18,9 +18,6 @@
                     <a href="{{ route('admin.penjualans.index') }}" class="btn btn-default btn-sm">
                         <i class="fas fa-arrow-left"></i> Kembali
                     </a>
-                    <a href="{{ route('admin.penjualans.print', $penjualan) }}" target="_blank" class="btn btn-default btn-sm">
-                        <i class="fas fa-print"></i> Print
-                    </a>
                     <a href="{{ route('admin.penjualans.pdf', $penjualan) }}" class="btn btn-danger btn-sm">
                         <i class="fas fa-file-pdf"></i> Export PDF
                     </a>
@@ -35,7 +32,7 @@
                         <address>
                             <strong>{{ $penjualan->lokasi->nama_lokasi ?? 'Pusat' }}</strong><br>
                             {{ $penjualan->lokasi->alamat ?? '-' }}<br>
-                            Sales: {{ $penjualan->sales->nama ?? '-' }}
+                            Karyawan: {{ $penjualan->sales->nama ?? '-' }}
                         </address>
                     </div>
                     <div class="col-sm-6 text-right">

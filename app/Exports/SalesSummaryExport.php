@@ -8,80 +8,81 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
+use PhpOffice\PhpSpreadsheet\Cell\Cell;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use Illuminate\Support\Facades\Auth;
 
-class SalesSummaryExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize, WithStyles, WithColumnFormatting, WithEvents
+class SalesSummaryExport extends DefaultValueBinder implements 
+    FromCollection, WithHeadings, WithMapping, ShouldAutoSize, 
+    WithStyles, WithEvents, WithCustomValueBinder
 {
     protected $startDate;
     protected $endDate;
-    protected $dealerId;
+    private $rowCount = 0;
+    private $totalQty = 0;
+    private $totalPenjualan = 0;
 
-    // Variabel untuk menampung total perhitungan
-    protected $totalQty = 0;
-    protected $totalPenjualan = 0;
-    protected $totalHpp = 0;
-    protected $totalProfit = 0;
-    protected $rowCount = 0; // Menghitung baris data
-
-    public function __construct($startDate, $endDate, $dealerId)
+    public function __construct($startDate, $endDate)
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
-        $this->dealerId = $dealerId;
+    }
+
+    public function bindValue(Cell $cell, $value)
+    {
+        if ($cell->getColumn() === 'F') { // Asumsi Kolom F adalah Kode Barang
+            $cell->setValueExplicit($value, DataType::TYPE_STRING);
+            return true;
+        }
+        return parent::bindValue($cell, $value);
     }
 
     public function collection()
     {
-        return PenjualanDetail::with(['penjualan.lokasi', 'penjualan.konsumen', 'penjualan.sales', 'barang'])
-            ->whereHas('penjualan', function ($q) {
+        $user = Auth::user();
+        $query = PenjualanDetail::with(['penjualan.konsumen', 'penjualan.sales', 'barang', 'penjualan.lokasi'])
+            ->whereHas('penjualan', function ($q) use ($user) {
                 $q->whereBetween('tanggal_jual', [$this->startDate, $this->endDate]);
-                if ($this->dealerId) {
-                    $q->where('lokasi_id', $this->dealerId);
+                if ($user->isPusat()) {
+                    $q->whereHas('lokasi', fn($l) => $l->where('tipe', 'DEALER'));
+                } elseif ($user->isDealer()) {
+                    $q->where('lokasi_id', $user->lokasi_id);
                 }
-            })
-            ->orderByDesc('created_at')
-            ->get();
+            })->latest();
+
+        $data = $query->get();
+        $this->rowCount = $data->count();
+        return $data;
     }
 
     public function headings(): array
     {
         return [
-            'Tanggal',
-            'No. Faktur',
-            'Dealer/Lokasi',
-            'Konsumen',
-            'Sales',
+            'Tanggal Transaksi',
+            'No Faktur',
+            'Lokasi/Dealer',
+            'Nama Konsumen',
+            'Nama Sales',
             'Kode Barang',
             'Nama Barang',
-            'Qty',
-            'Harga Jual Satuan',
-            'Total Penjualan',
-            'HPP Satuan',
-            'Total HPP',
-            'Profit',
+            'Qty Terjual',
+            'Harga Satuan',
+            'Total Subtotal',
         ];
     }
 
     public function map($detail): array
     {
-        // Gunakan selling_out sesuai perbaikan logika sebelumnya
-        $hpp = $detail->barang->selling_out ?? 0;
-        $totalHppItem = $detail->qty_jual * $hpp;
-        $profitItem = $detail->subtotal - $totalHppItem;
-
-        // Akumulasi untuk Grand Total
         $this->totalQty += $detail->qty_jual;
         $this->totalPenjualan += $detail->subtotal;
-        $this->totalHpp += $totalHppItem;
-        $this->totalProfit += $profitItem;
-        $this->rowCount++; // Tambah counter baris
 
         return [
             $detail->penjualan->tanggal_jual->format('d-m-Y'),
@@ -94,93 +95,44 @@ class SalesSummaryExport implements FromCollection, WithHeadings, WithMapping, S
             $detail->qty_jual,
             $detail->harga_jual,
             $detail->subtotal,
-            $hpp,
-            $totalHppItem,
-            $profitItem,
         ];
     }
 
-    // Styling dasar untuk Header
     public function styles(Worksheet $sheet)
     {
         return [
             1 => [
                 'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFF']],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['argb' => '4B5563'], // Warna Abu-abu Gelap
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER,
-                ],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => '059669']], // Hijau
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
             ],
         ];
     }
 
-    // Format Angka (Ribuan)
-    public function columnFormats(): array
-    {
-        return [
-            'H' => '#,##0', // Qty
-            'I' => '#,##0', // Harga Jual
-            'J' => '#,##0', // Total Jual
-            'K' => '#,##0', // HPP
-            'L' => '#,##0', // Total HPP
-            'M' => '#,##0', // Profit
-        ];
-    }
-
-    // Event untuk menambahkan baris Grand Total & Border di akhir
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                
-                // Menentukan posisi baris terakhir data dan baris total
-                $lastDataRow = $this->rowCount + 1; // +1 karena ada header
-                $totalRow = $lastDataRow + 1;
+                $lastRow = $this->rowCount + 1;
+                $totalRow = $lastRow + 1;
 
-                // === 1. Menambahkan Baris Grand Total ===
-                $sheet->setCellValue('A' . $totalRow, 'GRAND TOTAL');
-                $sheet->mergeCells('A' . $totalRow . ':G' . $totalRow); // Merge kolom A sampai G
-                
-                // Isi Nilai Total
+                $sheet->getStyle('I2:J' . $totalRow)->getNumberFormat()->setFormatCode('_("Rp"* #,##0_);_("Rp"* (#,##0);_("Rp"* "-"_);_(@_)');
+
+                // Grand Total
+                $sheet->setCellValue('A' . $totalRow, 'GRAND TOTAL PENJUALAN');
+                $sheet->mergeCells('A' . $totalRow . ':G' . $totalRow);
                 $sheet->setCellValue('H' . $totalRow, $this->totalQty);
                 $sheet->setCellValue('J' . $totalRow, $this->totalPenjualan);
-                $sheet->setCellValue('L' . $totalRow, $this->totalHpp);
-                $sheet->setCellValue('M' . $totalRow, $this->totalProfit);
 
-                // Styling Baris Grand Total (Bold & Background Abu muda)
-                $sheet->getStyle('A' . $totalRow . ':M' . $totalRow)->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 11],
-                    'fill' => [
-                        'fillType' => Fill::FILL_SOLID,
-                        'startColor' => ['argb' => 'E5E7EB'], 
-                    ],
-                    'alignment' => [
-                        'vertical' => Alignment::VERTICAL_CENTER,
-                    ],
+                $sheet->getStyle('A' . $totalRow . ':J' . $totalRow)->applyFromArray([
+                    'font' => ['bold' => true],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'E5E7EB']],
                 ]);
-                
-                // Align Text "GRAND TOTAL" ke Kanan
                 $sheet->getStyle('A' . $totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-
-                // Format Angka di Baris Total
-                $sheet->getStyle('H' . $totalRow . ':M' . $totalRow)->getNumberFormat()->setFormatCode('#,##0');
-
-                // === 2. Menambahkan Border ke Seluruh Tabel ===
-                $styleBorder = [
-                    'borders' => [
-                        'allBorders' => [
-                            'borderStyle' => Border::BORDER_THIN,
-                            'color' => ['argb' => '000000'],
-                        ],
-                    ],
-                ];
-                // Terapkan border dari A1 sampai M baris terakhir (Total)
-                $sheet->getStyle('A1:M' . $totalRow)->applyFromArray($styleBorder);
+                $sheet->getStyle('A1:J' . $totalRow)->applyFromArray([
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => '000000']]],
+                ]);
             },
         ];
     }

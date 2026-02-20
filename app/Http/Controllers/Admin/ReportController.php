@@ -167,14 +167,16 @@ class ReportController extends Controller
         $this->authorize('view-stock-location-report');
         $request->validate(['lokasi_id' => 'required|exists:lokasi,id']);
         
-        // Security Check
         $user = Auth::user();
         if (($user->isGudang() || $user->isDealer()) && $request->lokasi_id != $user->lokasi_id) abort(403);
 
         $lokasi = Lokasi::find($request->lokasi_id);
         $fileName = 'Laporan Stok - ' . $lokasi->kode_lokasi . ' - ' . now()->format('d-m-Y') . '.xlsx';
 
-        return Excel::download(new StockByWarehouseExport($request->lokasi_id), $fileName);
+        $canSeeSellingIn = $user->can('view-price-selling-in');
+        $canSeeSellingOut = $user->can('view-price-selling-out');
+
+        return Excel::download(new StockByWarehouseExport($request->lokasi_id, $canSeeSellingIn, $canSeeSellingOut), $fileName);
     }
 
     // =================================================================
@@ -205,7 +207,12 @@ class ReportController extends Controller
     {
         $this->authorize('view-stock-total-report');
         $fileName = 'Laporan Stok Total (Semua Lokasi) - ' . now()->format('d-m-Y') . '.xlsx';
-        return Excel::download(new StockReportExport(), $fileName);
+        
+        $user = Auth::user();
+        $canSeeSellingIn = $user->can('view-price-selling-in');
+        $canSeeSellingOut = $user->can('view-price-selling-out');
+
+        return Excel::download(new StockReportExport($canSeeSellingIn, $canSeeSellingOut), $fileName);
     }
 
     // =================================================================
@@ -310,36 +317,43 @@ class ReportController extends Controller
             ->with(['barang', 'lokasi', 'rak'])
             ->groupBy('barang_id', 'lokasi_id', 'rak_id');
 
-        if ($user->isGlobal()) {
-        } elseif ($user->isPusat()) {
+        if ($user->isPusat()) {
             $inventoryQuery->whereHas('lokasi', fn($q) => $q->where('tipe', 'DEALER'));
-        } elseif ($user->isGudang()) {
-            $inventoryQuery->where('lokasi_id', $user->lokasi_id);
-        } elseif ($user->isDealer()) {
+        } elseif ($user->isGudang() || $user->isDealer()) {
             $inventoryQuery->where('lokasi_id', $user->lokasi_id);
         }
 
         $inventoryDetails = $inventoryQuery->get();
-        $totalValue = $inventoryDetails->sum(function($item) use ($user) {
+        
+        // Cek Gate Permission
+        $canSeeSellingIn = $user->can('view-price-selling-in');
+        
+        $totalValue = $inventoryDetails->sum(function($item) use ($canSeeSellingIn) {
             if ($item->barang) {
-                if ($user->isGlobal() || $user->isGudang()) {
+                // Jika boleh lihat Selling In (Gudang/SA), pakai Selling In.
+                // Jika tidak (Pusat/Dealer), pakai Selling Out.
+                if ($canSeeSellingIn) {
                     return $item->quantity * $item->barang->selling_in;
-                }
-                else {
+                } else {
                     return $item->quantity * $item->barang->selling_out;
                 }
             }
             return 0;
         });
 
-        return view('admin.reports.inventory_value', compact('inventoryDetails', 'totalValue'));
+        // Kirim $canSeeSellingIn ke view agar view juga menyesuaikan nama kolom
+        return view('admin.reports.inventory_value', compact('inventoryDetails', 'totalValue', 'canSeeSellingIn'));
     }
 
     public function exportInventoryValue()
     {
         $this->authorize('view-inventory-value-report');
         $fileName = 'Laporan Nilai Persediaan - ' . now()->format('d-m-Y') . '.xlsx';
-        return Excel::download(new InventoryValueExport(), $fileName);
+        
+        // Cek Gate dan kirim boolean ke Export class
+        $canSeeSellingIn = Auth::user()->can('view-price-selling-in');
+        
+        return Excel::download(new InventoryValueExport($canSeeSellingIn), $fileName);
     }
 
     // =================================================================

@@ -388,7 +388,8 @@ class HomeController extends Controller
 
         // 1. Widget Counters
         $pendingApprovalPO = PurchaseOrder::where('status', 'PENDING_APPROVAL')
-            ->where('created_by', $user->id) // PO yang dia request sendiri
+            ->where('po_type', 'dealer_request')
+            ->where('sumber_lokasi_id', $lokasiId) // Yang sumber pengirimannya adalah Gudang ini
             ->count();
 
         // PO yang masuk ke lokasi dia dan sudah approve (siap di-receive)
@@ -469,89 +470,105 @@ class HomeController extends Controller
     // --- LAINNYA ---
     private function getServiceMdData($user)
     {
-        $myRequests = PurchaseOrder::where('created_by', $user->id)->where('po_type', 'dealer_request')->latest()->take(5)->get();
+        $myRequests = PurchaseOrder::where('created_by', $user->id)
+            ->where('po_type', 'dealer_request')
+            ->latest()
+            ->take(5)
+            ->get();
+            
         $stockData = DB::table('inventory_batches')
             ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
             ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id')
-            ->where('lokasi.tipe', '!=', 'PUSAT')
+            // [PERBAIKAN] Ganti '!=', 'PUSAT' menjadi '=', 'DEALER'
+            ->where('lokasi.tipe', '=', 'DEALER') 
             ->select('lokasi.nama_lokasi', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_qty'))
             ->groupBy('lokasi.id', 'lokasi.nama_lokasi', 'barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
             ->orderByRaw('(SUM(inventory_batches.quantity) < barangs.stok_minimum) DESC')
-            ->orderBy('lokasi.nama_lokasi')->limit(20)->get();
-        $totalStokCount = DB::table('inventory_batches')->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id')->where('lokasi.tipe', '!=', 'PUSAT')->sum('quantity');
+            ->orderBy('lokasi.nama_lokasi')
+            ->limit(20)
+            ->get();
+            
+        $totalStokCount = DB::table('inventory_batches')
+            ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id')
+            // [PERBAIKAN] Ganti juga di perhitungan total ini
+            ->where('lokasi.tipe', '=', 'DEALER') 
+            ->sum('quantity');
 
-        return ['targetAmount' => 0, 'achievedAmount' => 0, 'achievementPercentage' => 0, 'jumlahInsentif' => 0, 'recentSales' => collect([]), 'myRequests' => $myRequests, 'totalStokCount' => $totalStokCount, 'stockData' => $stockData, 'isSMD' => true];
+        return [
+            'targetAmount' => 0, 
+            'achievedAmount' => 0, 
+            'achievementPercentage' => 0, 
+            'jumlahInsentif' => 0, 
+            'recentSales' => collect([]), 
+            'myRequests' => $myRequests, 
+            'totalStokCount' => $totalStokCount, 
+            'stockData' => $stockData, 
+            'isSMD' => true
+        ];
     }
 
     private function getAsdData($user)
     {
-        $lokasiId = $user->lokasi_id;
-        
-        // 1. DATA PENDING APPROVAL MUTASI (Tetap)
-        $pendingMutations = StockMutation::with(['lokasiAsal', 'lokasiTujuan'])
-            ->where('status', 'PENDING_APPROVAL')
-            ->latest()
-            ->limit(10)
-            ->get();
+        // 1. KASIR WIDGET DATA (Global Area / Seluruh Cabang untuk ASD)
+        $serviceToday = DB::table('services')->whereDate('created_at', today())->count();
+        $serviceWeek = DB::table('services')->whereBetween('created_at', [now()->subDays(7), now()])->count();
+        $salesToday = DB::table('penjualans')->whereDate('tanggal_jual', today())->count();
+        $salesWeek = DB::table('penjualans')->whereBetween('tanggal_jual', [now()->subDays(7), now()])->count();
 
-        $countPendingMutations = StockMutation::where('status', 'PENDING_APPROVAL')->count();
+        // 2. ITEM TERJUAL BULAN INI (Part & Oli dari Service + Penjualan Langsung)
+        $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code')->toArray();
+        $validBarangIds = \App\Models\Barang::whereIn('part_code', $validPartCodes)->pluck('id');
 
-        // 2. MASTER DATA OVERVIEW (Tetap)
-        $totalItems = Barang::count();
-        $totalConvertItems = 0;
-        try {
-             $totalConvertItems = DB::table('converts_main')->count(); 
-        } catch (\Exception $e) {}
+        $itemsFromSales = DB::table('penjualan_details')
+            ->join('penjualans', 'penjualan_details.penjualan_id', '=', 'penjualans.id')
+            ->whereMonth('penjualans.tanggal_jual', now()->month)
+            ->sum('penjualan_details.qty_jual');
 
-        // 3. TRANSAKSI HARI INI (Tetap)
-        $servicesToday = DB::table('services')
-            ->where('lokasi_id', $lokasiId)
-            ->whereDate('created_at', today())
-            ->count();
-            
-        $salesToday = Penjualan::where('lokasi_id', $lokasiId)
-            ->whereDate('tanggal_jual', today())
-            ->count();
+        $netServiceMovement = DB::table('stock_movements')
+            ->where('referensi_type', 'like', '%Service%')
+            ->whereIn('barang_id', $validBarangIds)
+            ->whereMonth('created_at', now()->month)
+            ->sum('jumlah');
 
-        // 4. [UBAH DISINI] MONITORING STOK JARINGAN DEALER (Sama seperti Service MD)
-        // Mengambil data stok dari seluruh lokasi tipe DEALER (bukan PUSAT)
+        $totalItemsSoldMonth = $itemsFromSales + abs($netServiceMovement);
+
+        // 3. MONITORING STOK JARINGAN DEALER (Sama seperti perbaikan kita sebelumnya)
         $stockData = DB::table('inventory_batches')
             ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
             ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id') 
-            ->where('lokasi.tipe', '!=', 'PUSAT') // Filter hanya Dealer
-            ->select(
-                'lokasi.nama_lokasi', 
-                'barangs.part_name',
-                'barangs.part_code',
-                'barangs.stok_minimum',
-                DB::raw('SUM(inventory_batches.quantity) as total_qty')
-            )
-            ->groupBy(
-                'lokasi.id', 'lokasi.nama_lokasi', 
-                'barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum'
-            )
-            // Urutkan: Yang KRITIS (kurang dari min) paling atas, lalu nama dealer
+            ->where('lokasi.tipe', '=', 'DEALER') // Hanya Dealer
+            ->select('lokasi.nama_lokasi', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_qty'))
+            ->groupBy('lokasi.id', 'lokasi.nama_lokasi', 'barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
             ->orderByRaw('(SUM(inventory_batches.quantity) < barangs.stok_minimum) DESC')
             ->orderBy('lokasi.nama_lokasi')
-            ->limit(20) // Batasi 20 record
+            ->limit(20)
             ->get();
 
-        // 5. RECENT SERVICE ACTIVITY (Tetap)
-        $recentServices = DB::table('services')
-            ->where('lokasi_id', $lokasiId)
-            ->orderByDesc('created_at')
-            ->limit(5)
-            ->get();
+        // 4. CHART DATA: TREN 30 HARI TERAKHIR (Service vs Penjualan)
+        $dailySales = DB::table('penjualans')
+            ->where('tanggal_jual', '>=', now()->subDays(30))
+            ->select(DB::raw('DATE(tanggal_jual) as date'), DB::raw('COUNT(*) as total'))
+            ->groupBy('date')->pluck('total', 'date')->toArray();
+
+        $dailyService = DB::table('services')
+            ->where('created_at', '>=', now()->subDays(30))
+            ->select(DB::raw('DATE(created_at) as date'), DB::raw('COUNT(*) as total'))
+            ->groupBy('date')->pluck('total', 'date')->toArray();
+
+        $chartLabels = [];
+        $salesChartData = [];
+        $serviceChartData = [];
+        
+        for ($i = 29; $i >= 0; $i--) {
+            $date = now()->subDays($i)->format('Y-m-d');
+            $chartLabels[] = now()->subDays($i)->format('d M');
+            $salesChartData[] = $dailySales[$date] ?? 0;
+            $serviceChartData[] = $dailyService[$date] ?? 0;
+        }
 
         return compact(
-            'pendingMutations', 
-            'countPendingMutations', 
-            'totalItems', 
-            'totalConvertItems',
-            'servicesToday',
-            'salesToday',
-            'stockData', // Variable baru pengganti lowStockItems
-            'recentServices'
+            'serviceToday', 'serviceWeek', 'salesToday', 'salesWeek', 'totalItemsSoldMonth',
+            'stockData', 'chartLabels', 'salesChartData', 'serviceChartData'
         );
     }
 

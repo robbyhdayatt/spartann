@@ -7,23 +7,26 @@ use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
+use PhpOffice\PhpSpreadsheet\Cell\Cell;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 
-class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSize, WithStyles, WithColumnFormatting, WithEvents
+class ServiceSummaryExport extends DefaultValueBinder implements 
+    FromCollection, WithHeadings, ShouldAutoSize, WithStyles, 
+    WithEvents, WithCustomValueBinder
 {
     protected $startDate;
     protected $endDate;
     protected $invoiceNo;
     protected $lokasiId;
 
-    // Variabel untuk menampung total
     protected $grandQty = 0;
     protected $grandJual = 0;
     protected $grandModal = 0;
@@ -38,33 +41,42 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
         $this->lokasiId = $lokasiId;
     }
 
+    public function bindValue(Cell $cell, $value)
+    {
+        // Paksa Kolom A (Kode Part) menjadi String
+        if ($cell->getColumn() === 'A') {
+            $cell->setValueExplicit($value, DataType::TYPE_STRING);
+            return true;
+        }
+        return parent::bindValue($cell, $value);
+    }
+
     public function collection()
     {
-        // 1. Ambil daftar kode part yang valid (sama seperti di Controller)
-        $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code');
+        $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code')->toArray();
 
-        // 2. Query Utama (Copy logic dari ReportController::serviceSummary)
-        $query = DB::table('service_details')
-            ->join('services', 'service_details.service_id', '=', 'services.id')
-            ->join('barangs', 'service_details.barang_id', '=', 'barangs.id')
-            ->whereIn('service_details.item_code', $validPartCodes)
+        $query = DB::table('stock_movements')
+            ->join('barangs', 'stock_movements.barang_id', '=', 'barangs.id')
+            ->join('services', 'stock_movements.referensi_id', '=', 'services.id')
+            ->where('stock_movements.referensi_type', 'like', '%Service%')
+            ->whereIn('barangs.part_code', $validPartCodes)
             ->select(
-                'service_details.item_code',
+                'barangs.part_code as item_code',
                 'barangs.part_name as item_name',
-                'service_details.item_category',
-                DB::raw('SUM(service_details.quantity) as total_qty'),
-                
-                // Perhitungan Keuangan
-                DB::raw('SUM(service_details.quantity * COALESCE(barangs.retail, 0)) as total_penjualan'),
-                DB::raw("SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_modal"), // Pakai selling_out
-                DB::raw("SUM(service_details.quantity * COALESCE(barangs.retail, 0)) -
-                         SUM(service_details.quantity * COALESCE(barangs.selling_out, 0)) as total_keuntungan")
+                DB::raw("'Sparepart' as item_category"),
+                DB::raw('ABS(SUM(stock_movements.jumlah)) as total_qty'),
+                // Ambil harga satuan menggunakan MAX (Karena harga konstan per barang)
+                DB::raw('MAX(COALESCE(barangs.retail, 0)) as harga_jual_satuan'),
+                DB::raw('MAX(COALESCE(barangs.selling_out, 0)) as hpp_satuan'),
+                // Hitung total dengan mengalikan SUM qty dengan Harga Satuan
+                DB::raw('ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.retail, 0)) as total_penjualan'),
+                DB::raw('ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.selling_out, 0)) as total_modal'),
+                DB::raw('(ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.retail, 0))) - 
+                         (ABS(SUM(stock_movements.jumlah)) * MAX(COALESCE(barangs.selling_out, 0))) as total_keuntungan')
             )
             ->whereBetween('services.reg_date', [$this->startDate, $this->endDate])
-            ->groupBy('service_details.item_code', 'barangs.part_name', 'service_details.item_category')
-            ->orderBy('total_qty', 'desc');
+            ->groupBy('barangs.id', 'barangs.part_code', 'barangs.part_name');
 
-        // 3. Terapkan Filter Lokasi & Invoice
         if ($this->lokasiId) {
             $query->where('services.lokasi_id', $this->lokasiId);
         }
@@ -73,16 +85,31 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
             $query->where('services.invoice_no', 'like', '%' . $this->invoiceNo . '%');
         }
 
+        $query->having('total_qty', '>', 0);
+        $query->orderBy('total_qty', 'desc');
+
         $data = $query->get();
 
-        // 4. Hitung Grand Total saat fetching data
         $this->grandQty = $data->sum('total_qty');
         $this->grandJual = $data->sum('total_penjualan');
         $this->grandModal = $data->sum('total_modal');
         $this->grandProfit = $data->sum('total_keuntungan');
         $this->rowCount = $data->count();
 
-        return $data;
+        // Karena kita menggunakan stdClass dari DB::table, format array agar sesuai urutan header
+        return $data->map(function ($item) {
+            return [
+                $item->item_code,
+                $item->item_name,
+                $item->item_category,
+                $item->total_qty,
+                $item->harga_jual_satuan,
+                $item->total_penjualan,
+                $item->hpp_satuan,
+                $item->total_modal,
+                $item->total_keuntungan,
+            ];
+        });
     }
 
     public function headings(): array
@@ -92,21 +119,22 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
             'Nama Barang',
             'Kategori',
             'Total Qty',
+            'Harga Jual Satuan (Retail)',
             'Total Penjualan',
-            'Total Modal (HPP)',
+            'HPP Satuan (Selling Out)',
+            'Total HPP',
             'Total Keuntungan',
         ];
     }
 
     public function styles(Worksheet $sheet)
     {
-        // Styling Header (Baris 1)
         return [
             1 => [
                 'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFF']],
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['argb' => '4B5563'], // Abu-abu gelap
+                    'startColor' => ['argb' => 'DC2626'], // Merah gelap untuk Service
                 ],
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -116,62 +144,37 @@ class ServiceSummaryExport implements FromCollection, WithHeadings, ShouldAutoSi
         ];
     }
 
-    public function columnFormats(): array
-    {
-        return [
-            'D' => '#,##0', // Qty
-            'E' => '#,##0', // Jual
-            'F' => '#,##0', // Modal
-            'G' => '#,##0', // Untung
-        ];
-    }
-
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                
-                // Menentukan baris Grand Total
-                $lastRow = $this->rowCount + 1; // Header
+                $lastRow = $this->rowCount + 1;
                 $totalRow = $lastRow + 1;
 
-                // Tulis "GRAND TOTAL"
+                // Format Rupiah untuk Kolom Harga dan Total (E, F, G, H, I)
+                $sheet->getStyle('E2:I' . $totalRow)->getNumberFormat()->setFormatCode('_("Rp"* #,##0_);_("Rp"* (#,##0);_("Rp"* "-"_);_(@_)');
+                $sheet->getStyle('D2:D' . $totalRow)->getNumberFormat()->setFormatCode('#,##0');
+
+                // Baris Grand Total
                 $sheet->setCellValue('A' . $totalRow, 'GRAND TOTAL');
-                $sheet->mergeCells('A' . $totalRow . ':C' . $totalRow); // Merge A-C
+                $sheet->mergeCells('A' . $totalRow . ':C' . $totalRow);
 
-                // Tulis Nilai Total
                 $sheet->setCellValue('D' . $totalRow, $this->grandQty);
-                $sheet->setCellValue('E' . $totalRow, $this->grandJual);
-                $sheet->setCellValue('F' . $totalRow, $this->grandModal);
-                $sheet->setCellValue('G' . $totalRow, $this->grandProfit);
+                $sheet->setCellValue('F' . $totalRow, $this->grandJual);
+                $sheet->setCellValue('H' . $totalRow, $this->grandModal);
+                $sheet->setCellValue('I' . $totalRow, $this->grandProfit);
 
-                // Styling Baris Total
-                $sheet->getStyle('A' . $totalRow . ':G' . $totalRow)->applyFromArray([
+                // Styling Total
+                $sheet->getStyle('A' . $totalRow . ':I' . $totalRow)->applyFromArray([
                     'font' => ['bold' => true, 'size' => 11],
-                    'fill' => [
-                        'fillType' => Fill::FILL_SOLID,
-                        'startColor' => ['argb' => 'E5E7EB'], // Abu-abu muda
-                    ],
-                    'alignment' => [
-                        'vertical' => Alignment::VERTICAL_CENTER,
-                    ],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'F3F4F6']],
                 ]);
-
-                // Alignment text "GRAND TOTAL" ke kanan
                 $sheet->getStyle('A' . $totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
-                // Format angka baris total
-                $sheet->getStyle('D' . $totalRow . ':G' . $totalRow)->getNumberFormat()->setFormatCode('#,##0');
-
-                // Tambahkan Border ke seluruh tabel
-                $sheet->getStyle('A1:G' . $totalRow)->applyFromArray([
-                    'borders' => [
-                        'allBorders' => [
-                            'borderStyle' => Border::BORDER_THIN,
-                            'color' => ['argb' => '000000'],
-                        ],
-                    ],
+                // Border Seluruh
+                $sheet->getStyle('A1:I' . $totalRow)->applyFromArray([
+                    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['argb' => '000000']]],
                 ]);
             },
         ];

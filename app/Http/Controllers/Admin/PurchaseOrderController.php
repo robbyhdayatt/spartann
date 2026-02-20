@@ -270,8 +270,15 @@ class PurchaseOrderController extends Controller
             elseif ($purchaseOrder->po_type === 'dealer_request') {
                 $poLocked = PurchaseOrder::where('id', $purchaseOrder->id)->lockForUpdate()->first();
 
+                // Ambil data inputan dari form approve (berasal dari $request->qty_approved)
+                $qtyInputan = $request->qty_approved ?? [];
+
                 foreach ($poLocked->details as $detail) {
-                    $qtyApprove = $detail->qty_pesan;
+                    // Ambil Qty yang disetujui dari form, jika tidak ada, gunakan qty_pesan (default)
+                    $qtyApprove = isset($qtyInputan[$detail->id]) ? (int)$qtyInputan[$detail->id] : $detail->qty_pesan;
+                    
+                    // Simpan ke database
+                    $detail->update(['qty_disetujui' => $qtyApprove]);
                     
                     if ($qtyApprove > 0) {
                         $batches = InventoryBatch::where('lokasi_id', $poLocked->sumber_lokasi_id)

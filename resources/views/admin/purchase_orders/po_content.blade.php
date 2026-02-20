@@ -73,16 +73,20 @@
                     @if($purchaseOrder->po_type == 'dealer_request')
                         <th class="text-center" style="width: 10%">Qty Minta</th>
                         
-                        {{-- Jika mode edit, tampilkan kolom input --}}
-                        @if($isDealerRequestApproval)
+                        {{-- HANYA MUNCUL JIKA SUDAH DI-APPROVE ATAU SEDANG PROSES APPROVE --}}
+                        @if($purchaseOrder->status != 'PENDING_APPROVAL' || $isDealerRequestApproval)
                             <th class="text-center bg-warning text-dark" style="width: 15%">Qty Disetujui</th>
-                        @else
-                            <th class="text-center" style="width: 10%">Qty Disetujui</th>
                         @endif
 
-                        <th class="text-center bg-white border-left" style="width: 10%">Stok Gudang</th>
-                        <th class="text-center bg-white" style="width: 10%">Prediksi Sisa</th>
-                        <th class="text-center bg-white" style="width: 10%">Status</th>
+                        {{-- KOLOM RAHASIA HANYA UNTUK GUDANG (AG/KG/Pusat) --}}
+                        @if(auth()->user()->isGudang() || auth()->user()->isGlobal())
+                            {{-- HANYA TAMPIL SAAT PENDING (Belum potong stok) --}}
+                            @if($purchaseOrder->status == 'PENDING_APPROVAL')
+                                <th class="text-center bg-white border-left" style="width: 10%">Stok Gudang</th>
+                                <th class="text-center bg-white" style="width: 10%">Prediksi Sisa</th>
+                                <th class="text-center bg-white" style="width: 10%">Status</th>
+                            @endif
+                        @endif
                     @else
                         <th class="text-center">Qty</th>
                     @endif
@@ -96,17 +100,16 @@
                 <tbody>
                 @foreach($purchaseOrder->details as $detail)
                     @php
-                        $stokGudang = $detail->stok_sumber ?? 0; // Fix: use stok_sumber from controller
+                        $stokGudang = $detail->stok_sumber ?? 0;
                         $stokMin = $detail->barang->stok_minimum ?? 0;
                         $qtyReq = $detail->qty_pesan;
                         
-                        // Default sisa berdasarkan request awal
                         $sisaAwal = $stokGudang - $qtyReq;
                         $isSafeAwal = ($sisaAwal >= $stokMin && $stokGudang >= $qtyReq);
                         
                         $rowClass = '';
-                        if($purchaseOrder->po_type == 'dealer_request' && !$isSafeAwal) {
-                            $rowClass = 'table-danger'; // Merah jika awal tidak aman
+                        if($purchaseOrder->po_type == 'dealer_request' && $purchaseOrder->status == 'PENDING_APPROVAL' && !$isSafeAwal) {
+                            $rowClass = 'table-danger';
                         }
                     @endphp
 
@@ -115,37 +118,39 @@
                     <td>{{ $detail->barang->part_code }}</td>
 
                     @if($purchaseOrder->po_type == 'dealer_request')
-                        {{-- Qty Minta (Readonly) --}}
                         <td class="text-center text-muted">{{ $detail->qty_pesan }}</td>
 
-                        {{-- Qty Disetujui (Input / Text) --}}
-                        <td class="text-center font-weight-bold">
-                            @if($isDealerRequestApproval)
-                                <input type="number" 
-                                       name="qty_approved[{{ $detail->id }}]" 
-                                       class="form-control text-center font-weight-bold qty-approve-input" 
-                                       value="{{ $detail->qty_pesan }}" 
-                                       min="0" 
-                                       max="{{ $detail->qty_pesan }}"
-                                       style="font-size: 1.1em;">
-                            @else
-                                {{ $detail->qty_pesan }}
-                            @endif
-                        </td>
+                        @if($purchaseOrder->status != 'PENDING_APPROVAL' || $isDealerRequestApproval)
+                            <td class="text-center font-weight-bold">
+                                @if($isDealerRequestApproval)
+                                    {{-- FORM INPUT UNTUK GUDANG --}}
+                                    <input type="number" 
+                                           name="qty_approved[{{ $detail->id }}]" 
+                                           class="form-control text-center font-weight-bold qty-approve-input" 
+                                           value="{{ $detail->qty_pesan }}" 
+                                           min="0" 
+                                           max="{{ $detail->qty_pesan }}"
+                                           style="font-size: 1.1em;">
+                                @else
+                                    {{-- TAMPILAN TEXT JIKA SUDAH APPROVED --}}
+                                    {{ $detail->qty_disetujui ?? $detail->qty_pesan }}
+                                @endif
+                            </td>
+                        @endif
 
-                        <td class="text-center border-left font-weight-bold">{{ $stokGudang }}</td>
-                        
-                        <td class="text-center font-weight-bold sisa-prediksi">
-                            {{ $sisaAwal }}
-                        </td>
-                        
-                        <td class="text-center status-col">
-                            @if($isSafeAwal)
-                                <span class="badge badge-success">AMAN</span>
-                            @else
-                                <span class="badge badge-danger">KURANG</span>
+                        @if(auth()->user()->isGudang() || auth()->user()->isGlobal())
+                            @if($purchaseOrder->status == 'PENDING_APPROVAL')
+                                <td class="text-center border-left font-weight-bold">{{ $stokGudang }}</td>
+                                <td class="text-center font-weight-bold sisa-prediksi">{{ $sisaAwal }}</td>
+                                <td class="text-center status-col">
+                                    @if($isSafeAwal)
+                                        <span class="badge badge-success">AMAN</span>
+                                    @else
+                                        <span class="badge badge-danger">KURANG</span>
+                                    @endif
+                                </td>
                             @endif
-                        </td>
+                        @endif
                     @else
                         <td class="text-center">{{ $detail->qty_pesan }}</td>
                     @endif

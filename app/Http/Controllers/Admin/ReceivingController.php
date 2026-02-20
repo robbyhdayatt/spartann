@@ -165,7 +165,15 @@ class ReceivingController extends Controller
         }
 
         $receiving->load(['purchaseOrder.supplier', 'details.barang', 'createdBy', 'receivedBy', 'lokasi']);
-        return view('admin.receivings.show', compact('receiving'));
+
+        // [MODIFIKASI] Ambil data pergerakan stok yang terjadi akibat penerimaan (Putaway) ini
+        $stockMovements = \App\Models\StockMovement::with(['barang', 'rak'])
+                            ->where('referensi_type', \App\Models\Receiving::class)
+                            ->where('referensi_id', $receiving->id)
+                            ->get();
+
+        // Tambahkan $stockMovements ke dalam compact
+        return view('admin.receivings.show', compact('receiving', 'stockMovements'));
     }
 
     // Helper Generate Number

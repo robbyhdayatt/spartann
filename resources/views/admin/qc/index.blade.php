@@ -61,7 +61,7 @@
 
                     <td class="align-middle">{{ $receiving->tanggal_terima->format('d/m/Y') }}</td>
                     <td class="align-middle text-center">
-                        <a href="{{ route('admin.qc.form', $receiving->id) }}" class="btn btn-warning btn-sm shadow-sm">
+                        <a href="{{ route('admin.qc.show', $receiving->id) }}" class="btn btn-warning btn-sm shadow-sm">
                             <i class="fas fa-tasks mr-1"></i> Proses QC
                         </a>
                     </td>

@@ -101,15 +101,33 @@ class AuthServiceProvider extends ServiceProvider
         // Menu PO (View List)
         Gate::define('view-po', function (User $user) {
             return $user->isGlobal() || 
-                   $user->hasRole(['AG', 'IMS', 'KG', 'ASD', 'ACC']) ||
-                   ($user->isDealer() && $user->hasRole(['PC', 'KC']));
+                   $user->hasRole(['AG', 'IMS', 'KG', 'ASD', 'ACC']) 
+                //    ||($user->isDealer() && $user->hasRole(['PC', 'KC']))
+                   ;
         });
-        // Create PO
+
+        // Create PO Khusus
         Gate::define('create-po-supplier', fn(User $user) => $user->hasRole('AG'));
         Gate::define('create-po-dealer', fn(User $user) => $user->hasRole('IMS'));
-        // Approve PO
-        Gate::define('approve-po-dealer', fn(User $user) => $user->hasRole('AG'));
-        Gate::define('approve-po-supplier', fn(User $user) => $user->hasRole('KG'));
+        
+        // [MODIFIKASI] GATE APPROVAL PO (Yang sebelumnya hilang)
+        Gate::define('approve-po', function (User $user, \App\Models\PurchaseOrder $po) {
+            // Super Admin / PIC boleh approve semuanya
+            if ($user->isGlobal()) return true;
+
+            // Jika ini PO ke Supplier (Dibuat oleh AG) -> Yang Approve Kepala Gudang (KG)
+            if ($po->po_type === 'supplier_po') {
+                return $user->hasRole('KG') && $user->isGudang() && $user->lokasi_id == $po->lokasi_id;
+            }
+
+            // Jika ini Request dari Dealer (Dibuat oleh IMS/PC) -> Yang Approve Pusat / AG (Tergantung SOP Anda)
+            // Sesuai dokumen: Gudang mendistribusikan ke dealer. Maka AG Gudang yang mengeksekusi/menyetujui pengiriman.
+            if ($po->po_type === 'dealer_request') {
+                return $user->hasRole('AG') && $user->isGudang() && $user->lokasi_id == $po->sumber_lokasi_id;
+            }
+
+            return false;
+        });
 
         // Retur Pembelian
         Gate::define('view-retur-pembelian', fn(User $user) => $user->isGlobal() || $user->hasRole(['AG', 'KG']));

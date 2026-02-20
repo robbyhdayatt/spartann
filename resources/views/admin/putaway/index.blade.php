@@ -57,7 +57,7 @@
                         <span class="badge badge-success">{{ $receiving->qc_at ? $receiving->qc_at->format('d/m H:i') : '-' }}</span>
                     </td>
                     <td class="align-middle text-center">
-                        <a href="{{ route('admin.putaway.form', $receiving->id) }}" class="btn btn-info btn-sm shadow-sm">
+                        <a href="{{ route('admin.putaway.show', $receiving->id) }}" class="btn btn-info btn-sm shadow-sm">
                             <i class="fas fa-dolly-flatbed mr-1"></i> Atur Rak
                         </a>
                     </td>

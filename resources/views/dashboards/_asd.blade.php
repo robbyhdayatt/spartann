@@ -1,212 +1,164 @@
 <div class="row mb-3">
     <div class="col-12">
-        <h4 class="text-dark"><i class="fas fa-cogs mr-2"></i> Dashboard Area Service Development (ASD)</h4>
-        <p class="text-muted">Halo, <strong>{{ Auth::user()->nama }}</strong>! Kelola stok, persetujuan mutasi, dan master data di sini.</p>
+        <h4 class="text-dark"><i class="fas fa-chart-line mr-2 text-primary"></i> Dashboard Area Service Development (ASD)</h4>
+        <p class="text-muted">Pantauan Performa Service & Penjualan Jaringan Dealer</p>
     </div>
 </div>
 
-{{-- ROW 1: SHORTCUTS & MASTER DATA --}}
+{{-- WIDGETS KASIR STYLE --}}
 <div class="row">
-    {{-- Total Barang --}}
-    <div class="col-12 col-sm-6 col-md-3">
-        <div class="info-box shadow-sm">
-            <span class="info-box-icon bg-info elevation-1"><i class="fas fa-box-open"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Total Master Barang</span>
-                <span class="info-box-number">{{ number_format($data['totalItems']) }} SKU</span>
-                <a href="#" class="small text-muted stretched-link">Lihat / Edit Barang <i class="fas fa-arrow-right ml-1"></i></a>
-            </div>
-        </div>
-    </div>
-
-    {{-- Total Convert --}}
-    <div class="col-12 col-sm-6 col-md-3">
-        <div class="info-box shadow-sm">
-            <span class="info-box-icon bg-purple elevation-1"><i class="fas fa-sync-alt"></i></span>
-            <div class="info-box-content">
-                <span class="info-box-text">Item Convert</span>
-                <span class="info-box-number">{{ number_format($data['totalConvertItems']) }} Paket</span>
-                <a href="#" class="small text-muted stretched-link">Kelola Convert <i class="fas fa-arrow-right ml-1"></i></a>
-            </div>
-        </div>
-    </div>
-
-</div>
-
-{{-- ROW 2: MONITORING TRANSAKSI & ALERT --}}
-<div class="row">
-    {{-- Service Hari Ini --}}
-    <div class="col-lg-4 col-6">
-        <div class="small-box bg-teal">
-            <div class="inner">
-                <h3>{{ $data['servicesToday'] }}</h3>
-                <p>Service Hari Ini</p>
-            </div>
-            <div class="icon"><i class="fas fa-tools"></i></div>
-        </div>
-    </div>
-
-    {{-- Penjualan Hari Ini --}}
-    <div class="col-lg-4 col-6">
-        <div class="small-box bg-success">
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-info shadow-sm">
             <div class="inner">
                 <h3>{{ $data['salesToday'] }}</h3>
                 <p>Penjualan Part Hari Ini</p>
             </div>
             <div class="icon"><i class="fas fa-shopping-cart"></i></div>
+            <a href="{{ route('admin.penjualans.index') }}" class="small-box-footer">Lihat Transaksi <i class="fas fa-arrow-circle-right"></i></a>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-success shadow-sm">
+            <div class="inner">
+                <h3>{{ $data['serviceToday'] }}</h3>
+                <p>Unit Service Hari Ini</p>
+            </div>
+            <div class="icon"><i class="fas fa-wrench"></i></div>
+            <a href="{{ route('admin.services.index') }}" class="small-box-footer">Lihat Service <i class="fas fa-arrow-circle-right"></i></a>
         </div>
     </div>
 
-    {{-- Pending Approval Mutasi --}}
-    <div class="col-lg-4 col-12">
-        <div class="small-box {{ $data['countPendingMutations'] > 0 ? 'bg-danger' : 'bg-secondary' }}">
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-primary shadow-sm">
             <div class="inner">
-                <h3>{{ $data['countPendingMutations'] }}</h3>
-                <p>Mutasi Menunggu Approval</p>
+                <h3>{{ $data['salesWeek'] }}</h3>
+                <p>Penjualan Part (7 Hari Terakhir)</p>
             </div>
-            <div class="icon"><i class="fas fa-exchange-alt"></i></div>
+            <div class="icon"><i class="fas fa-chart-bar"></i></div>
+            <a href="{{ route('admin.penjualans.index') }}" class="small-box-footer">Lihat Transaksi <i class="fas fa-arrow-circle-right"></i></a>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-6">
+        <div class="small-box bg-teal shadow-sm">
+            <div class="inner">
+                <h3>{{ $data['serviceWeek'] }}</h3>
+                <p>Unit Service (7 Hari Terakhir)</p>
+            </div>
+            <div class="icon"><i class="fas fa-cogs"></i></div>
+            <a href="{{ route('admin.services.index') }}" class="small-box-footer">Lihat Service <i class="fas fa-arrow-circle-right"></i></a>
         </div>
     </div>
 </div>
 
-{{-- ROW 3: TABEL APPROVAL & WARNING --}}
 <div class="row">
-    {{-- KOLOM KIRI: DAFTAR MUTASI PENDING --}}
-    <div class="col-lg-8">
-        <div class="card card-outline card-danger">
-            <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-exclamation-circle mr-1"></i> Perlu Persetujuan (Mutasi Stok)
-                </h3>
+    {{-- GRAFIK TREN SERVICE & PENJUALAN (30 HARI) --}}
+    <div class="col-md-7">
+        <div class="card card-outline card-primary shadow-sm">
+            <div class="card-header border-0">
+                <h3 class="card-title"><i class="fas fa-chart-area mr-1"></i> Tren Transaksi (30 Hari Terakhir)</h3>
             </div>
-            <div class="card-body p-0 table-responsive">
-                <table class="table table-striped table-sm">
-                    <thead>
-                        <tr>
-                            <th>No. Ref</th>
-                            <th>Tanggal</th>
-                            <th>Dari</th>
-                            <th>Ke</th>
-                            <th class="text-center">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{-- Gunakan pengecekan data agar tidak error --}}
-                        @if(isset($data['pendingMutations']) && count($data['pendingMutations']) > 0)
-                            @foreach($data['pendingMutations'] as $mutasi)
-                                <tr>
-                                    <td>{{ $mutasi->nomor_mutasi ?? $mutasi->id }}</td>
-                                    <td>{{ $mutasi->created_at->format('d/m/Y') }}</td>
-                                    <td>{{ $mutasi->lokasiAsal->nama_lokasi ?? '-' }}</td>
-                                    <td>{{ $mutasi->lokasiTujuan->nama_lokasi ?? '-' }}</td>
-                                    <td class="text-center">
-                                        {{-- Link ke Show Mutasi --}}
-                                        @if(Route::has('admin.stock-mutations.show'))
-                                            <a href="{{ route('admin.stock-mutations.show', $mutasi->id) }}" class="btn btn-xs btn-primary">
-                                                <i class="fas fa-search"></i> Review
-                                            </a>
-                                        @else
-                                            <span class="badge badge-warning">Route Error</span>
-                                        @endif
-                                    </td>
-                                </tr>
-                            @endforeach
-                        @else
-                            <tr>
-                                <td colspan="5" class="text-center text-muted py-3">Tidak ada mutasi yang menunggu persetujuan.</td>
-                            </tr>
-                        @endif
-                    </tbody>
-                </table>
+            <div class="card-body">
+                <div class="position-relative mb-4">
+                    <canvas id="asdTrendChart" height="300"></canvas>
+                </div>
             </div>
         </div>
+    </div>
 
-        {{-- Tabel Service Terakhir --}}
-        <div class="card card-outline card-teal mt-3">
-            <div class="card-header">
-                <h3 class="card-title">5 Service Terakhir</h3>
+    {{-- STOK JARINGAN DEALER --}}
+    <div class="col-md-5">
+        <div class="card card-outline card-danger shadow-sm">
+            <div class="card-header border-0">
+                <h3 class="card-title"><i class="fas fa-exclamation-triangle mr-1"></i> Monitoring Stok Dealer</h3>
             </div>
-            <div class="card-body p-0">
-                <table class="table table-sm">
+            <div class="card-body table-responsive p-0" style="max-height: 340px;">
+                <table class="table table-sm table-striped table-head-fixed text-nowrap">
                     <thead>
                         <tr>
-                            <th>Invoice</th>
-                            <th>Mekanik</th>
-                            <th>Customer</th>
-                            <th class="text-right">Total</th>
+                            <th>Dealer</th>
+                            <th>Kode Part</th>
+                            <th class="text-right">Sisa</th>
+                            <th class="text-right">Min</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($data['recentServices'] as $svc)
-                            <tr>
-                                <td>{{ $svc->invoice_no }}</td>
-                                <td>{{ $svc->technician_name }}</td>
-                                <td>{{ Str::limit($svc->customer_name, 15) }}</td>
-                                <td class="text-right">{{ number_format($svc->total_amount, 0, ',', '.') }}</td>
-                            </tr>
+                        @forelse($data['stockData'] as $stok)
+                        <tr class="{{ $stok->total_qty < $stok->stok_minimum ? 'table-danger' : '' }}">
+                            <td class="align-middle">
+                                <span class="d-block text-bold">{{ $stok->nama_lokasi }}</span>
+                            </td>
+                            <td class="align-middle">{{ $stok->part_code }}</td>
+                            <td class="text-right align-middle font-weight-bold {{ $stok->total_qty < $stok->stok_minimum ? 'text-danger' : '' }}">
+                                {{ $stok->total_qty }}
+                            </td>
+                            <td class="text-right align-middle text-muted">{{ $stok->stok_minimum }}</td>
+                        </tr>
                         @empty
-                            <tr><td colspan="4" class="text-center">Belum ada service.</td></tr>
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">
+                                <i class="fas fa-check-circle text-success mb-2" style="font-size: 1.5rem;"></i><br>
+                                Stok jaringan dealer aman.
+                            </td>
+                        </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
-
-    {{-- KOLOM KANAN: STOK MENIPIS --}}
-    {{-- KOLOM KANAN: MONITORING STOK JARINGAN DEALER --}}
-    <div class="col-lg-4">
-        <div class="card card-outline card-primary">
-            <div class="card-header border-0">
-                <h3 class="card-title">
-                    <i class="fas fa-network-wired mr-1"></i> Monitoring Stok Dealer
-                </h3>
-                <div class="card-tools">
-                    <a href="{{ route('admin.reports.stock-by-warehouse') }}" class="btn btn-tool btn-sm">
-                        <i class="fas fa-bars"></i>
-                    </a>
-                </div>
-            </div>
-            <div class="card-body p-0 table-responsive">
-                <table class="table table-striped table-valign-middle table-sm">
-                    <thead>
-                    <tr>
-                        <th>Dealer</th>
-                        <th>Part</th>
-                        <th class="text-center">Stok</th>
-                        <th class="text-center">Status</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @forelse($data['stockData'] as $item)
-                        <tr>
-                            <td>
-                                <span class="font-weight-bold text-dark" style="font-size: 0.9rem;">{{ $item->nama_lokasi }}</span>
-                            </td>
-                            <td>
-                                {{ Str::limit($item->part_name, 15) }}
-                                <br>
-                                <small class="text-muted">{{ $item->part_code }}</small>
-                            </td>
-                            <td class="text-center font-weight-bold">
-                                {{ $item->total_qty }}
-                            </td>
-                            <td class="text-center">
-                                @if($item->total_qty < $item->stok_minimum)
-                                    <span class="badge badge-danger">KRITIS</span>
-                                @else
-                                    <span class="badge badge-success">AMAN</span>
-                                @endif
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="4" class="text-center text-muted py-4">Belum ada data stok dealer.</td>
-                        </tr>
-                    @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 </div>
+
+{{-- SCRIPT UNTUK CHART.JS --}}
+@push('js')
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    $(document).ready(function() {
+        var ctx = document.getElementById('asdTrendChart').getContext('2d');
+        var asdTrendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {!! json_encode($data['chartLabels']) !!},
+                datasets: [
+                    {
+                        label: 'Unit Service',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        borderColor: 'rgba(40, 167, 69, 1)',
+                        pointRadius: 3,
+                        pointBackgroundColor: 'rgba(40, 167, 69, 1)',
+                        data: {!! json_encode($data['serviceChartData']) !!},
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Penjualan Part',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        borderColor: 'rgba(0, 123, 255, 1)',
+                        pointRadius: 3,
+                        pointBackgroundColor: 'rgba(0, 123, 255, 1)',
+                        data: {!! json_encode($data['salesChartData']) !!},
+                        fill: true,
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                maintainAspectRatio: false,
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                }
+            }
+        });
+    });
+</script>
+@endpush

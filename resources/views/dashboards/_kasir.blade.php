@@ -67,7 +67,7 @@
     </div>
 </div>
 
-<div class="row">
+<!-- <div class="row">
     <div class="col-12 text-center mt-4">
         <a href="{{ route('admin.penjualans.create') }}" class="btn btn-app bg-success">
             <i class="fas fa-plus"></i> Transaksi Penjualan Baru
@@ -76,5 +76,5 @@
         {{-- <a href="{{ route('admin.services.create') }}" class="btn btn-app bg-info">
             <i class="fas fa-wrench"></i> Service Baru
         </a> --}}
-    </div>
+    </div> -->
 </div>

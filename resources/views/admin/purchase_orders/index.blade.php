@@ -16,9 +16,8 @@
         <ul class="nav nav-tabs" role="tablist">
             
             {{-- TAB 1: DEALER REQUEST (Internal Distribution) --}}
-            {{-- VIEW: PUSAT (IMS, ASD, ACC), DEALER (PC, KC), SA/PIC --}}
-            {{-- HIDE: GUDANG (AG, KG) -> Mereka handle ini di menu Receiving --}}
-            @if(auth()->user()->isGlobal() || auth()->user()->isPusat() || auth()->user()->isDealer())
+            {{-- VIEW: PUSAT, DEALER, GLOBAL, dan GUDANG (AG untuk Approve) --}}
+            @if(auth()->user()->isGlobal() || auth()->user()->isPusat() || auth()->user()->isDealer() || auth()->user()->isGudang())
             <li class="nav-item">
                 <a class="nav-link {{ $type == 'dealer_request' ? 'active' : '' }}" href="{{ route('admin.purchase-orders.index', ['type' => 'dealer_request']) }}">
                     <i class="fas fa-store mr-1"></i> Request Dealer (Internal)
