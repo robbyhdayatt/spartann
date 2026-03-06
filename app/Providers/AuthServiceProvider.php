@@ -101,7 +101,7 @@ class AuthServiceProvider extends ServiceProvider
         // Menu PO (View List)
         Gate::define('view-po', function (User $user) {
             return $user->isGlobal() || 
-                   $user->hasRole(['AG', 'IMS', 'KG', 'ASD', 'ACC']) 
+                   $user->hasRole(['AG', 'IMS', 'KG', 'ASD', 'ACC', 'PC']) 
                 //    ||($user->isDealer() && $user->hasRole(['PC', 'KC']))
                    ;
         });
@@ -222,7 +222,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('view-service', function (User $user) {
             return $user->isGlobal() || $user->hasRole(['PC', 'KC', 'KSR', 'ASD', 'ACC']);
         });
-        Gate::define('manage-service', fn(User $user) => $user->hasRole('PC'));
+        Gate::define('manage-service', fn(User $user) => $user->hasRole(['PC', 'KSR']));
 
         // Penjualan
         Gate::define('view-penjualan', function (User $user) {

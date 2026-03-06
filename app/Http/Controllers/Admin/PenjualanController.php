@@ -122,7 +122,7 @@ class PenjualanController extends Controller
 
             // 3. Buat Header Penjualan
             $penjualan = Penjualan::create([
-                'nomor_faktur' => Penjualan::generateNomorFaktur(),
+                'nomor_faktur' => Penjualan::generateNomorFaktur($lokasiId),
                 'tanggal_jual' => $request->tanggal_jual,
                 'lokasi_id'    => $lokasiId,
                 'konsumen_id'  => $konsumen->id,
@@ -138,15 +138,13 @@ class PenjualanController extends Controller
 
             $subtotalGlobal = 0;
 
-            // 4. Proses Setiap Item (CORE LOGIC)
+            // 4. Proses Setiap Item
             foreach ($request->items as $item) {
                 $barangId = $item['barang_id'];
                 $qtyRequest = (int) $item['qty'];
                 
-                // Ambil data barang untuk harga saat ini
                 $barang = Barang::find($barangId);
 
-                // [MODIFIKASI] VALIDASI BARANG AKTIF
                 if (!$barang->is_active) {
                     throw new \Exception("Transaksi Dibatalkan! Barang '{$barang->part_name}' ({$barang->part_code}) berstatus NONAKTIF dan tidak dapat dijual.");
                 }
@@ -158,7 +156,7 @@ class PenjualanController extends Controller
                     ->where('lokasi_id', $lokasiId)
                     ->where('quantity', '>', 0)
                     ->orderBy('created_at', 'asc')
-                    ->lockForUpdate() // [PENTING] Lock baris agar tidak race condition
+                    ->lockForUpdate()
                     ->get();
 
                 $totalStokTersedia = $batches->sum('quantity');
@@ -284,16 +282,28 @@ class PenjualanController extends Controller
 
         $results = [];
         foreach ($barangs as $barang) {
-            $stok = InventoryBatch::where('barang_id', $barang->id)
+            // Ambil semua batch stok yang tersedia di lokasi ini (FIFO)
+            $batches = InventoryBatch::where('barang_id', $barang->id)
                 ->where('lokasi_id', $lokasiId)
-                ->sum('quantity');
+                ->where('quantity', '>', 0)
+                ->orderBy('created_at', 'asc') // Sort FIFO
+                ->with('rak') // Load relasi rak
+                ->get();
+
+            $stok = $batches->sum('quantity');
 
             if ($stok > 0) {
+                // Ambil info rak dari batch tertua (FIFO) untuk panduan user mengambil barang
+                $rakTertua = $batches->first()->rak;
+                $namaRak = $rakTertua ? $rakTertua->kode_rak . ' (' . $rakTertua->nama_rak . ')' : 'Rak Tidak Diketahui';
+
                 $results[] = [
                     'id' => $barang->id,
+                    // Tampilkan info tambahan di dropdown Select2
                     'text' => $barang->part_name . ' (' . $barang->part_code . ') - Stok: ' . $stok,
                     'price' => $barang->retail,
-                    'stock' => $stok
+                    'stock' => $stok,
+                    'rak' => $namaRak // [MODIFIKASI] Kirim data rak ke frontend
                 ];
             }
         }

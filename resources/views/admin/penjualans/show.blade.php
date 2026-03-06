@@ -28,7 +28,7 @@
                 {{-- Header Invoice --}}
                 <div class="row mb-4">
                     <div class="col-sm-6">
-                        <h5 class="text-success"><i class="fas fa-store mr-1"></i> SPARTAN PARTS</h5>
+                        <h5 class="text-success"><i class="fas fa-store mr-1"></i> PT LAUTAN TEDUH INTERNIAGA</h5>
                         <address>
                             <strong>{{ $penjualan->lokasi->nama_lokasi ?? 'Pusat' }}</strong><br>
                             {{ $penjualan->lokasi->alamat ?? '-' }}<br>
@@ -113,7 +113,7 @@
                 {{-- Footer Note --}}
                 <div class="row mt-4">
                     <div class="col-12 text-muted text-center small">
-                        <p>Terima kasih telah berbelanja di SPARTAN. Barang yang sudah dibeli tidak dapat ditukar/dikembalikan kecuali ada perjanjian sebelumnya.</p>
+                        <p>Terima kasih telah berbelanja di dealer kami. Barang yang sudah dibeli tidak dapat ditukar/dikembalikan kecuali ada perjanjian sebelumnya.</p>
                     </div>
                 </div>
 

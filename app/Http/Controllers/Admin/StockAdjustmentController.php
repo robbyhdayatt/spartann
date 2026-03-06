@@ -26,9 +26,8 @@ class StockAdjustmentController extends Controller
         }
         elseif ($user->lokasi) {
             if ($user->lokasi->tipe === 'PUSAT') {
-                $query->whereHas('lokasi', function($q) use ($user) {
-                    $q->where('id', $user->lokasi_id)
-                      ->orWhere('tipe', 'DEALER');
+                $query->whereHas('lokasi', function($q) {
+                    $q->where('tipe', 'DEALER');
                 });
             }
             elseif ($user->lokasi->tipe === 'GUDANG') {
@@ -56,10 +55,7 @@ class StockAdjustmentController extends Controller
         }
         elseif ($user->lokasi) {
             if ($user->lokasi->tipe === 'PUSAT') {
-                $query->where(function($q) use ($user) {
-                    $q->where('id', $user->lokasi_id)
-                      ->orWhere('tipe', 'DEALER');
-                });
+                $query->where('tipe', 'DEALER');
             }
             else {
                 $query->where('id', $user->lokasi_id);

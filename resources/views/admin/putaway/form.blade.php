@@ -51,7 +51,7 @@
                         <strong><i class="fas fa-barcode"></i> Struktur Kode Rak:</strong><br>
                         <span class="text-muted">Contoh: <strong>A-01-L2-B05</strong></span>
                         <ul class="mb-0 mt-1">
-                            <li><strong>Zona (A):</strong> Area Gudang Utama.</li>
+                            <li><strong>Zona (A):</strong> Area Lokasi Utama.</li>
                             <li><strong>Nomor (01):</strong> Nomor urut Rak.</li>
                             <li><strong>Level (L2):</strong> Tingkat ketinggian rak (L1 = Bawah).</li>
                             <li><strong>Bin (B05):</strong> Kotak/Posisi spesifik dalam rak.</li>

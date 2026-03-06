@@ -41,12 +41,25 @@
                     @forelse($penjualans as $penjualan)
                         <tr>
                             <td>{{ $loop->iteration }}</td>
-                            <td><strong>{{ $penjualan->nomor_faktur }}</strong></td>
+                            {{-- Tambahkan data-sort untuk Faktur --}}
+                            <td data-sort="{{ $penjualan->nomor_faktur }}">
+                                <strong>{{ $penjualan->nomor_faktur }}</strong>
+                            </td>
                             <td>{{ $penjualan->lokasi->nama_lokasi ?? 'Tidak Diketahui' }}</td>
-                            <td>{{ \Carbon\Carbon::parse($penjualan->tanggal_jual)->format('d/m/Y') }}</td>
+                            
+                            {{-- [PERBAIKAN SORT TANGGAL] Gunakan format timestamp/Y-m-d untuk sort --}}
+                            <td data-sort="{{ \Carbon\Carbon::parse($penjualan->tanggal_jual)->format('Ymd') }}">
+                                {{ \Carbon\Carbon::parse($penjualan->tanggal_jual)->format('d/m/Y') }}
+                            </td>
+                            
                             <td>{{ $penjualan->konsumen->nama_konsumen ?? '-' }}</td>
                             <td>{{ $penjualan->sales->nama ?? 'Tanpa Sales' }}</td>
-                            <td class="text-right">Rp {{ number_format($penjualan->total_harga ?? 0, 0, ',', '.') }}</td>
+                            
+                            {{-- [PERBAIKAN SORT ANGKA] Gunakan angka asli untuk sort --}}
+                            <td class="text-right" data-sort="{{ $penjualan->total_harga ?? 0 }}">
+                                Rp {{ number_format($penjualan->total_harga ?? 0, 0, ',', '.') }}
+                            </td>
+                            
                             <td class="text-center">
                                 <a href="{{ route('admin.penjualans.show', $penjualan->id) }}"
                                    class="btn btn-info btn-xs" title="Lihat Detail">
@@ -97,9 +110,9 @@ $(function () {
         ],
         columnDefs: [
             { orderable: false, targets: [0, 7] },
-            { searchable: false, targets: [0, 6, 7] }
+            { searchable: false, targets: [7] }
         ],
-        order: [[3, "desc"]] // urutkan berdasarkan tanggal terbaru
+        order: [[3, "desc"]]
     });
 });
 </script>

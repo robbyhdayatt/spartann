@@ -94,8 +94,8 @@
                         <table class="table table-bordered table-hover" id="items-table">
                             <thead class="bg-light">
                                 <tr>
-                                    <th style="width: 40%">Barang / Part</th>
-                                    <th style="width: 15%" class="text-center">Stok Gudang</th>
+                                    <th style="width: 35%">Barang / Part</th>
+                                    <th style="width: 20%" class="text-center">Info Stok & Rak</th>
                                     <th style="width: 15%" class="text-center">Qty Beli</th>
                                     <th style="width: 15%" class="text-right">Harga (@)</th>
                                     <th style="width: 15%" class="text-right">Subtotal</th>
@@ -184,12 +184,10 @@
 $(document).ready(function() {
     let rowIndex = 0;
 
-    // Format Rupiah Helper
     function formatRupiah(angka) {
         return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka);
     }
 
-    // Tambah Baris Baru
     function addRow() {
         rowIndex++;
         let row = `
@@ -200,7 +198,8 @@ $(document).ready(function() {
                     </select>
                 </td>
                 <td class="text-center align-middle">
-                    <span id="stock-badge-${rowIndex}" class="badge badge-secondary" style="font-size:1em;">0</span>
+                    <span id="stock-badge-${rowIndex}" class="badge badge-secondary" style="font-size:1.1em; display:block; margin-bottom:5px;">0</span>
+                    <small id="rak-info-${rowIndex}" class="text-muted font-weight-bold" style="display:none;"><i class="fas fa-map-marker-alt text-danger mr-1"></i> <span class="rak-name"></span></small>
                     <input type="hidden" id="stock-val-${rowIndex}" value="0">
                 </td>
                 <td>
@@ -225,7 +224,6 @@ $(document).ready(function() {
         calculateTotal();
     }
 
-    // Inisialisasi Select2 Ajax
     function initSelect2(index) {
         $(`.select-barang[data-row="${index}"]`).select2({
             theme: 'bootstrap4',
@@ -238,7 +236,7 @@ $(document).ready(function() {
                 data: function (params) {
                     return {
                         q: params.term,
-                        lokasi_id: $('#lokasi_id').val() // Kirim ID lokasi
+                        lokasi_id: $('#lokasi_id').val()
                     };
                 },
                 processResults: function (data) {
@@ -255,22 +253,26 @@ $(document).ready(function() {
         let data = e.params.data;
         let price = parseFloat(data.price) || 0;
         let stock = parseInt(data.stock) || 0;
+        let rak = data.rak || 'Tidak Diketahui';
 
-        // Update UI
         $(`#price-text-${row}`).text(formatRupiah(price));
         $(`#price-input-${row}`).val(price);
         $(`#stock-val-${row}`).val(stock);
 
         let badge = $(`#stock-badge-${row}`);
-        badge.text(stock);
+        badge.text('Sisa Stok: ' + stock);
+        
+        let infoRak = $(`#rak-info-${row}`);
 
         let qtyInput = $(`.input-qty[data-row="${row}"]`);
 
         if(stock > 0) {
             badge.removeClass('badge-danger badge-secondary').addClass('badge-success');
+            infoRak.show().find('.rak-name').text(rak); // Tampilkan info RAK
             qtyInput.prop('disabled', false).attr('max', stock).val(1);
         } else {
             badge.removeClass('badge-success badge-secondary').addClass('badge-danger');
+            infoRak.hide(); // Sembunyikan info rak jika stok kosong
             qtyInput.prop('disabled', true).val(0);
             Swal.fire({
                 icon: 'error',
@@ -303,14 +305,12 @@ $(document).ready(function() {
         calculateRow(row);
     });
 
-    // Event: Hapus Baris
     $(document).on('click', '.btn-remove', function() {
         let row = $(this).data('row');
         $(`#row-${row}`).remove();
         calculateTotal();
     });
 
-    // Hitung Subtotal Baris
     function calculateRow(row) {
         let qty = parseInt($(`.input-qty[data-row="${row}"]`).val()) || 0;
         let price = parseFloat($(`#price-input-${row}`).val()) || 0;
@@ -319,7 +319,6 @@ $(document).ready(function() {
         calculateTotal();
     }
 
-    // Hitung Grand Total Global
     function calculateTotal() {
         let subtotalGlobal = 0;
         let itemCount = 0;
@@ -337,7 +336,6 @@ $(document).ready(function() {
         let diskon = parseFloat($('#input-diskon').val()) || 0;
         let isPpn = $('#check-ppn').is(':checked');
 
-        // Validasi Diskon
         if(diskon > subtotalGlobal) {
             diskon = subtotalGlobal;
             $('#input-diskon').val(diskon);
@@ -347,12 +345,10 @@ $(document).ready(function() {
         let ppnValue = isPpn ? (dpp * 0.11) : 0;
         let grandTotal = dpp + ppnValue;
 
-        // Update Label
         $('#label-subtotal').text(formatRupiah(subtotalGlobal));
         $('#label-ppn').text(isPpn ? formatRupiah(ppnValue) : 'Rp 0');
         $('#label-grand-total').text(formatRupiah(grandTotal));
 
-        // Enable/Disable tombol save
         if(subtotalGlobal > 0 && itemCount > 0) {
             $('#btn-save').prop('disabled', false);
         } else {
@@ -364,7 +360,6 @@ $(document).ready(function() {
     $('#input-diskon').on('input', calculateTotal);
     $('#check-ppn').on('change', calculateTotal);
 
-    // Tambah 1 baris default saat load
     addRow();
 });
 </script>
