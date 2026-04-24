@@ -109,7 +109,7 @@
                 </form>
 
                 {{-- Tombol Export Excel (Sesuai Hak Akses) --}}
-                @can('export-service-report')
+                @can('view-service')
                 <div class="mt-2">
                     <button type="button" class="btn btn-success" id="export-excel-btn">
                         <i class="fas fa-file-excel"></i> Export Excel (sesuai filter)

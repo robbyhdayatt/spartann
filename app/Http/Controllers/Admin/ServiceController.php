@@ -132,7 +132,7 @@ class ServiceController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $this->authorize('export-service-report');
+        $this->authorize('view-service');
         
         $user = Auth::user();
         $startDate = $request->input('start_date') ?? session('service.start_date') ?? now()->toDateString();

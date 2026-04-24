@@ -25,6 +25,7 @@ use App\Http\Controllers\Admin\PdfController;
 use App\Http\Controllers\Admin\ConvertController;
 use App\Http\Controllers\Admin\BarangController;
 use App\Http\Controllers\Admin\JabatanController;
+use App\Http\Controllers\Admin\PartController;
 
 Route::get('/', fn() => redirect()->route('login'));
 
@@ -44,6 +45,9 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::resource('users', UserController::class);
     Route::resource('jabatans', JabatanController::class);
     Route::resource('barangs', BarangController::class)->except(['create', 'edit']);
+    Route::get('parts/template', [PartController::class, 'downloadTemplate'])->name('parts.template');
+    Route::post('parts/import', [PartController::class, 'import'])->name('parts.import');
+    Route::resource('parts', PartController::class);
 
     // === TRANSAKSI GUDANG & DEALER ===
     Route::resource('purchase-orders', PurchaseOrderController::class)->except(['edit', 'update', 'destroy']);
@@ -90,7 +94,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     // === SERVICE ===
     Route::get('services', [ServiceController::class, 'index'])->name('services.index');
     Route::post('services/import', [ServiceController::class, 'import'])->name('services.import');
-    Route::get('services/export-excel', [App\Http\Controllers\Admin\ServiceController::class, 'exportExcel'])->name('services.export.excel');
+    Route::get('services/export-excel', [ServiceController::class, 'exportExcel'])->name('services.export.excel');
     Route::get('services/{service}', [ServiceController::class, 'show'])->name('services.show');
     Route::get('services/{id}/pdf', [ServiceController::class, 'downloadPDF'])->name('services.pdf');
 
@@ -133,7 +137,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
     Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
     Route::get('api/check-stock', [StockAdjustmentController::class, 'checkStock'])->name('api.check-stock');
-    Route::get('purchase-returns/get-failed-items/{receiving}', [App\Http\Controllers\Admin\PurchaseReturnController::class, 'getFailedItems']);
+    Route::get('purchase-returns/get-failed-items/{receiving}', [PurchaseReturnController::class, 'getFailedItems']);
     Route::get('stock-adjustments/get-barangs', [StockAdjustmentController::class, 'getBarangs'])->name('stock-adjustments.get-barangs');
     Route::get('stock-adjustments/get-batches', [StockAdjustmentController::class, 'getBatches'])->name('stock-adjustments.get-batches');
     Route::get('api/lokasi/{lokasi}/raks', function(App\Models\Lokasi $lokasi) { return $lokasi->raks()->where('is_active', true)->get();

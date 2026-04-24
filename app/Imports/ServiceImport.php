@@ -279,9 +279,19 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $currentGlobalStock -= $potong;
                 $sisaQty -= $potong;
             }
+
+            // [PERBAIKAN SKENARIO 1: HARD STOP]
+            // Jika setelah looping ternyata masih ada sisa Qty yang belum terpenuhi,
+            // berarti stok di sistem tidak cukup. Lemparkan error agar import dibatalkan!
+            if ($sisaQty > 0) {
+                $stokYangAda = $qty - $sisaQty;
+                throw new \Exception("Stok '{$namaBarang}' TIDAK CUKUP! Diminta: {$qty}, Tersedia: {$stokYangAda}.");
+            }
+
             return ($qty > 0) ? ($totalCost / $qty) : 0;
         } 
         else {
+            // Logika untuk Refund/Retur (Qty Minus)
             $qtyToRestore = abs($qty);
             
             $batch = InventoryBatch::where('barang_id', $barangId)
@@ -315,6 +325,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 'user_id' => $this->userId,
                 'created_at' => $timestamp, 'updated_at' => $timestamp,
             ]);
+            
             return 0;
         }
     }

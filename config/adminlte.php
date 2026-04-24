@@ -213,7 +213,7 @@ return [
         // ================== MASTER & PENGATURAN ==================
         [
             'header' => 'MASTER & PENGATURAN',
-            'can'    => ['manage-users', 'view-lokasi', 'view-raks', 'view-supplier', 'view-convert', 'view-barang'],
+            'can'    => ['manage-users', 'view-lokasi', 'view-raks', 'view-supplier', 'view-convert', 'view-barang', 'view-ygp'],
         ],
         
         // 1. MANAJEMEN PENGGUNA (Hanya SA)
@@ -255,7 +255,7 @@ return [
         [
             'text'    => 'Master Data',
             'icon'    => 'fas fa-fw fa-database',
-            'can'     => ['view-barang', 'view-supplier', 'view-convert'],
+            'can'     => ['view-barang', 'view-supplier', 'view-convert', 'view-ygp'],
             'submenu' => [
                 [
                     'text'  => 'Supplier', 
@@ -270,10 +270,16 @@ return [
                     'can'   => 'view-convert',
                 ],
                 [
-                    'text'  => 'Item / Barang',
+                    'text'  => 'Item Non YGP',
                     'icon'  => 'fas fa-fw fa-box-open',
                     'route' => 'admin.barangs.index',
                     'can'   => 'view-barang'
+                ],
+                [
+                    'text'  => 'Item YGP',
+                    'icon'  => 'fas fa-fw fa-cogs',
+                    'route' => 'admin.parts.index',
+                    'can'   => 'view-ygp'
                 ],
             ],
         ],

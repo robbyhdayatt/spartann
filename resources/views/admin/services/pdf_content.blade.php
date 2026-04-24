@@ -16,22 +16,22 @@ $npwpDealer = 'NPWP No.: ' . ($service->lokasi->npwp ?? $service->customer_npwp_
 $serviceOrder = $service->service_order ?? 'Walk In Service';
 $isPartRetail = stripos($serviceOrder, 'part') !== false;
 
-// === Pengaturan Font & Tampilan (DIPERKECIL) ===
+// === Pengaturan Font & Tampilan (DIPERBESAR) ===
 $totalDetailsCount = $service->details->count();
-$maxItemsPerPage = 40; // Bisa muat lebih banyak item karena font kecil
+$maxItemsPerPage = 35; // Dikurangi sedikit karena font membesar memakan ruang
 
-// Ukuran Font Standar (Diperkecil)
-$baseFontSize = 12;
-$lineHeight = 1.5;
-$rowPadding = 2;
-$signaturePaddingTop = 20;
+// Ukuran Font Standar
+$baseFontSize = 14; // <-- DIPERBESAR (Sebelumnya 12)
+$lineHeight = 1.6;  // <-- Spasi direnggangkan (Sebelumnya 1.5)
+$rowPadding = 4;    // <-- Jarak antar baris tabel (Sebelumnya 2)
+$signaturePaddingTop = 30; // <-- Jarak tanda tangan (Sebelumnya 20)
 
-// Logika Scaling Otomatis (Jika item sangat banyak)
+// Logika Scaling Otomatis (Jika item sangat banyak agar tidak berantakan)
 if ($totalDetailsCount > $maxItemsPerPage) {
     $scale = max(0.85, 1 - (($totalDetailsCount - $maxItemsPerPage) * 0.01));
-    $baseFontSize = floor(11 * $scale);
-    $lineHeight = max(1.0, 1.2 * $scale);
-    $rowPadding = max(1, floor(2 * $scale));
+    $baseFontSize = floor(12 * $scale); // Sebelumnya 11
+    $lineHeight = max(1.2, 1.4 * $scale);
+    $rowPadding = max(2, floor(3 * $scale));
     $signaturePaddingTop = max(20, floor(30 * $scale));
 }
 
@@ -41,6 +41,9 @@ $conditionalStyles = "
     .items-table td, .items-table th { padding: {$rowPadding}px 2px; line-height: 1.1; }
     .signature-box td[style*='padding-top'] { padding-top: {$signaturePaddingTop}px !important; }
 ";
+
+// === VARIABEL PENAMPUNG GRAND TOTAL DISKON ===
+$grandTotalDiskon = 0;
 @endphp
 
 <!DOCTYPE html>
@@ -63,19 +66,49 @@ $conditionalStyles = "
             color: #000;
             width: 100%;
             height: 100%;
-            letter-spacing: 0.1px; /* Sedikit dirapatkan */
+            letter-spacing: 0.1px; 
         }
 
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .font-bold { font-weight: bold; }
 
-        /* Style Header & Footer Tabel agar lebih compact */
         .items-table th {
             border-top: 1px solid #000;
             border-bottom: 1px solid #000;
             font-weight: bold;
             text-align: center;
+        }
+
+        /* CLASS UNTUK FITUR EDITABLE */
+        .editable-area {
+            border: 1px dashed #ffc107;
+            background-color: #fffdf5;
+            transition: 0.3s;
+            cursor: text;
+        }
+        .editable-area:focus {
+            outline: none;
+            background-color: #fff3cd;
+            border-color: #ff9800;
+        }
+        .editable-area[placeholder]:empty:before {
+            content: attr(placeholder);
+            color: #aaa;
+            font-style: italic;
+        }
+        
+        @media print {
+            .editable-area {
+                border: none !important;
+                background-color: transparent !important;
+            }
+            /* Paksa sembunyikan tulisan placeholder saat dicetak */
+            .editable-area::before, 
+            .editable-area[placeholder]:empty::before { 
+                content: "" !important; 
+                display: none !important; 
+            }
         }
 
         /* Render style dinamis dari PHP */
@@ -153,10 +186,11 @@ $conditionalStyles = "
         <thead>
             <tr>
                 <th style="width:4%;">No.</th>
-                <th style="width:20%;">Package</th>
-                <th style="width:15%;">Nomor Item</th>
-                <th style="width:35%;">Nama Item</th>
-                <th style="width:12%;">Harga Satuan</th>
+                <th style="width:18%;">Package</th>
+                <th style="width:13%;">Nomor Item</th>
+                <th style="width:30%;">Nama Item</th>
+                <th style="width:11%;">Harga Satuan</th>
+                <th style="width:10%;">Diskon (%)</th>
                 <th style="width:4%;">Qty</th>
                 <th style="width:10%;">Total</th>
             </tr>
@@ -171,18 +205,22 @@ $conditionalStyles = "
 
                 @unless($isPartRetail)
                     <tr style="font-weight:bold; border-top:1px solid #ccc;">
-                        <td colspan="7" style="padding-top: 5px;">{{ $groupCode ?: 'Lain-lain' }}</td>
+                        <td colspan="8" style="padding-top: 5px;">{{ $groupCode ?: 'Lain-lain' }}</td>
                     </tr>
                 @endunless
 
                 @foreach ($jasaDetails as $detail)
-                    @php $totalItem = ($detail->quantity ?? 0) * ($detail->price ?? 0); @endphp
+                    @php 
+                        $totalItem = ($detail->quantity ?? 0) * ($detail->price ?? 0); 
+                    @endphp
                     <tr>
                         <td class="text-center">{{ $itemNumber++ }}</td>
                         <td>{{ $detail->service_package_name }}</td>
                         <td>{{ $detail->item_code ?? '' }}</td>
                         <td>{{ $detail->item_name ?? '' }}</td>
-                        <td class="text-right">{{ number_format($detail->price ?? 0, 0, ',', '.') }}</td>
+                        {{-- Jasa: Harga dan Diskon Editable --}}
+                        <td class="text-right editable-area" contenteditable="true">{{ number_format($detail->price ?? 0, 0, ',', '.') }}</td>
+                        <td class="text-center editable-area" contenteditable="true">0.00</td> 
                         <td class="text-center">{{ $detail->quantity ?? 0 }}</td>
                         <td class="text-right">{{ number_format($totalItem, 0, ',', '.') }}</td>
                     </tr>
@@ -190,17 +228,35 @@ $conditionalStyles = "
 
                 @if ($sparepartDetails->isNotEmpty())
                     @unless($isPartRetail)
-                        <tr><td colspan="7" style="font-style:italic; font-weight:bold; padding-left: 10px;">Sparepart:</td></tr>
+                        <tr><td colspan="8" style="font-style:italic; font-weight:bold; padding-left: 10px;">Sparepart:</td></tr>
                     @endunless
                     @foreach ($sparepartDetails as $detail)
-                        @php $totalItem = ($detail->quantity ?? 0) * ($detail->price ?? 0); @endphp
+                        @php 
+                            $hargaSatuanInvoice = $detail->price ?? 0;
+                            $qty = $detail->quantity ?? 0;
+                            $hargaRetail = $hargaSatuanInvoice; 
+                            $diskonNominal = 0;
+                            $diskonPersen = 0;
+                            
+                            if ($detail->partData) {
+                                $hargaRetail = $detail->partData->retail;
+                                if ($hargaRetail > $hargaSatuanInvoice) {
+                                    $diskonNominal = $hargaRetail - $hargaSatuanInvoice;
+                                    $diskonPersen = ($diskonNominal / $hargaRetail) * 100;
+                                }
+                            }
+                            $totalItem = $qty * $hargaSatuanInvoice; 
+                            $grandTotalDiskon += ($diskonNominal * $qty);
+                        @endphp
                         <tr>
                             <td class="text-center">{{ $itemNumber++ }}</td>
-                            <td></td>
+                            {{-- Sparepart: Package Editable --}}
+                            <td class="editable-area" contenteditable="true" placeholder="..."></td>
                             <td>{{ $detail->item_code ?? '' }}</td>
                             <td>{{ $detail->item_name ?? '' }}</td>
-                            <td class="text-right">{{ number_format($detail->price ?? 0, 0, ',', '.') }}</td>
-                            <td class="text-center">{{ $detail->quantity ?? 0 }}</td>
+                            <td class="text-right">{{ number_format($hargaRetail, 0, ',', '.') }}</td>
+                            <td class="text-center">{{ $diskonPersen > 0 ? number_format($diskonPersen, 2, '.', '') : '-' }}</td>
+                            <td class="text-center">{{ $qty }}</td>
                             <td class="text-right">{{ number_format($totalItem, 0, ',', '.') }}</td>
                         </tr>
                     @endforeach
@@ -230,11 +286,20 @@ $conditionalStyles = "
                 <div style="font-style:italic; text-transform: capitalize;">
                     # {{ trim(NumberHelper::terbilang($totalPayment)) }} Rupiah #
                 </div>
+
+                {{-- Keterangan / Catatan Tambahan --}}
+                <div style="margin-top: 10px;">
+                    <strong>Keterangan:</strong>
+                    <div class="editable-area" contenteditable="true" placeholder="Tambahkan catatan khusus di sini..." style="min-height: 25px; margin-top: 2px;"></div>
+                </div>
             </td>
             <td style="width: 40%; vertical-align: top;">
                 <table style="width: 100%;">
                     @if($isPartRetail)
                         <tr><td>Sub Total Spare Parts:</td><td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td></tr>
+                        @if($grandTotalDiskon > 0)
+                            <tr><td>Total Hemat / Diskon:</td><td class="text-right">Rp {{ number_format($grandTotalDiskon, 0, ',', '.') }}</td></tr>
+                        @endif
                         <tr><td>Down Payment:</td><td class="text-right">Rp {{ number_format($totalDP, 0, ',', '.') }}</td></tr>
                         <tr><td>Member Benefit:</td><td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td></tr>
                         <tr><td style="border-top:1px solid #000;"><strong>Total Bayar:</strong></td>
@@ -242,6 +307,9 @@ $conditionalStyles = "
                     @else
                         <tr><td>Total Service:</td><td class="text-right">Rp {{ number_format($totalService, 0, ',', '.') }}</td></tr>
                         <tr><td>Total Sparepart:</td><td class="text-right">Rp {{ number_format($totalSparepart, 0, ',', '.') }}</td></tr>
+                        @if($grandTotalDiskon > 0)
+                            <tr><td>Total Hemat / Diskon:</td><td class="text-right">Rp {{ number_format($grandTotalDiskon, 0, ',', '.') }}</td></tr>
+                        @endif
                         <tr><td>Member Benefit:</td><td class="text-right">Rp {{ number_format($benefitAmount, 0, ',', '.') }}</td></tr>
                         <tr><td style="border-top:1px solid #000;"><strong>Total Bayar:</strong></td>
                             <td style="border-top:1px solid #000; text-align:right;"><strong>Rp {{ number_format($totalPayment, 0, ',', '.') }}</strong></td></tr>
@@ -262,7 +330,6 @@ $conditionalStyles = "
             <td style="width:34%;">Kasir,</td>
         </tr>
         <tr>
-            {{-- Padding top diatur oleh variabel $signaturePaddingTop --}}
             <td style="padding-top:30px;">(__________________)</td>
             <td style="padding-top:30px;">(__________________)</td>
             <td style="padding-top:30px;">(__________________)</td>
@@ -275,7 +342,7 @@ $conditionalStyles = "
 <script type="text/php">
 if (isset($pdf)) {
     $font = $fontMetrics->get_font("Arial", "normal");
-    $size = 9; // Font size untuk nomor halaman juga diperkecil
+    $size = 11; // <-- DIPERBESAR (Sebelumnya 9)
     $pageText = "Hal {PAGE_NUM} dari {PAGE_COUNT}";
     $x = $pdf->get_width() - 60;
     $y = $pdf->get_height() - 15;

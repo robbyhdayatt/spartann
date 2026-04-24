@@ -69,6 +69,18 @@ class AuthServiceProvider extends ServiceProvider
             return $user->hasRole(['ASD', 'IMS', 'ACC', 'AG', 'KG']);
         });
 
+        // [TAMBAHAN] Master Item YGP
+        Gate::define('view-ygp', function (User $user) {
+            return $user->isGlobal() || 
+                   $user->hasRole(['ASD', 'IMS', 'ACC']) || 
+                   $user->hasRole(['AG', 'KG']) ||
+                   $user->hasRole(['KC', 'PC']);
+
+        });
+        Gate::define('manage-ygp', function (User $user) {
+            return $user->hasRole(['ASD', 'IMS', 'ACC', 'AG', 'KG']);
+        });
+
         // Detail: Visibility Harga
         // ASD, IMS, ACC (Full kecuali Selling In) -> Bisa lihat Selling Out & Retail
         // AG, KG (Full kecuali Selling Out & Retail) -> Bisa lihat Selling In

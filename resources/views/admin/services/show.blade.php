@@ -20,25 +20,74 @@ $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->
             <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Kembali
             </a>
-
-            <a href="{{ route('admin.services.pdf', ['id' => $service->id]) }}" class="btn btn-danger" target="_blank">
-                <i class="fas fa-file-pdf"></i> Export PDF
-            </a>
+            
+            {{-- Tombol diubah menjadi Print Browser agar hasil editan layar bisa ikut tercetak --}}
+            <button onclick="window.print()" class="btn btn-danger">
+                <i class="fas fa-print"></i> Cetak / Simpan PDF
+            </button>
         </div>
     </div>
 @stop
 
 @section('content')
-<div class="invoice p-3 mb-3">
-    {{-- Menggunakan file pdf_content yang sama untuk konsistensi --}}
+<div class="alert alert-info alert-dismissible no-print">
+    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+    <h5><i class="icon fas fa-info-circle"></i> Mode Edit Cepat!</h5>
+    Beberapa area pada invoice di bawah ini (yang memiliki garis putus-putus) <b>bisa Anda klik dan ketik/edit secara langsung</b> sebelum dicetak. Perubahan angka di sini tidak akan mengubah data asli di database.
+</div>
+
+<div class="invoice p-3 mb-3" id="print-area">
     @include('admin.services.pdf_content', ['service' => $service, 'totalService' => $totalService, 'totalSparepart' => $totalSparepart])
 </div>
 @stop
 
 @push('css')
-{{-- CSS Kustom untuk tampilan web --}}
 <style>
-    .invoice-box { border: 1px solid #ddd; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
-    /* Menggunakan style dari pdf_content.blade.php, namun bisa ditambahkan override di sini jika perlu */
+    .invoice-box { 
+        border: 1px solid #ddd; 
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); 
+        background-color: #fff; 
+    }
+    
+    /* === PERINTAH KHUSUS UNTUK BROWSER PRINT === */
+    @media print {
+        /* 1. Sembunyikan Menu Sidebar, Navbar, dan Footer AdminLTE */
+        .main-header, .main-sidebar, .main-footer, .no-print {
+            display: none !important;
+        }
+
+        /* 2. HILANGKAN SEMUA MARGIN & PADDING BAWAAN TEMPLATE (Biar Mentok) */
+        html, body, .wrapper, .content-wrapper, .content, .invoice, .invoice-box {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            background-color: #fff !important;
+        }
+
+        /* 3. Atur Kertas Continuous Form dengan Margin 0 (Mentok Ujung Kertas) */
+        @page {
+            size: 21.5cm 14cm; 
+            margin: 0mm !important; /* Margin 0 agar mentok */
+        }
+
+        /* 4. Beri jarak nafas super tipis (2mm) hanya di dalam box agar teks tidak terpotong fisik printer */
+        .invoice-box {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 2mm !important; 
+        }
+
+        /* 5. Paksa browser mencetak warna dan garis tabel */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        
+        /* 6. Mencegah baris terpotong di tengah */
+        tr {
+            page-break-inside: avoid;
+        }
+    }
 </style>
 @endpush

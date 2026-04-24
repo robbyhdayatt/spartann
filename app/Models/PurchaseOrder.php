@@ -36,10 +36,13 @@ class PurchaseOrder extends Model
     {
         $this->load('details');
         
-        $totalPesan = $this->details->sum('qty_pesan');
+        $totalTarget = $this->details->sum(function ($detail) {
+            return $detail->qty_disetujui ?? $detail->qty_pesan;
+        });
+        
         $totalTerima = $this->details->sum('qty_diterima');
 
-        if ($totalPesan > 0 && $totalTerima >= $totalPesan) {
+        if ($totalTarget > 0 && $totalTerima >= $totalTarget) {
             $this->update(['status' => 'FULLY_RECEIVED']);
         } elseif ($totalTerima > 0) {
             $this->update(['status' => 'PARTIALLY_RECEIVED']);
