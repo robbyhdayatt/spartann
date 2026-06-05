@@ -150,6 +150,8 @@ class PenjualanController extends Controller
                 }
 
                 $hargaJualSatuan = $barang->retail;
+                // [MODIFIKASI PENTING]: Ambil HPP (Harga Modal) dari Master Barang saat ini
+                $hargaModalSatuan = $barang->selling_out ?? 0;
 
                 // Ambil stok dari inventory_batch (FIFO)
                 $batches = InventoryBatch::where('barang_id', $barangId)
@@ -182,6 +184,8 @@ class PenjualanController extends Controller
                         'rak_id'      => $batch->rak_id,
                         'qty_jual'    => $qtyDiambil,
                         'harga_jual'  => $hargaJualSatuan,
+                        // [MODIFIKASI PENTING]: Simpan Snapshot HPP ke kolom harga_modal
+                        'harga_modal' => $hargaModalSatuan, 
                         'subtotal'    => $subtotalItem,
                         'qty_diretur' => 0
                     ]);
@@ -299,11 +303,10 @@ class PenjualanController extends Controller
 
                 $results[] = [
                     'id' => $barang->id,
-                    // Tampilkan info tambahan di dropdown Select2
                     'text' => $barang->part_name . ' (' . $barang->part_code . ') - Stok: ' . $stok,
                     'price' => $barang->retail,
                     'stock' => $stok,
-                    'rak' => $namaRak // [MODIFIKASI] Kirim data rak ke frontend
+                    'rak' => $namaRak 
                 ];
             }
         }

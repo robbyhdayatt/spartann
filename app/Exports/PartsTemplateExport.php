@@ -9,15 +9,15 @@ class PartsTemplateExport implements FromArray, WithHeadings
 {
     public function headings(): array
     {
-        // Hanya 3 kolom yang dibutuhkan di Excel
-        return ['kode_part', 'nama_part', 'retail'];
+        // Penambahan kolom cost (Harga Modal)
+        return ['kode_part', 'nama_part', 'cost', 'retail'];
     }
 
     public function array(): array
     {
         // Baris contoh pengisian
         return [
-            ['123-ABC', 'CONTOH NAMA PART', 50000],
+            ['123-ABC', 'CONTOH NAMA PART', 40000, 50000],
         ];
     }
 }

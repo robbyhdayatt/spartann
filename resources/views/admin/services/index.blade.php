@@ -13,23 +13,37 @@
 @section('content')
 <div class="row">
     <div class="col-12">
-        {{-- Pesan Sukses/Error --}}
+        {{-- Pesan Sukses/Error Bawaan --}}
         @if (session('success'))
-            <div class="alert alert-success alert-dismissible">
+            <div class="alert alert-success alert-dismissible shadow-sm">
                 <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
                 <i class="icon fas fa-check"></i>{{ session('success') }}
             </div>
         @endif
         @if (session('error'))
-            <div class="alert alert-danger alert-dismissible">
+            <div class="alert alert-danger alert-dismissible shadow-sm">
                 <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
                 <i class="icon fas fa-ban"></i>{{ session('error') }}
             </div>
         @endif
 
+        {{-- [MODIFIKASI] KOTAK KHUSUS MENAMPILKAN DETAIL ERROR IMPORT --}}
+        @if (session('import_errors'))
+            <div class="alert alert-warning alert-dismissible shadow-sm">
+                <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                <h5><i class="icon fas fa-exclamation-triangle"></i> Peringatan! Ada data yang gagal diproses:</h5>
+                <p class="mb-2">Beberapa baris dalam file Excel Anda tidak dapat diimpor karena alasan berikut:</p>
+                <ul style="max-height: 200px; overflow-y: auto; background: rgba(255,255,255,0.5); padding: 10px 10px 10px 30px; border-radius: 5px; margin-bottom: 0;">
+                    @foreach (session('import_errors') as $importError)
+                        <li>{{ $importError }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         {{-- IMPORT SECTION: HANYA PC DEALER (manage-service) --}}
         @can('manage-service')
-        <div class="card card-outline card-secondary">
+        <div class="card card-outline card-secondary shadow-sm">
             <div class="card-header">
                 <h3 class="card-title">Import Data Service</h3>
             </div>
@@ -49,7 +63,13 @@
                                 </button>
                             </div>
                         </div>
-                        <small class="form-text text-muted">Hanya file .xls, .xlsx, atau .csv. Pastikan kolom `dealer` sesuai kode dealer.</small>
+                    </div>
+                    
+                    {{-- Input Tanggal Laporan --}}
+                    <div class="form-group mt-3">
+                        <label for="tanggal_laporan">Tanggal Laporan <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="tanggal_laporan" name="tanggal_laporan" value="{{ date('Y-m-d') }}" required>
+                        <small class="form-text text-muted">Tanggal laporan ini akan menjadi penentu waktu transaksi (Otomatis hari ini).</small>
                     </div>
                 </form>
             </div>
@@ -57,7 +77,7 @@
         @endcan
 
         {{-- FILTER --}}
-        <div class="card card-outline card-primary">
+        <div class="card card-outline card-primary shadow-sm">
             <div class="card-header">
                 <h3 class="card-title">Filter Data</h3>
             </div>
@@ -99,11 +119,9 @@
                             <button type="submit" class="btn btn-primary mr-2">
                                 <i class="fas fa-filter"></i> Terapkan Filter
                             </button>
-                            @if(request()->has('start_date') || request()->has('end_date') || ($canFilterByDealer && $selectedDealer && $selectedDealer !== 'all'))
-                                <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
-                                    <i class="fas fa-sync-alt"></i> Reset
-                                </a>
-                            @endif
+                            <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
+                                <i class="fas fa-sync-alt"></i> Reset
+                            </a>
                         </div>
                     </div>
                 </form>
@@ -111,7 +129,7 @@
                 {{-- Tombol Export Excel (Sesuai Hak Akses) --}}
                 @can('view-service')
                 <div class="mt-2">
-                    <button type="button" class="btn btn-success" id="export-excel-btn">
+                    <button type="button" class="btn btn-success shadow-sm" id="export-excel-btn">
                         <i class="fas fa-file-excel"></i> Export Excel (sesuai filter)
                     </button>
                     <small class="text-muted ml-2">Pilih Tanggal Mulai dan Selesai terlebih dahulu untuk mengaktifkan tombol ini.</small>
@@ -120,15 +138,15 @@
             </div>
         </div>
 
-        {{-- TABEL --}}
-        <div class="card card-outline card-info">
+        {{-- TABEL SERVER-SIDE PROCESSING --}}
+        <div class="card card-outline card-info shadow-sm">
             <div class="card-header">
                 <h3 class="card-title">Daftar Transaksi Service</h3>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table id="services-table" class="table table-bordered table-striped table-hover" style="width:100%">
-                        <thead>
+                        <thead class="bg-light">
                             <tr>
                                 <th style="width: 5%;">No.</th>
                                 <th>No. Invoice</th>
@@ -139,43 +157,11 @@
                                 <th>Tgl. Import</th>
                                 <th class="text-right">Total</th>
                                 <th class="text-center" style="width: 10%;">Status Cetak</th>
-                                <th class="text-center" style="width: 10%;">Aksi</th>
+                                <th class="text-center" style="width: 8%;">Aksi</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            @forelse ($services as $service)
-                                <tr class="{{ $service->printed_at ? 'row-printed' : '' }}">
-                                    <td>{{ $loop->iteration }}</td>
-                                    <td><strong>{{ $service->invoice_no }}</strong></td>
-                                    <td><span class="badge badge-secondary">{{ $service->dealer_code }}</span></td>
-                                    <td>{{ \Carbon\Carbon::parse($service->reg_date)->isoFormat('DD MMM YYYY') }}</td>
-                                    <td>{{ $service->customer_name }}</td>
-                                    <td><span class="badge badge-info">{{ $service->service_order }}</span></td>
-                                    <td>{{ $service->created_at->isoFormat('DD MMM YYYY, HH:mm') }}</td>
-                                    <td class="text-right"><strong>@rupiah($service->total_amount)</strong></td>
-                                    <td class="text-center" data-order="{{ $service->printed_at ? 1 : 0 }}">
-                                        @if($service->printed_at)
-                                            <span class="badge badge-success" title="Pada: {{ $service->printed_at->format('d/m/Y H:i') }}">
-                                                <i class="fas fa-check"></i> Sudah Cetak
-                                            </span>
-                                        @else
-                                            <span class="badge badge-warning">
-                                                <i class="fas fa-times"></i> Belum
-                                            </span>
-                                        @endif
-                                    </td>
-                                    <td class="text-center">
-                                        <a href="{{ route('admin.services.show', $service->id) }}" class="btn btn-xs btn-info" title="Lihat Detail">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="10" class="text-center">Tidak ada data service ditemukan.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
+                        {{-- TBODY dikosongkan karena DataTables AJAX yang akan mengisinya otomatis --}}
+                        <tbody></tbody>
                     </table>
                 </div>
             </div>
@@ -191,15 +177,27 @@
         $('.select2').select2({ theme: 'bootstrap4' });
 
         var table = $('#services-table').DataTable({
+            processing: true,
+            serverSide: true, // Mengaktifkan Server-Side Processing
             responsive: true,
             autoWidth: false,
-            paging: true,
+            ajax: {
+                url: "{{ route('admin.services.index') }}",
+                data: function (d) {
+                    d.start_date = $('#start_date').val();
+                    d.end_date = $('#end_date').val();
+                    d.dealer_code = $('#dealer_code').val();
+                }
+            },
+            pageLength: 25, 
+            lengthMenu: [[10, 25, 50, 100, 500, 1000], [10, 25, 50, 100, 500, 1000]],
             searching: true,
             ordering: true,
             language: {
                 url: "//cdn.datatables.net/plug-ins/1.10.25/i18n/Indonesian.json",
                 search: "",
-                searchPlaceholder: "Cari di halaman ini..."
+                searchPlaceholder: "Cari nomor invoice/pelanggan...",
+                lengthMenu: "Tampilkan _MENU_ data" 
             },
             dom: "<'row'<'col-sm-12 col-md-6'lB><'col-sm-12 col-md-6'f>>" +
                  "<'row'<'col-sm-12'tr>>" +
@@ -212,11 +210,53 @@
                 { extend: 'print', text: '<i class="fas fa-print"></i> Cetak', className: 'btn btn-sm btn-default' },
                 { extend: 'colvis', text: '<i class="fas fa-eye"></i> Kolom', className: 'btn btn-sm btn-default' }
             ],
-            columnDefs: [
-                { orderable: false, targets: [0, 9] },
-                { searchable: false, targets: [0, 7, 8, 9] }
+            // Pemetaan Kolom dari Response JSON Yajra DataTables
+            columns: [
+                { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+                { data: 'invoice_no', name: 'invoice_no', render: function(data) { return '<strong>'+data+'</strong>'; } },
+                { data: 'dealer', name: 'dealer', searchable: false, orderable: false, render: function(data) { return '<span class="badge badge-secondary">'+data+'</span>'; } },
+                { data: 'reg_date', name: 'reg_date' },
+                { data: 'customer_name', name: 'customer_name' },
+                { data: 'service_order', name: 'service_order', render: function(data) { return '<span class="badge badge-info">'+data+'</span>'; } },
+                { data: 'created_at', name: 'created_at', render: function(data) {
+                    if(!data) return '-'; 
+                    let d = new Date(data); 
+                    return d.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'});
+                }},
+                { data: 'total_amount', name: 'total_amount', className: 'text-right', render: function(data) { return '<strong>'+data+'</strong>'; } },
+                { data: 'printed_at', name: 'printed_at', className: 'text-center', render: function(data) {
+                    if(data) {
+                        let d = new Date(data);
+                        let dStr = d.toLocaleDateString('id-ID') + ' ' + d.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'});
+                        return '<span class="badge badge-success" title="Pada: '+dStr+'"><i class="fas fa-check"></i> Sudah Cetak</span>';
+                    } else {
+                        return '<span class="badge badge-warning"><i class="fas fa-times"></i> Belum</span>';
+                    }
+                }},
+                { data: 'aksi', name: 'aksi', orderable: false, searchable: false, className: 'text-center' }
             ],
-            order: [[ 8, "asc" ]]
+            // [MODIFIKASI] Target Default Sorting dialihkan ke Kolom 8 (Status Cetak)
+            order: [[ 8, "asc" ]], 
+            createdRow: function(row, data, dataIndex) {
+                if (data.printed_at) {
+                    $(row).addClass('row-printed');
+                }
+            }
+        });
+
+        // AJAX FILTER SUBMIT (Tanpa Refresh Halaman)
+        $('#filter-form').on('submit', function(e) {
+            e.preventDefault();
+            table.ajax.reload(); 
+            checkExportButtonState();
+            
+            const url = new URL(window.location);
+            url.searchParams.set('start_date', $('#start_date').val());
+            url.searchParams.set('end_date', $('#end_date').val());
+            if ($('#dealer_code').length && $('#dealer_code').val()) {
+                url.searchParams.set('dealer_code', $('#dealer_code').val());
+            }
+            window.history.pushState({}, '', url);
         });
 
         function checkExportButtonState() {
@@ -232,7 +272,7 @@
         $('#export-excel-btn').on('click', function() {
             var startDateValue = $('#start_date').val();
             var endDateValue = $('#end_date').val();
-            var dealerCodeValue = $('#dealer_code').val() || 'all';
+            var dealerCodeValue = $('#dealer_code').length ? $('#dealer_code').val() : 'all';
 
             if (!startDateValue || !endDateValue) {
                 alert('Silakan pilih Tanggal Mulai dan Tanggal Selesai terlebih dahulu.');

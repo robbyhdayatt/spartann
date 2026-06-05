@@ -41,7 +41,7 @@ class ProfileController extends Controller
         if ($request->filled('current_password') || $request->filled('new_password')) {
             $request->validate([
                 'current_password' => 'required',
-                'new_password'     => 'required|string|min:8|confirmed', // field konfirmasi harus bernama new_password_confirmation
+                'new_password'     => 'required|string|min:3|confirmed', // field konfirmasi harus bernama new_password_confirmation
             ]);
 
             // Cek Password Lama

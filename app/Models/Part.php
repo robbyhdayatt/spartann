@@ -16,6 +16,7 @@ class Part extends Model
         'nama_part',
         'stok_minimum',
         'qty_stok',
+        'cost',
         'retail',
         'is_active',
     ];

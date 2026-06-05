@@ -17,77 +17,150 @@ $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->
     <div class="d-flex justify-content-between align-items-center">
         <h1>Faktur Service: {{ $service->invoice_no }}</h1>
         <div>
-            <a href="{{ route('admin.services.index') }}" class="btn btn-secondary">
+            <a href="{{ route('admin.services.index') }}" class="btn btn-secondary mr-2">
                 <i class="fas fa-arrow-left"></i> Kembali
             </a>
             
-            {{-- Tombol diubah menjadi Print Browser agar hasil editan layar bisa ikut tercetak --}}
-            <button onclick="window.print()" class="btn btn-danger">
-                <i class="fas fa-print"></i> Cetak / Simpan PDF
+            {{-- TOMBOL SAKTI: Mode Edit + Download + Buka Tab Baru --}}
+            <button onclick="generateAndDownloadPDF()" class="btn btn-danger shadow-sm" id="btn-download-pdf">
+                <i class="fas fa-file-pdf"></i> Unduh & Buka PDF
             </button>
         </div>
     </div>
 @stop
 
 @section('content')
-<div class="alert alert-info alert-dismissible no-print">
+<div class="alert alert-info alert-dismissible no-print shadow-sm">
     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-    <h5><i class="icon fas fa-info-circle"></i> Mode Edit Cepat!</h5>
-    Beberapa area pada invoice di bawah ini (yang memiliki garis putus-putus) <b>bisa Anda klik dan ketik/edit secara langsung</b> sebelum dicetak. Perubahan angka di sini tidak akan mengubah data asli di database.
+    <h5><i class="icon fas fa-info-circle"></i> Mode Edit Cepat & Auto PDF!</h5>
+    Area dengan <i>background</i> kuning putus-putus <b>bisa Anda ketik/edit secara langsung</b>. 
+    <br>Klik tombol <b>"Unduh & Buka PDF"</b>, sistem akan mengambil editan Anda, mengunduh filenya, dan langsung membukanya di tab baru secara otomatis!
 </div>
 
-<div class="invoice p-3 mb-3" id="print-area">
-    @include('admin.services.pdf_content', ['service' => $service, 'totalService' => $totalService, 'totalSparepart' => $totalSparepart])
+{{-- Pembungkus utama untuk mensimulasikan kertas di layar browser --}}
+<div class="invoice-container">
+    <div class="invoice-wrapper" id="print-area">
+        @include('admin.services.pdf_content', ['service' => $service, 'totalService' => $totalService, 'totalSparepart' => $totalSparepart])
+    </div>
 </div>
 @stop
 
+@push('js')
+{{-- Panggil Library html2pdf.js --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<script>
+    function generateAndDownloadPDF() {
+        let btn = document.getElementById('btn-download-pdf');
+        let originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sedang Memproses...';
+        btn.disabled = true;
+
+        let printArea = document.getElementById('print-area');
+        printArea.classList.add('pdf-rendering-mode');
+
+        // [TRIK ANTI POP-UP BLOCKER] 
+        // Buka tab baru SEKARANG JUGA secara sinkron sebelum proses pembuatan PDF yang memakan waktu
+        let pdfWindow = window.open('', '_blank');
+        pdfWindow.document.write('<html style="font-family:sans-serif; text-align:center; background:#f4f6f9; padding-top:100px;"><body><h2>Mempersiapkan Dokumen PDF...</h2><p>Mohon tunggu sebentar, faktur akan segera dimuat di sini.</p></body></html>');
+
+        let opt = {
+            margin:       [0.2, 0.2], 
+            filename:     'Invoice-{{ $service->invoice_no }}.pdf',
+            image:        { type: 'jpeg', quality: 1 },
+            html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
+            jsPDF:        { unit: 'cm', format: [21.5, 14], orientation: 'landscape' }
+        };
+
+        // Mulai Proses Generate PDF
+        html2pdf().set(opt).from(printArea).toPdf().get('pdf').then(function(pdf) {
+            
+            // 1. UNDUH OTOMATIS: Simpan file ke komputer (folder Downloads)
+            pdf.save('Invoice-{{ $service->invoice_no }}.pdf');
+            
+            // 2. BUKA DI TAB BARU: Ubah PDF menjadi format URL (Blob) lalu tembak ke tab kosong yang sudah disiapkan
+            let blobUrl = pdf.output('bloburl');
+            pdfWindow.location.href = blobUrl;
+
+        }).then(() => {
+            // Kembalikan tampilan layar
+            printArea.classList.remove('pdf-rendering-mode');
+            
+            // Update status ke backend (database) diam-diam
+            fetch("{{ route('admin.services.mark_printed', $service->id) }}", {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Content-Type': 'application/json'
+                }
+            }).then(() => {
+                btn.innerHTML = '<i class="fas fa-check"></i> Selesai!';
+                setTimeout(function(){ window.location.reload(); }, 1500);
+            });
+
+        }).catch(err => {
+            console.error("Gagal membuat PDF: ", err);
+            printArea.classList.remove('pdf-rendering-mode');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            
+            // Tutup tab loading jika ternyata prosesnya error/gagal
+            if(pdfWindow) pdfWindow.close(); 
+            
+            alert("Terjadi kesalahan saat memproses PDF.");
+        });
+    }
+</script>
+@endpush
+
 @push('css')
 <style>
-    .invoice-box { 
+    /* Agar di browser tidak memanjang secara aneh */
+    .invoice-container {
+        width: 100%;
+        overflow-x: auto;
+        background: transparent;
+        padding-bottom: 20px;
+    }
+
+    /* Simulasi lebar kertas Continuous Form di layar */
+    .invoice-wrapper { 
         border: 1px solid #ddd; 
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); 
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1); 
         background-color: #fff; 
+        padding: 15px; 
+        width: 800px; 
+        margin: 0 auto;
     }
     
-    /* === PERINTAH KHUSUS UNTUK BROWSER PRINT === */
-    @media print {
-        /* 1. Sembunyikan Menu Sidebar, Navbar, dan Footer AdminLTE */
-        .main-header, .main-sidebar, .main-footer, .no-print {
-            display: none !important;
-        }
+    /* === KOTAK EDIT DI LAYAR BROWSER === */
+    .editable-area {
+        border: 1px dashed #ffc107;
+        background-color: #fffdf5;
+        cursor: text;
+        padding: 1px 4px;
+        border-radius: 2px;
+        transition: 0.2s;
+    }
+    .editable-area:focus {
+        outline: none;
+        background-color: #fff3cd;
+        border-color: #ff9800;
+    }
 
-        /* 2. HILANGKAN SEMUA MARGIN & PADDING BAWAAN TEMPLATE (Biar Mentok) */
-        html, body, .wrapper, .content-wrapper, .content, .invoice, .invoice-box {
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            background-color: #fff !important;
-        }
-
-        /* 3. Atur Kertas Continuous Form dengan Margin 0 (Mentok Ujung Kertas) */
-        @page {
-            size: 21.5cm 14cm; 
-            margin: 0mm !important; /* Margin 0 agar mentok */
-        }
-
-        /* 4. Beri jarak nafas super tipis (2mm) hanya di dalam box agar teks tidak terpotong fisik printer */
-        .invoice-box {
-            border: none !important;
-            box-shadow: none !important;
-            padding: 2mm !important; 
-        }
-
-        /* 5. Paksa browser mencetak warna dan garis tabel */
-        * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-        }
-        
-        /* 6. Mencegah baris terpotong di tengah */
-        tr {
-            page-break-inside: avoid;
-        }
+    /* === SULAP SAAT PDF DI-GENERATE === */
+    .pdf-rendering-mode {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 10px !important;
+    }
+    .pdf-rendering-mode .editable-area {
+        border: none !important;
+        background-color: transparent !important;
+        padding: 0 !important;
+    }
+    .pdf-rendering-mode .editable-area[placeholder]:empty:before {
+        content: "" !important;
     }
 </style>
 @endpush

@@ -16,23 +16,23 @@ $npwpDealer = 'NPWP No.: ' . ($service->lokasi->npwp ?? $service->customer_npwp_
 $serviceOrder = $service->service_order ?? 'Walk In Service';
 $isPartRetail = stripos($serviceOrder, 'part') !== false;
 
-// === Pengaturan Font & Tampilan (DIPERBESAR) ===
+// === Pengaturan Font & Tampilan (DIKEMBALIKAN KE UKURAN KECIL/STANDAR) ===
 $totalDetailsCount = $service->details->count();
-$maxItemsPerPage = 35; // Dikurangi sedikit karena font membesar memakan ruang
+$maxItemsPerPage = 35; 
 
 // Ukuran Font Standar
-$baseFontSize = 14; // <-- DIPERBESAR (Sebelumnya 12)
-$lineHeight = 1.6;  // <-- Spasi direnggangkan (Sebelumnya 1.5)
-$rowPadding = 4;    // <-- Jarak antar baris tabel (Sebelumnya 2)
-$signaturePaddingTop = 30; // <-- Jarak tanda tangan (Sebelumnya 20)
+$baseFontSize = 11; // <-- DIPERKECIL (Sebelumnya 14)
+$lineHeight = 1.3;  
+$rowPadding = 3;    // <-- Sedikit dilonggarkan agar tidak terlalu berdempetan saat font kecil
+$signaturePaddingTop = 25; 
 
-// Logika Scaling Otomatis (Jika item sangat banyak agar tidak berantakan)
+// Logika Scaling Otomatis (Jika item sangat banyak)
 if ($totalDetailsCount > $maxItemsPerPage) {
     $scale = max(0.85, 1 - (($totalDetailsCount - $maxItemsPerPage) * 0.01));
-    $baseFontSize = floor(12 * $scale); // Sebelumnya 11
-    $lineHeight = max(1.2, 1.4 * $scale);
-    $rowPadding = max(2, floor(3 * $scale));
-    $signaturePaddingTop = max(20, floor(30 * $scale));
+    $baseFontSize = floor(11 * $scale); 
+    $lineHeight = max(1.1, 1.3 * $scale);
+    $rowPadding = max(1, floor(3 * $scale));
+    $signaturePaddingTop = max(15, floor(25 * $scale));
 }
 
 $conditionalStyles = "
@@ -103,7 +103,6 @@ $grandTotalDiskon = 0;
                 border: none !important;
                 background-color: transparent !important;
             }
-            /* Paksa sembunyikan tulisan placeholder saat dicetak */
             .editable-area::before, 
             .editable-area[placeholder]:empty::before { 
                 content: "" !important; 
@@ -119,17 +118,17 @@ $grandTotalDiskon = 0;
 <div class="invoice-box">
 
     {{-- ================= HEADER ================= --}}
-    <table style="width: 100%; margin-bottom: 5px;">
+    <table style="width: 100%; margin-bottom: 3px;">
         <tr>
             <td style="text-align: center;">
-                <div style="font-size: 1.4em; font-weight: bold; text-transform: uppercase;">
+                <div style="font-size: 1.3em; font-weight: bold; text-transform: uppercase;">
                     {{ $isPartRetail ? 'FAKTUR PENJUALAN' : 'FAKTUR SERVICE' }}
                 </div>
             </td>
         </tr>
     </table>
 
-    <table style="width: 100%; margin-bottom: 5px;">
+    <table style="width: 100%; margin-bottom: 3px;">
         <tr>
             <td style="width: 60%; font-weight: bold; font-size: 1.1em;">{{ $namaDealer }}</td>
             <td style="width: 40%; text-align: right;">
@@ -139,10 +138,10 @@ $grandTotalDiskon = 0;
         </tr>
     </table>
 
-    <hr style="border:0; border-top:1px solid #000; margin: 3px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 2px 0;">
 
     {{-- ================= INFO PELANGGAN ================= --}}
-    <table style="width: 100%; line-height: 1.2;">
+    <table style="width: 100%; line-height: 1.15;">
         <tr>
             <td style="width:13%;"><strong>Tanggal</strong></td>
             <td style="width:22%;">: {{ $service->reg_date ? \Carbon\Carbon::parse($service->reg_date)->format('d/m/Y') : '-' }}</td>
@@ -179,7 +178,7 @@ $grandTotalDiskon = 0;
         </tr>
     </table>
 
-    <hr style="border:0; border-top:1px solid #000; margin: 5px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 3px 0;">
 
     {{-- ================= ITEM TABLE ================= --}}
     <table class="items-table" style="width: 100%;">
@@ -205,7 +204,7 @@ $grandTotalDiskon = 0;
 
                 @unless($isPartRetail)
                     <tr style="font-weight:bold; border-top:1px solid #ccc;">
-                        <td colspan="8" style="padding-top: 5px;">{{ $groupCode ?: 'Lain-lain' }}</td>
+                        <td colspan="8" style="padding-top: 3px;">{{ $groupCode ?: 'Lain-lain' }}</td>
                     </tr>
                 @endunless
 
@@ -218,7 +217,6 @@ $grandTotalDiskon = 0;
                         <td>{{ $detail->service_package_name }}</td>
                         <td>{{ $detail->item_code ?? '' }}</td>
                         <td>{{ $detail->item_name ?? '' }}</td>
-                        {{-- Jasa: Harga dan Diskon Editable --}}
                         <td class="text-right editable-area" contenteditable="true">{{ number_format($detail->price ?? 0, 0, ',', '.') }}</td>
                         <td class="text-center editable-area" contenteditable="true">0.00</td> 
                         <td class="text-center">{{ $detail->quantity ?? 0 }}</td>
@@ -250,7 +248,6 @@ $grandTotalDiskon = 0;
                         @endphp
                         <tr>
                             <td class="text-center">{{ $itemNumber++ }}</td>
-                            {{-- Sparepart: Package Editable --}}
                             <td class="editable-area" contenteditable="true" placeholder="..."></td>
                             <td>{{ $detail->item_code ?? '' }}</td>
                             <td>{{ $detail->item_name ?? '' }}</td>
@@ -265,7 +262,7 @@ $grandTotalDiskon = 0;
         </tbody>
     </table>
 
-    <hr style="border:0; border-top:1px solid #000; margin: 5px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 3px 0;">
 
     {{-- ================= FOOTER ================= --}}
     @php
@@ -288,9 +285,9 @@ $grandTotalDiskon = 0;
                 </div>
 
                 {{-- Keterangan / Catatan Tambahan --}}
-                <div style="margin-top: 10px;">
+                <div style="margin-top: 5px;">
                     <strong>Keterangan:</strong>
-                    <div class="editable-area" contenteditable="true" placeholder="Tambahkan catatan khusus di sini..." style="min-height: 25px; margin-top: 2px;"></div>
+                    <div class="editable-area" contenteditable="true" placeholder="Tambahkan catatan khusus di sini..." style="min-height: 20px; margin-top: 2px;"></div>
                 </div>
             </td>
             <td style="width: 40%; vertical-align: top;">
@@ -320,19 +317,19 @@ $grandTotalDiskon = 0;
         </tr>
     </table>
 
-    <hr style="border:0; border-top:1px solid #000; margin: 8px 0 2px 0;">
+    <hr style="border:0; border-top:1px solid #000; margin: 4px 0 2px 0;">
 
     {{-- ================= SIGNATURE ================= --}}
     <table class="signature-box" style="width: 100%; text-align: center;">
         <tr>
-            <td style="width:33%;">Counter Service,</td>
+            <td style="width:33%;">Service Advisor,</td>
             <td style="width:33%;">Konsumen,</td>
             <td style="width:34%;">Kasir,</td>
         </tr>
         <tr>
-            <td style="padding-top:30px;">(__________________)</td>
-            <td style="padding-top:30px;">(__________________)</td>
-            <td style="padding-top:30px;">(__________________)</td>
+            <td style="padding-top:25px;">(__________________)</td>
+            <td style="padding-top:25px;">(__________________)</td>
+            <td style="padding-top:25px;">(__________________)</td>
         </tr>
     </table>
 
@@ -342,7 +339,7 @@ $grandTotalDiskon = 0;
 <script type="text/php">
 if (isset($pdf)) {
     $font = $fontMetrics->get_font("Arial", "normal");
-    $size = 11; // <-- DIPERBESAR (Sebelumnya 9)
+    $size = 9; // <-- Font nomor halaman juga diperkecil ke ukuran 9
     $pageText = "Hal {PAGE_NUM} dari {PAGE_COUNT}";
     $x = $pdf->get_width() - 60;
     $y = $pdf->get_height() - 15;

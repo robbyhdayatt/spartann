@@ -27,6 +27,9 @@ class PartController extends Controller
                     }
                     return $row->qty_stok;
                 })
+                ->editColumn('cost', function($row){
+                    return 'Rp ' . number_format($row->cost, 0, ',', '.');
+                })
                 ->editColumn('retail', function($row){
                     return 'Rp ' . number_format($row->retail, 0, ',', '.');
                 })
@@ -41,7 +44,7 @@ class PartController extends Controller
                         $btn .= '<button type="button" class="btn btn-xs btn-warning btn-edit" 
                                     data-id="'.$row->id.'" data-kode="'.$row->kode_part.'" 
                                     data-nama="'.$row->nama_part.'" data-min="'.$row->stok_minimum.'" 
-                                    data-qty="'.$row->qty_stok.'" data-retail="'.$row->retail.'" 
+                                    data-qty="'.$row->qty_stok.'" data-cost="'.$row->cost.'" data-retail="'.$row->retail.'" 
                                     data-active="'.$row->is_active.'" title="Edit">
                                     <i class="fas fa-edit"></i>
                                  </button> ';
@@ -74,6 +77,7 @@ class PartController extends Controller
             'nama_part' => 'required|string',
             'stok_minimum' => 'required|integer|min:0',
             'qty_stok' => 'required|integer|min:0',
+            'cost' => 'required|numeric|min:0',
             'retail' => 'required|numeric|min:0',
             'is_active' => 'required|boolean',
         ]);
@@ -92,6 +96,7 @@ class PartController extends Controller
             'nama_part' => 'required|string',
             'stok_minimum' => 'required|integer|min:0',
             'qty_stok' => 'required|integer|min:0',
+            'cost' => 'required|numeric|min:0',
             'retail' => 'required|numeric|min:0',
             'is_active' => 'required|boolean',
         ]);

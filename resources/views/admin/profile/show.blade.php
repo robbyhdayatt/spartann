@@ -131,7 +131,7 @@
                             <div class="form-group row">
                                 <label for="new_password" class="col-sm-3 col-form-label">Password Baru</label>
                                 <div class="col-sm-9">
-                                    <input type="password" class="form-control @error('new_password') is-invalid @enderror" id="new_password" name="new_password" placeholder="Password baru (Min. 8 karakter)">
+                                    <input type="password" class="form-control @error('new_password') is-invalid @enderror" id="new_password" name="new_password" placeholder="Password baru (Min. 3 karakter)">
                                     @error('new_password') <span class="invalid-feedback">{{ $message }}</span> @enderror
                                 </div>
                             </div>

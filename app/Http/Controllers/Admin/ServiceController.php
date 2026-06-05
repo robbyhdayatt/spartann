@@ -18,6 +18,7 @@ use App\Models\Lokasi;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Exports\ServiceDailyReportExport;
+use Yajra\DataTables\Facades\DataTables; 
 
 class ServiceController extends Controller
 {
@@ -26,7 +27,7 @@ class ServiceController extends Controller
         $this->authorize('view-service');
 
         $user = Auth::user();
-        $query = Service::query();
+        $query = Service::with('lokasi'); 
         $dealers = collect();
 
         if ($request->filled('start_date') || $request->filled('end_date')) {
@@ -74,8 +75,45 @@ class ServiceController extends Controller
             }
         }
 
-        $services = $query->orderBy('created_at', 'desc')
-                          ->paginate(1000)
+        if ($request->ajax()) {
+            // [MODIFIKASI] Hapus orderBy default di sini agar tidak bertabrakan dengan DataTables
+            $data = $query->select('services.*');
+            
+            return DataTables::of($data)
+                ->addIndexColumn()
+                ->editColumn('reg_date', function($row) {
+                    return $row->reg_date ? Carbon::parse($row->reg_date)->format('d M Y') : '-';
+                })
+                ->editColumn('customer_name', function($row) {
+                    return $row->customer_name ?? '-';
+                })
+                ->editColumn('total_amount', function($row) {
+                    $total = $row->total_payment ?? $row->total_amount;
+                    return 'Rp ' . number_format($total, 0, ',', '.');
+                })
+                ->addColumn('dealer', function($row) {
+                    return $row->lokasi ? $row->lokasi->nama_lokasi : $row->dealer_code;
+                })
+                ->addColumn('aksi', function($row) {
+                    $showUrl = route('admin.services.show', $row->id);
+                    return '<a href="'.$showUrl.'" class="btn btn-sm btn-info shadow-sm" title="Lihat Detail"><i class="fas fa-eye mr-1"></i> Detail</a>';
+                })
+                // [MODIFIKASI] Logika Sorting Kustom: "Belum Cetak" Diutamakan, disusul Tanggal Terbaru
+                ->orderColumn('printed_at', function ($query, $order) {
+                    if ($order === 'asc') {
+                        $query->orderByRaw('CASE WHEN printed_at IS NULL THEN 0 ELSE 1 END ASC')->orderBy('created_at', 'desc');
+                    } else {
+                        $query->orderByRaw('CASE WHEN printed_at IS NULL THEN 0 ELSE 1 END DESC')->orderBy('created_at', 'desc');
+                    }
+                })
+                ->rawColumns(['aksi'])
+                ->make(true);
+        }
+
+        // [MODIFIKASI] Terapkan logika sorting yang sama pada fallback non-AJAX
+        $services = $query->orderByRaw('CASE WHEN printed_at IS NULL THEN 0 ELSE 1 END ASC')
+                          ->orderBy('created_at', 'desc')
+                          ->paginate(50000)
                           ->withQueryString();
 
         return view('admin.services.index', [
@@ -93,7 +131,8 @@ class ServiceController extends Controller
         $this->authorize('manage-service');
         
         $request->validate([
-            'file' => 'required|mimes:xls,xlsx,csv'
+            'file' => 'required|mimes:xls,xlsx,csv',
+            'tanggal_laporan' => 'required|date' 
         ]);
 
         try {
@@ -102,8 +141,9 @@ class ServiceController extends Controller
                 return redirect()->back()->with('error', 'Gagal mengimpor: Akun Anda tidak terasosiasi dengan dealer manapun.');
             }
             $userDealerCode = $user->lokasi->kode_lokasi;
+            $tanggalLaporan = $request->input('tanggal_laporan'); 
 
-            $import = new ServiceImport($userDealerCode);
+            $import = new ServiceImport($userDealerCode, $tanggalLaporan); 
             Excel::import($import, $request->file('file'));
 
             $importedCount = $import->getImportedCount();
@@ -116,6 +156,7 @@ class ServiceController extends Controller
                 $message = "Sukses! {$importedCount} data baru ditambahkan.";
                 if ($updatedCount > 0) $message .= " {$updatedCount} data KSG diperbarui.";
                 if ($skippedDuplicate > 0) $message .= " {$skippedDuplicate} data duplikat dilewati.";
+                
                 if (!empty($errors)) {
                     return redirect()->back()->with('success', $message)->with('import_errors', $errors);
                 }
@@ -123,7 +164,13 @@ class ServiceController extends Controller
                 return redirect()->back()->with('success', $message);
             }
             
-            return redirect()->back()->with('error', 'Tidak ada data baru yang diimpor. ' . ($skippedDuplicate > 0 ? "{$skippedDuplicate} data duplikat ditemukan." : ""));
+            $errorMessage = 'Tidak ada data baru yang diimpor. ' . ($skippedDuplicate > 0 ? "{$skippedDuplicate} data duplikat ditemukan." : "");
+            
+            if (!empty($errors)) {
+                return redirect()->back()->with('error', $errorMessage)->with('import_errors', $errors);
+            }
+
+            return redirect()->back()->with('error', $errorMessage);
 
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Terjadi kesalahan fatal saat membaca file: ' . $e->getMessage());
@@ -213,7 +260,26 @@ class ServiceController extends Controller
             ->setPaper($customPaper)
             ->setOptions(['isHtml5ParserEnabled' => true, 'isRemoteEnabled' => true]);
 
-        return $pdf->stream($fileName);
+        // [MODIFIKASI] Memaksa browser untuk membuka PDF langsung di tab (Inline)
+        // Ini akan mencegah PDF ter-download otomatis ke folder komputer Anda.
+        return response()->make($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$fileName.'"'
+        ]);
+    }
+
+    public function markAsPrinted($id)
+    {
+        $this->authorize('view-service');
+        
+        $service = Service::findOrFail($id);
+        
+        if (is_null($service->printed_at)) {
+            $service->printed_at = now();
+            $service->save();
+        }
+
+        return response()->json(['status' => 'success', 'message' => 'Status cetak diperbarui']);
     }
 
     public function update(Request $request, Service $service)
@@ -238,7 +304,6 @@ class ServiceController extends Controller
             foreach ($validated['items'] as $item) {
                 $barang = Barang::find($item['part_id']);
 
-                // [MODIFIKASI] VALIDASI BARANG AKTIF
                 if (!$barang->is_active) {
                     throw new \Exception("Gagal Tambah Part! '{$barang->part_name}' statusnya NONAKTIF.");
                 }
@@ -268,7 +333,7 @@ class ServiceController extends Controller
                     if ($sisaQty <= 0) break;
 
                     $potong = min($batch->quantity, $sisaQty);
-                    $costPerUnit = $barang->selling_out; // Asumsi harga modal dealer
+                    $costPerUnit = $barang->selling_out; 
                     $totalHpp += ($costPerUnit * $potong);
                     $batch->decrement('quantity', $potong);
 

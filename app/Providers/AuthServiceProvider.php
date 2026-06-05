@@ -38,47 +38,48 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('manage-jabatans', fn(User $user) => $user->hasRole('SA'));
 
         // Menu Lokasi (SA & PIC View Only)
-        Gate::define('view-lokasi', fn(User $user) => $user->isGlobal());
-        Gate::define('manage-lokasi', fn(User $user) => false);
+        Gate::define('view-lokasi', fn(User $user) => $user->hasRole('SA'));
+        Gate::define('manage-lokasi', fn(User $user) => $user->hasRole('SA'));
 
         // Menu Rak
         Gate::define('view-raks', function (User $user) {
-            if ($user->isGlobal()) return true;
+            if ($user->hasRole('SA')) return true;
             if ($user->hasRole(['AG', 'KG']) && $user->isGudang()) return true; // Gudang
             if ($user->hasRole(['ASD', 'IMS', 'ACC']) && $user->isPusat()) return true; // Pusat
             if ($user->hasRole(['KC', 'PC']) && $user->isDealer()) return true; // Dealer
             return false;
         });
-        Gate::define('manage-raks', fn(User $user) => false); // Hanya SA (Full Akses)
+        Gate::define('manage-raks', fn(User $user) => $user->hasRole('SA')); // Hanya SA (Full Akses)
 
         // Menu Supplier
-        Gate::define('view-supplier', fn(User $user) => $user->isGlobal() || $user->hasRole(['AG', 'KG']));
-        Gate::define('manage-supplier', fn(User $user) => $user->hasRole(['AG', 'KG']));
+        Gate::define('view-supplier', fn(User $user) => $user->hasRole('SA') || $user->hasRole(['AG', 'KG']));
+        Gate::define('manage-supplier', fn(User $user) => $user->hasRole('SA') || $user->hasRole(['AG', 'KG']));
 
         // Master Convert
-        Gate::define('view-convert', fn(User $user) => $user->isGlobal() || $user->hasRole('ASD'));
-        Gate::define('manage-convert', fn(User $user) => $user->hasRole('ASD'));
+        Gate::define('view-convert', fn(User $user) => $user->hasRole('SA') || $user->hasRole('ASD'));
+        Gate::define('manage-convert', fn(User $user) => $user->hasRole('SA') || $user->hasRole('ASD'));
 
         // Master Item (Barang)
         Gate::define('view-barang', function (User $user) {
-            return $user->isGlobal() || 
+            return $user->hasRole('SA') || 
                    $user->hasRole(['ASD', 'IMS', 'ACC']) || 
-                   $user->hasRole(['AG', 'KG']);
+                   $user->hasRole(['AG', 'KG']) ||
+                   $user->hasRole(['KC', 'PC']);
         });
         Gate::define('manage-barang', function (User $user) {
-            return $user->hasRole(['ASD', 'IMS', 'ACC', 'AG', 'KG']);
+            return $user->hasRole('SA') || $user->hasRole(['ASD', 'IMS', 'ACC', 'AG', 'KG']);
         });
 
         // [TAMBAHAN] Master Item YGP
         Gate::define('view-ygp', function (User $user) {
-            return $user->isGlobal() || 
+            return $user->hasRole('SA') || 
                    $user->hasRole(['ASD', 'IMS', 'ACC']) || 
                    $user->hasRole(['AG', 'KG']) ||
                    $user->hasRole(['KC', 'PC']);
 
         });
         Gate::define('manage-ygp', function (User $user) {
-            return $user->hasRole(['ASD', 'IMS', 'ACC', 'AG', 'KG']);
+            return $user->hasRole('SA') || $user->hasRole(['ASD', 'IMS', 'ACC', 'AG', 'KG']);
         });
 
         // Detail: Visibility Harga
@@ -98,8 +99,8 @@ class AuthServiceProvider extends ServiceProvider
         // GROUP B: PEMBELIAN & INBOUND
         // =================================================================
         Gate::define('create-po', function (User $user) {
-            // SA/PIC (Global)
-            if ($user->isGlobal()) return true;
+            // SA (Global)
+            if ($user->hasRole('SA')) return true;
             
             // AG (Gudang) -> Bikin PO Supplier
             if ($user->hasRole('AG') && $user->isGudang()) return true;
@@ -112,8 +113,8 @@ class AuthServiceProvider extends ServiceProvider
 
         // Menu PO (View List)
         Gate::define('view-po', function (User $user) {
-            return $user->isGlobal() || 
-                   $user->hasRole(['AG', 'IMS', 'KG', 'ASD', 'ACC', 'PC']) 
+            return $user->hasRole('SA') || 
+                   $user->hasRole(['AG', 'IMS', 'KG', 'ASD', 'ACC']) 
                 //    ||($user->isDealer() && $user->hasRole(['PC', 'KC']))
                    ;
         });
@@ -121,8 +122,8 @@ class AuthServiceProvider extends ServiceProvider
         // Create PO Khusus
         Gate::define('create-po-supplier', fn(User $user) => $user->hasRole('AG'));
         Gate::define('create-po-dealer', fn(User $user) => $user->hasRole('IMS'));
-        
-        // [MODIFIKASI] GATE APPROVAL PO (Yang sebelumnya hilang)
+
+        // Approve PO
         Gate::define('approve-po', function (User $user, \App\Models\PurchaseOrder $po) {
             // Super Admin / PIC boleh approve semuanya
             if ($user->isGlobal()) return true;
@@ -146,21 +147,21 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('create-retur-pembelian', fn(User $user) => $user->hasRole('AG'));
 
         // Receiving
-        Gate::define('view-receiving', fn(User $user) => $user->isGlobal() || $user->hasRole(['AG', 'PC']));
+        Gate::define('view-receiving', fn(User $user) => $user->hasRole('SA') || $user->hasRole(['AG']));
         Gate::define('process-receiving-gudang', fn(User $user) => $user->hasRole('AG'));
         Gate::define('process-receiving-dealer', fn(User $user) => $user->hasRole('PC'));
 
         // Quality Control (QC)
-        Gate::define('view-qc', fn(User $user) => $user->isGlobal() || $user->hasRole('AG'));
+        Gate::define('view-qc', fn(User $user) => $user->hasRole('SA') || $user->hasRole('AG'));
         Gate::define('process-qc', fn(User $user) => $user->hasRole('AG'));
 
         // Putaway
-        Gate::define('view-putaway', fn(User $user) => $user->isGlobal() || $user->hasRole(['AG', 'PC']));
+        Gate::define('view-putaway', fn(User $user) => $user->hasRole('SA') || $user->hasRole(['AG']));
         Gate::define('process-putaway-gudang', fn(User $user) => $user->hasRole('AG'));
         Gate::define('process-putaway-dealer', fn(User $user) => $user->hasRole('PC'));
 
         // Stok Karantina
-        Gate::define('view-karantina', fn(User $user) => $user->isGlobal() || $user->hasRole(['AG', 'KG']));
+        Gate::define('view-karantina', fn(User $user) => $user->hasRole('SA') || $user->hasRole(['AG', 'KG']));
         Gate::define('manage-karantina', fn(User $user) => $user->hasRole('AG'));
 
 
@@ -172,13 +173,13 @@ class AuthServiceProvider extends ServiceProvider
         
         // 1. View Adjustment
         Gate::define('view-stock-adjustment', function (User $user) {
-            return $user->isGlobal() || $user->hasRole(['AG', 'KG', 'ACC', 'IMS', 'SA', 'PIC']);
+            return $user->hasRole('SA') || $user->hasRole(['AG', 'KG', 'ACC', 'IMS']);
         });
 
         // 2. Create Adjustment (Gabungan logika Gudang & Dealer)
         Gate::define('create-stock-adjustment', function (User $user) {
             // Global (SA/PIC) boleh
-            if ($user->isGlobal()) return true;
+            if ($user->hasRole('SA')) return true;
 
             // Gudang: Admin Gudang (AG) boleh
             if ($user->isGudang() && $user->hasRole('AG')) return true;
@@ -195,7 +196,7 @@ class AuthServiceProvider extends ServiceProvider
         // 3. Approve Adjustment
         Gate::define('approve-stock-adjustment', function (User $user) {
             // Global (SA/PIC) boleh
-            if ($user->isGlobal()) return true;
+            if ($user->hasRole('SA')) return true;
 
             // Gudang: Kepala Gudang (KG) approve kerjaan AG
             if ($user->isGudang() && $user->hasRole('KG')) return true;
@@ -209,7 +210,7 @@ class AuthServiceProvider extends ServiceProvider
 
         // Mutasi Stok
         Gate::define('view-stock-transaction', function (User $user) {
-            return $user->isGlobal() || 
+            return $user->hasRole('SA') || 
                    $user->hasRole(['AG', 'KG', 'IMS', 'ACC', 'ASD']) ||
                    ($user->isDealer() && $user->hasRole(['KC', 'PC']));
         });
@@ -217,7 +218,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('create-stock-transaction', function (User $user) {
             // Siapa yang boleh request mutasi?
             // Biasanya Admin Gudang (Gudang) atau Part Counter (Dealer)
-            return $user->isGlobal() || 
+            return $user->hasRole('SA') || 
                    ($user->isGudang() && $user->hasRole('AG')) ||
                    ($user->isDealer() && $user->hasRole('PC'));
         });
@@ -225,7 +226,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('approve-stock-transaction', function (User $user) {
             // Siapa yang menyetujui mutasi keluar?
             // Kepala Gudang (Gudang) atau Kepala Cabang (Dealer)
-            return $user->isGlobal() || 
+            return $user->hasRole('SA') || 
                    ($user->isGudang() && $user->hasRole('KG')) ||
                    ($user->isDealer() && $user->hasRole('KC'));
         });

@@ -14,9 +14,10 @@ class PenjualanDetail extends Model
     protected $fillable = [
         'penjualan_id',
         'barang_id',
-        'rak_id',      
+        'rak_id',
         'qty_jual',
         'harga_jual',
+        'harga_modal', // <--- TAMBAHKAN BARIS INI
         'subtotal',
         'qty_diretur'
     ];

@@ -8,6 +8,7 @@ use App\Models\Lokasi;
 use App\Models\Barang;
 use App\Models\InventoryBatch;
 use App\Models\StockMovement;
+use App\Models\Part; // [MODIFIKASI]: Memanggil tabel parts untuk referensi Harga Modal
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -26,10 +27,13 @@ class ServiceImport implements OnEachRow, WithChunkReading
     private $skippedDealerCount = 0;
     private $skippedDuplicateCount = 0;
 
-    // State
+    // State & Rollback Handlers
     private $currentService = null;
     private $processedDetailIds = []; 
     private $currentServiceCategoryCode = null;
+    private $failedInvoices = [];
+    private $isCurrentServiceNew = false;
+    private $importedServiceIds = []; // Penampung ID untuk koreksi motor menginap
     
     // Config & Cache
     private $userDealerCode;
@@ -43,10 +47,14 @@ class ServiceImport implements OnEachRow, WithChunkReading
     private $colMap = [];
     private $referenceRegDate = null;
 
-    public function __construct(string $userDealerCode)
+    // Tambahkan parameter $tanggalLaporan
+    public function __construct(string $userDealerCode, string $tanggalLaporan)
     {
         $this->userDealerCode = $userDealerCode;
         $this->userId = Auth::id();
+        
+        $this->referenceRegDate = $tanggalLaporan; 
+        
         $this->lokasiMapping = Lokasi::pluck('id', 'kode_lokasi')->toArray();
         $this->convertMapping = DB::table('converts')
              ->get()
@@ -56,11 +64,42 @@ class ServiceImport implements OnEachRow, WithChunkReading
              ->toArray();
     }
 
-    // --- CLEANUP ---
+    // --- CLEANUP & AUTO-CORRECTION ---
     public function __destruct()
     {
         if ($this->currentService) {
             $this->cleanupOrphanDetails($this->currentService);
+        }
+
+        // [FITUR BARU: AUTO-KOREKSI MOTOR MENGINAP]
+        // Menarik maju tanggal laporan motor yang masuk kemarin tapi selesai di hari ini
+        if (!empty($this->importedServiceIds) && $this->referenceRegDate) {
+            $targetDate = $this->referenceRegDate;
+            
+            $servicesToFix = Service::whereIn('id', $this->importedServiceIds)
+                ->whereDate('created_at', '<', $targetDate)
+                ->get();
+
+            foreach ($servicesToFix as $srv) {
+                $diffDays = Carbon::parse($srv->reg_date)->diffInDays(Carbon::parse($targetDate));
+                
+                // Batasi maksimal selisih 7 hari agar tidak merusak data jika mengimpor Laporan Bulanan
+                if ($diffDays > 0 && $diffDays <= 7) {
+                    $newCreatedAt = $targetDate . ' ' . $srv->created_at->format('H:i:s');
+                    
+                    $srv->timestamps = false; // Matikan auto-update waktu sesaat
+                    $srv->created_at = $newCreatedAt;
+                    $srv->save();
+                    
+                    // Sinkronkan juga laporan pengeluaran gudangnya
+                    StockMovement::where('referensi_type', 'App\Models\Service')
+                        ->where('referensi_id', $srv->id)
+                        ->update([
+                            'created_at' => $newCreatedAt,
+                            'updated_at' => $newCreatedAt
+                        ]);
+                }
+            }
         }
     }
 
@@ -280,9 +319,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $sisaQty -= $potong;
             }
 
-            // [PERBAIKAN SKENARIO 1: HARD STOP]
-            // Jika setelah looping ternyata masih ada sisa Qty yang belum terpenuhi,
-            // berarti stok di sistem tidak cukup. Lemparkan error agar import dibatalkan!
             if ($sisaQty > 0) {
                 $stokYangAda = $qty - $sisaQty;
                 throw new \Exception("Stok '{$namaBarang}' TIDAK CUKUP! Diminta: {$qty}, Tersedia: {$stokYangAda}.");
@@ -291,7 +327,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
             return ($qty > 0) ? ($totalCost / $qty) : 0;
         } 
         else {
-            // Logika untuk Refund/Retur (Qty Minus)
             $qtyToRestore = abs($qty);
             
             $batch = InventoryBatch::where('barang_id', $barangId)
@@ -339,6 +374,8 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $query = $service->details()->where('item_category', $type);
 
         $barangId = null;
+        $masterCost = 0; // [MODIFIKASI]: Penampung Harga Modal (Cost Price) dari tabel parts
+
         if ($type == 'PART' || $type == 'OLI') {
             $barang = Barang::where('part_code', $data['item_code'])->first();
             if ($barang) {
@@ -346,6 +383,12 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 $query->where('barang_id', $barangId);
             } else {
                 $query->where('item_code', $data['item_code']);
+            }
+
+            // [MODIFIKASI]: Tarik data Harga Modal dari Master Part
+            $partData = Part::where('kode_part', $data['item_code'])->first();
+            if ($partData && $partData->cost > 0) {
+                $masterCost = $partData->cost;
             }
         } else {
             $query->where('service_package_name', $data['service_package_name']);
@@ -383,7 +426,10 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     'barang_id' => $barangId,
                 ];
                 
-                if (is_null($barangId) && $existingDetail->barang_id) {
+                // [MODIFIKASI]: Jika Harga Modal tersedia di tabel Parts, timpa langsung saat update
+                if ($masterCost > 0) {
+                    $updateData['cost_price'] = $masterCost;
+                } elseif (is_null($barangId) && $existingDetail->barang_id) {
                     $updateData['cost_price'] = 0; 
                 }
                 
@@ -393,7 +439,13 @@ class ServiceImport implements OnEachRow, WithChunkReading
         } else {
             $costPrice = 0;
             if ($barangId) {
+                // Awalnya costPrice dihitung secara dinamik berdasarkan Batch Inventory
                 $costPrice = $this->processStockDeduction($barangId, $data['quantity'], $service->id, $lokasiId, $service->invoice_no, $serviceDate);
+            }
+
+            // [MODIFIKASI]: Timpa hasil di atas dengan Cost Price dari tabel parts (Jika nilainya valid)
+            if ($masterCost > 0) {
+                $costPrice = $masterCost;
             }
 
             $newDetail = $service->details()->create([
@@ -406,7 +458,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 'quantity' => $data['quantity'],
                 'price' => $data['price'],
                 'barang_id' => $barangId,
-                'cost_price' => $costPrice,
+                'cost_price' => $costPrice, // Terisi Harga Modal yang Akurat
             ]);
             
             $this->processedDetailIds[] = $newDetail->id;
@@ -489,149 +541,213 @@ class ServiceImport implements OnEachRow, WithChunkReading
 
         if (empty(array_filter($rowArray))) return;
 
-        DB::transaction(function() use ($rowArray, $rowIndex) {
+        DB::beginTransaction(); 
+        
+        try {
             if (!$this->headerRowDetected) {
-                if ($this->detectHeaderRow($rowArray)) return; 
+                if ($this->detectHeaderRow($rowArray)) {
+                    DB::commit();
+                    return; 
+                }
             }
 
             $rowString = implode(' ', array_slice($rowArray, 0, 10));
-            if (str_contains(strtoupper($rowString), 'TOTAL')) return;
+            if (str_contains(strtoupper($rowString), 'TOTAL')) {
+                DB::commit();
+                return;
+            }
 
             if ($this->isRowCancelled($rowArray)) {
+                DB::commit();
                 return;
             }
 
             $invoiceNo = trim($this->getVal($rowArray, 'invoice_no') ?? '');
+            
+            // CEK BLACKLIST INVOICE
+            if (!empty($invoiceNo) && in_array($invoiceNo, $this->failedInvoices)) {
+                DB::commit();
+                return; 
+            }
+
             $dealerCode = trim($this->getVal($rowArray, 'dealer_code') ?? '');
 
-            try {
-                // VALIDASI DEALER CODE
-                if (!empty($dealerCode)) {
-                    if ($dealerCode !== $this->userDealerCode) {
-                        $this->skippedDealerCount++; 
-                        $this->currentService = null; 
-                        return;
-                    }
-                    if (!isset($this->lokasiMapping[$dealerCode])) {
-                        $this->skippedCount++; 
-                        $this->currentService = null;
-                        $this->errorMessages[] = "Baris {$rowIndex}: Kode Dealer '{$dealerCode}' tidak dikenali.";
-                        return;
-                    }
-                }
-
-                // PROSES BARIS DENGAN INVOICE NO
-                if (!empty($invoiceNo)) {
-                    // Skip cancelled row
-                    if ($this->isRowCancelled($rowArray)) {
-                        $this->currentService = null;
-                        return;
-                    }
-                    
-                    // Cleanup previous service jika beda invoice
-                    if ($this->currentService && $this->currentService->invoice_no !== $invoiceNo) {
-                        $this->cleanupOrphanDetails($this->currentService);
-                        $this->processedDetailIds = [];
-                        $this->currentServiceCategoryCode = null;
-                    }
-
-                    // CEK EXISTING SERVICE (FIX UTAMA)
-                    $existingService = Service::where('invoice_no', $invoiceNo)
-                                        ->where('dealer_code', $dealerCode)
-                                        ->lockForUpdate()
-                                        ->first();
-
-                    $regDate = $this->parseDate($this->getVal($rowArray, 'reg_date'));
-                    if (empty($regDate)) {
-                        throw new \Exception("Tanggal registrasi invalid pada baris {$rowIndex}.");
-                    }
-
-                    if ($this->referenceRegDate === null) $this->referenceRegDate = $regDate;
-                    $isFileToday = ($this->referenceRegDate === now()->toDateString());
-                    $shouldBackdate = !$isFileToday; 
-
-                    $serviceData = [
-                        'reg_date' => $regDate,
-                        'dealer_code' => $dealerCode,
-                        'lokasi_id' => $this->lokasiMapping[$dealerCode] ?? null,
-                        'yss' => $this->getVal($rowArray, 'yss'),
-                        'point' => $this->getVal($rowArray, 'point'),
-                        'service_order' => $this->getVal($rowArray, 'service_order'),
-                        'plate_no' => $this->getVal($rowArray, 'plate_no'),
-                        'work_order_no' => $this->getVal($rowArray, 'work_order'),
-                        'work_order_status' => $this->getVal($rowArray, 'wo_status'),
-                        'technician_name' => $this->getVal($rowArray, 'technician'),
-                        'customer_name' => $this->getVal($rowArray, 'cust_name'),
-                        'customer_ktp' => $this->getVal($rowArray, 'cust_ktp'),
-                        'customer_npwp_no' => $this->getVal($rowArray, 'cust_npwp_no'),
-                        'customer_npwp_name' => $this->getVal($rowArray, 'cust_npwp_name'),
-                        'customer_phone' => $this->getVal($rowArray, 'cust_phone'),
-                        'mc_brand' => $this->getVal($rowArray, 'mc_brand'),
-                        'mc_model_name' => $this->getVal($rowArray, 'mc_model'),
-                        'mc_frame_no' => $this->getVal($rowArray, 'mc_frame'),
-                        'payment_type' => $this->getVal($rowArray, 'payment_type'),
-                        'transaction_code' => $this->getVal($rowArray, 'trans_code'),
-                        'e_payment_amount' => $this->cleanNumeric($this->getVal($rowArray, 'e_payment')),
-                        'cash_amount' => $this->cleanNumeric($this->getVal($rowArray, 'cash')),
-                        'debit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'debit')),
-                        'total_down_payment' => $this->cleanNumeric($this->getVal($rowArray, 'dp')),
-                        'total_labor' => $this->cleanNumeric($this->getVal($rowArray, 'total_labor')),
-                        'total_part_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_part')),
-                        'total_oil_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_oil')),
-                        'total_retail_parts' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_parts')),
-                        'total_retail_oil' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_oil')),
-                        'total_amount' => $this->cleanNumeric($this->getVal($rowArray, 'total_amount')),
-                        'benefit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'benefit')),
-                        'total_payment' => $this->cleanNumeric($this->getVal($rowArray, 'total_payment')),
-                        'balance' => $this->cleanNumeric($this->getVal($rowArray, 'balance')),
-                    ];
-
-                    if ($existingService) {
-                        // UPDATE MODE
-                        $this->processedDetailIds = []; 
-                        
-                        $existingService->update($serviceData);
-                        $this->currentService = $existingService;
-                        $this->updatedCount++;
-                    } else {
-                        // CREATE MODE
-                        $this->processedDetailIds = [];
-                        
-                        $serviceData['invoice_no'] = $invoiceNo;
-                        
-                        if ($shouldBackdate) {
-                            $sibling = Service::where('dealer_code', $dealerCode)
-                                ->where('reg_date', $regDate)
-                                ->orderBy('created_at', 'asc')
-                                ->first();
-                            if ($sibling) {
-                                $serviceData['created_at'] = $sibling->created_at;
-                                $serviceData['updated_at'] = now();
-                            }
-                        }
-                        
-                        $this->currentService = Service::create($serviceData);
-                        $this->importedCount++;
-                    }
-                    
-                    $this->currentServiceCategoryCode = $this->getVal($rowArray, 'service_category');
-                
-                } elseif (empty($invoiceNo) && !$this->currentService) {
-                    // Baris tanpa invoice & tidak ada service aktif = skip
+            // VALIDASI DEALER CODE
+            if (!empty($dealerCode)) {
+                if ($dealerCode !== $this->userDealerCode) {
+                    $this->skippedDealerCount++; 
+                    $this->currentService = null; 
+                    $this->errorMessages[] = "Baris {$rowIndex}: Kode Dealer '{$dealerCode}' Ditolak. Tidak sesuai dengan dealer Anda ('{$this->userDealerCode}').";
+                    DB::commit();
                     return;
                 }
+                if (!isset($this->lokasiMapping[$dealerCode])) {
+                    $this->skippedCount++; 
+                    $this->currentService = null;
+                    $this->errorMessages[] = "Baris {$rowIndex}: Kode Dealer '{$dealerCode}' tidak dikenali di database.";
+                    DB::commit();
+                    return;
+                }
+            }
 
-                // PROSES DETAIL ROWS
-                if ($this->currentService) {
-                    $this->processRowDetails($this->currentService, $rowArray);
+            // PROSES BARIS DENGAN INVOICE NO
+            if (!empty($invoiceNo)) {
+                if ($this->isRowCancelled($rowArray)) {
+                    $this->currentService = null;
+                    DB::commit();
+                    return;
+                }
+                
+                if ($this->currentService && $this->currentService->invoice_no !== $invoiceNo) {
+                    $this->cleanupOrphanDetails($this->currentService);
+                    $this->processedDetailIds = [];
+                    $this->currentServiceCategoryCode = null;
                 }
 
-            } catch (\Exception $e) {
-                Log::error("Import Error Row {$rowIndex}: " . $e->getMessage());
-                $this->errorMessages[] = "Row {$rowIndex}: " . $e->getMessage();
-                $this->skippedCount++;
-                if (!empty($invoiceNo)) $this->currentService = null;
+                $existingService = Service::where('invoice_no', $invoiceNo)
+                                    ->where('dealer_code', $dealerCode)
+                                    ->lockForUpdate()
+                                    ->first();
+
+                $regDate = $this->parseDate($this->getVal($rowArray, 'reg_date'));
+                if (empty($regDate)) {
+                    throw new \Exception("Tanggal registrasi invalid.");
+                }
+                
+                $isFileToday = ($this->referenceRegDate === now()->toDateString());
+                $shouldBackdate = !$isFileToday; 
+
+                $serviceData = [
+                    'reg_date' => $regDate,
+                    'dealer_code' => $dealerCode,
+                    'lokasi_id' => $this->lokasiMapping[$dealerCode] ?? null,
+                    'yss' => $this->getVal($rowArray, 'yss'),
+                    'point' => $this->getVal($rowArray, 'point'),
+                    'service_order' => $this->getVal($rowArray, 'service_order'),
+                    'plate_no' => $this->getVal($rowArray, 'plate_no'),
+                    'work_order_no' => $this->getVal($rowArray, 'work_order'),
+                    'work_order_status' => $this->getVal($rowArray, 'wo_status'),
+                    'technician_name' => $this->getVal($rowArray, 'technician'),
+                    'customer_name' => $this->getVal($rowArray, 'cust_name'),
+                    'customer_ktp' => $this->getVal($rowArray, 'cust_ktp'),
+                    'customer_npwp_no' => $this->getVal($rowArray, 'cust_npwp_no'),
+                    'customer_npwp_name' => $this->getVal($rowArray, 'cust_npwp_name'),
+                    'customer_phone' => $this->getVal($rowArray, 'cust_phone'),
+                    'mc_brand' => $this->getVal($rowArray, 'mc_brand'),
+                    'mc_model_name' => $this->getVal($rowArray, 'mc_model'),
+                    'mc_frame_no' => $this->getVal($rowArray, 'mc_frame'),
+                    'payment_type' => $this->getVal($rowArray, 'payment_type'),
+                    'transaction_code' => $this->getVal($rowArray, 'trans_code'),
+                    'e_payment_amount' => $this->cleanNumeric($this->getVal($rowArray, 'e_payment')),
+                    'cash_amount' => $this->cleanNumeric($this->getVal($rowArray, 'cash')),
+                    'debit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'debit')),
+                    'total_down_payment' => $this->cleanNumeric($this->getVal($rowArray, 'dp')),
+                    'total_labor' => $this->cleanNumeric($this->getVal($rowArray, 'total_labor')),
+                    'total_part_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_part')),
+                    'total_oil_service' => $this->cleanNumeric($this->getVal($rowArray, 'total_oil')),
+                    'total_retail_parts' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_parts')),
+                    'total_retail_oil' => $this->cleanNumeric($this->getVal($rowArray, 'total_retail_oil')),
+                    'total_amount' => $this->cleanNumeric($this->getVal($rowArray, 'total_amount')),
+                    'benefit_amount' => $this->cleanNumeric($this->getVal($rowArray, 'benefit')),
+                    'total_payment' => $this->cleanNumeric($this->getVal($rowArray, 'total_payment')),
+                    'balance' => $this->cleanNumeric($this->getVal($rowArray, 'balance')),
+                ];
+
+                if ($existingService) {
+                    $this->isCurrentServiceNew = false;
+                    $this->processedDetailIds = []; 
+                    
+                    $existingService->update($serviceData);
+                    $this->currentService = $existingService;
+                    $this->updatedCount++;
+                    
+                    // DAFTARKAN ID UNTUK AUTO-KOREKSI
+                    $this->importedServiceIds[$existingService->id] = $existingService->id;
+                } else {
+                    $this->isCurrentServiceNew = true;
+                    $this->processedDetailIds = [];
+                    
+                    $serviceData['invoice_no'] = $invoiceNo;
+                    
+                    if ($shouldBackdate) {
+                        $sibling = Service::where('dealer_code', $dealerCode)
+                            ->where('reg_date', $regDate)
+                            ->orderBy('created_at', 'asc')
+                            ->first();
+                        
+                        if ($sibling) {
+                            $serviceData['created_at'] = $sibling->created_at;
+                            $serviceData['updated_at'] = now();
+                        } else {
+                            $serviceData['created_at'] = $regDate . ' ' . now()->format('H:i:s');
+                            $serviceData['updated_at'] = now();
+                        }
+                    }
+                    
+                    $this->currentService = Service::create($serviceData);
+                    $this->importedCount++;
+                    
+                    // DAFTARKAN ID UNTUK AUTO-KOREKSI
+                    $this->importedServiceIds[$this->currentService->id] = $this->currentService->id;
+                }
+                
+                $this->currentServiceCategoryCode = $this->getVal($rowArray, 'service_category');
+            
+            } elseif (empty($invoiceNo) && !$this->currentService) {
+                DB::commit();
+                return;
             }
-        });
+
+            if ($this->currentService) {
+                $this->processRowDetails($this->currentService, $rowArray);
+            }
+
+            DB::commit();
+
+        } catch (\Exception $e) {
+            DB::rollBack(); 
+            Log::error("Import Error Row {$rowIndex}: " . $e->getMessage());
+            
+            $pesanError = $e->getMessage();
+            $invoiceFailed = $invoiceNo ?: ($this->currentService ? $this->currentService->invoice_no : 'Unknown');
+            
+            $this->errorMessages[] = "Baris {$rowIndex} " . ($invoiceFailed !== 'Unknown' ? "(Invoice: {$invoiceFailed})" : "") . " Gagal: " . $pesanError;
+            $this->skippedCount++;
+            
+            if ($invoiceFailed !== 'Unknown') {
+                $this->failedInvoices[] = $invoiceFailed;
+            }
+
+            // KEMBALIKAN STOK & HAPUS HEADER JIKA TRANSAKSI SETENGAH MATANG
+            if ($this->currentService && $this->isCurrentServiceNew) {
+                try {
+                    $detailsToRollback = $this->currentService->details()->get();
+                    foreach ($detailsToRollback as $detail) {
+                        if ($detail->barang_id && $detail->quantity > 0) {
+                            $this->processStockDeduction(
+                                $detail->barang_id,
+                                -($detail->quantity), 
+                                $this->currentService->id,
+                                $this->currentService->lokasi_id,
+                                $this->currentService->invoice_no,
+                                $this->currentService->created_at
+                            );
+                        }
+                        $detail->delete(); 
+                    }
+                    $srvId = $this->currentService->id;
+                    $this->currentService->delete(); 
+                    $this->importedCount--; 
+                    
+                    // Lepas dari antrean Auto-Koreksi karena datanya sudah dihapus
+                    unset($this->importedServiceIds[$srvId]); 
+                } catch (\Exception $rollbackEx) {
+                    Log::error("Gagal melakukan manual rollback untuk Invoice {$invoiceFailed}: " . $rollbackEx->getMessage());
+                }
+            }
+            
+            $this->currentService = null; 
+            $this->currentServiceCategoryCode = null;
+        }
     }
 }

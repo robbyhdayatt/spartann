@@ -97,6 +97,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('services/export-excel', [ServiceController::class, 'exportExcel'])->name('services.export.excel');
     Route::get('services/{service}', [ServiceController::class, 'show'])->name('services.show');
     Route::get('services/{id}/pdf', [ServiceController::class, 'downloadPDF'])->name('services.pdf');
+    Route::post('services/{id}/mark-printed', [ServiceController::class, 'markAsPrinted'])->name('services.mark_printed');
 
     // === LAPORAN ===
     Route::get('reports/stock-card', [ReportController::class, 'stockCard'])->name('reports.stock-card');
@@ -131,7 +132,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('api/lokasi/{lokasi}/adjustment-raks', [StockAdjustmentController::class, 'getRaksByGudang'])->name('api.gudang.raks.for.adjustment');
     Route::get('/api/receivings/{receiving}/failed-items', [PurchaseReturnController::class, 'getFailedItems'])->name('api.receivings.failed-items');
     Route::get('/api/penjualans/{penjualan}/returnable-items', [SalesReturnController::class, 'getReturnableItems'])->name('penjualans.returnable-items');
-    Route::get('api/penjualan/items', [PenjualanController::class, 'getBarangItems']) ->name('api.penjualan.items');
+    Route::get('api/penjualan/items', [PenjualanController::class, 'getBarangItems'])->name('api.penjualan.items');
     Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
     Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
     Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
@@ -140,6 +141,11 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('purchase-returns/get-failed-items/{receiving}', [PurchaseReturnController::class, 'getFailedItems']);
     Route::get('stock-adjustments/get-barangs', [StockAdjustmentController::class, 'getBarangs'])->name('stock-adjustments.get-barangs');
     Route::get('stock-adjustments/get-batches', [StockAdjustmentController::class, 'getBatches'])->name('stock-adjustments.get-batches');
-    Route::get('api/lokasi/{lokasi}/raks', function(App\Models\Lokasi $lokasi) { return $lokasi->raks()->where('is_active', true)->get();
+    
+    // Perbaikan penutupan function dan penamaan route
+    Route::get('api/lokasi/{lokasi}/raks', function(App\Models\Lokasi $lokasi) { 
+        return $lokasi->raks()->where('is_active', true)->get();
     });
+
+    Route::get('/ajax/ygp-parts', [App\Http\Controllers\HomeController::class, 'searchYgp'])->name('ajax.ygp');
 });
