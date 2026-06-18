@@ -21,8 +21,11 @@ class StockAdjustmentController extends Controller
         $this->authorize('view-stock-adjustment');
         
         $user = Auth::user();
-        $query = StockAdjustment::with(['barang', 'lokasi', 'rak', 'createdBy']);
+        // [MODIFIKASI] Tambahkan 'approvedBy' ke dalam query relasi
+        $query = StockAdjustment::with(['barang', 'lokasi', 'rak', 'createdBy', 'approvedBy']);
+        
         if ($user->hasRole(['SA', 'PIC'])) {
+            // SA dan PIC bisa melihat semua
         }
         elseif ($user->lokasi) {
             if ($user->lokasi->tipe === 'PUSAT') {

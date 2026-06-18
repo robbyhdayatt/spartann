@@ -21,9 +21,9 @@ $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->
                 <i class="fas fa-arrow-left"></i> Kembali
             </a>
             
-            {{-- TOMBOL SAKTI: Mode Edit + Download + Buka Tab Baru --}}
+            {{-- TOMBOL SAKTI: Mode Edit + Unduh Otomatis --}}
             <button onclick="generateAndDownloadPDF()" class="btn btn-danger shadow-sm" id="btn-download-pdf">
-                <i class="fas fa-file-pdf"></i> Unduh & Buka PDF
+                <i class="fas fa-file-pdf"></i> Simpan & Unduh PDF
             </button>
         </div>
     </div>
@@ -34,7 +34,7 @@ $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->
     <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
     <h5><i class="icon fas fa-info-circle"></i> Mode Edit Cepat & Auto PDF!</h5>
     Area dengan <i>background</i> kuning putus-putus <b>bisa Anda ketik/edit secara langsung</b>. 
-    <br>Klik tombol <b>"Unduh & Buka PDF"</b>, sistem akan mengambil editan Anda, mengunduh filenya, dan langsung membukanya di tab baru secara otomatis!
+    <br>Klik tombol <b>"Simpan & Unduh PDF"</b>, sistem akan mengambil editan Anda dan mengunduh file PDF-nya secara otomatis ke perangkat Anda!
 </div>
 
 {{-- Pembungkus utama untuk mensimulasikan kertas di layar browser --}}
@@ -59,30 +59,20 @@ $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->
         let printArea = document.getElementById('print-area');
         printArea.classList.add('pdf-rendering-mode');
 
-        // [TRIK ANTI POP-UP BLOCKER] 
-        // Buka tab baru SEKARANG JUGA secara sinkron sebelum proses pembuatan PDF yang memakan waktu
-        let pdfWindow = window.open('', '_blank');
-        pdfWindow.document.write('<html style="font-family:sans-serif; text-align:center; background:#f4f6f9; padding-top:100px;"><body><h2>Mempersiapkan Dokumen PDF...</h2><p>Mohon tunggu sebentar, faktur akan segera dimuat di sini.</p></body></html>');
-
+        // Pengaturan PDF dengan tambahan fitur PAGEBREAK
         let opt = {
             margin:       [0.2, 0.2], 
             filename:     'Invoice-{{ $service->invoice_no }}.pdf',
             image:        { type: 'jpeg', quality: 1 },
             html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
-            jsPDF:        { unit: 'cm', format: [21.5, 14], orientation: 'landscape' }
+            jsPDF:        { unit: 'cm', format: [21.5, 14], orientation: 'landscape' },
+            // [BARIS BARU] Mencegah teks terpotong di tengah jalan. Memaksa baris tabel utuh pindah ke halaman berikutnya.
+            pagebreak:    { avoid: ['tr', '.signature-box'] } 
         };
 
-        // Mulai Proses Generate PDF
-        html2pdf().set(opt).from(printArea).toPdf().get('pdf').then(function(pdf) {
+        // Langsung eksekusi save() tanpa membuka tab baru
+        html2pdf().set(opt).from(printArea).save().then(() => {
             
-            // 1. UNDUH OTOMATIS: Simpan file ke komputer (folder Downloads)
-            pdf.save('Invoice-{{ $service->invoice_no }}.pdf');
-            
-            // 2. BUKA DI TAB BARU: Ubah PDF menjadi format URL (Blob) lalu tembak ke tab kosong yang sudah disiapkan
-            let blobUrl = pdf.output('bloburl');
-            pdfWindow.location.href = blobUrl;
-
-        }).then(() => {
             // Kembalikan tampilan layar
             printArea.classList.remove('pdf-rendering-mode');
             
@@ -103,10 +93,6 @@ $totalSparepart = $service->details->whereIn('item_category', ['PART', 'OLI'])->
             printArea.classList.remove('pdf-rendering-mode');
             btn.innerHTML = originalText;
             btn.disabled = false;
-            
-            // Tutup tab loading jika ternyata prosesnya error/gagal
-            if(pdfWindow) pdfWindow.close(); 
-            
             alert("Terjadi kesalahan saat memproses PDF.");
         });
     }

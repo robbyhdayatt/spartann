@@ -551,21 +551,26 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 }
             }
 
+            // 1. CEK BARIS TOTAL
             $rowString = implode(' ', array_slice($rowArray, 0, 10));
             if (str_contains(strtoupper($rowString), 'TOTAL')) {
+                $this->currentService = null; // [PERBAIKAN] Tutup kebocoran
                 DB::commit();
                 return;
             }
 
+            // 2. CEK BARIS CANCELLED
             if ($this->isRowCancelled($rowArray)) {
+                $this->currentService = null; // [PERBAIKAN] Tutup kebocoran (Kasus Virli)
                 DB::commit();
                 return;
             }
 
             $invoiceNo = trim($this->getVal($rowArray, 'invoice_no') ?? '');
             
-            // CEK BLACKLIST INVOICE
+            // 3. CEK BLACKLIST INVOICE
             if (!empty($invoiceNo) && in_array($invoiceNo, $this->failedInvoices)) {
+                $this->currentService = null; // [PERBAIKAN] Tutup kebocoran
                 DB::commit();
                 return; 
             }

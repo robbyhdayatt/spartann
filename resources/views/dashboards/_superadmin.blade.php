@@ -17,7 +17,7 @@
         <h3 class="m-0 text-dark font-weight-bold">
             <i class="fas fa-satellite-dish text-primary mr-2"></i> Command Center <span class="text-muted font-weight-light">| Super Admin</span>
         </h3>
-        <p class="text-muted text-sm mb-0 mt-1">Pemantauan Menyeluruh: IT, Finance, Management & Operations</p>
+        <p class="text-muted text-sm mb-0 mt-1">Pemantauan Menyeluruh: IT, Management & Operations</p>
     </div>
     <div class="col-md-4 text-right">
         <span class="badge badge-success px-3 py-2 shadow-sm" style="font-size: 0.9rem;">
@@ -34,11 +34,7 @@
                     <i class="fas fa-server mr-1 text-secondary"></i> IT & System Health
                 </a>
             </li>
-            <li class="nav-item">
-                <a class="nav-link font-weight-bold" id="tab-fin-link" data-toggle="pill" href="#tab-fin" role="tab">
-                    <i class="fas fa-chart-line mr-1 text-success"></i> Financial (ACC)
-                </a>
-            </li>
+            {{-- Tab Financial (ACC) telah dihapus sesuai permintaan --}}
             <li class="nav-item">
                 <a class="nav-link font-weight-bold" id="tab-mgt-link" data-toggle="pill" href="#tab-mgt" role="tab">
                     <i class="fas fa-briefcase mr-1 text-warning"></i> Management (PIC)
@@ -108,22 +104,31 @@
                                 <table class="table table-hover table-striped table-sm mb-0">
                                     <thead class="text-muted">
                                         <tr>
-                                            <th class="pl-3">Waktu</th>
-                                            <th>User</th>
-                                            <th>Lokasi</th>
-                                            <th>Barang</th>
-                                            <th>Detail Aktivitas</th>
-                                            <th class="text-center pr-3">Qty</th>
+                                            <th class="pl-3" style="width: 15%;">Waktu</th>
+                                            <th style="width: 15%;">Nama User</th>
+                                            <th style="width: 15%;">Lokasi</th>
+                                            <th style="width: 20%;">Barang</th>
+                                            <th style="width: 25%;">Detail Aktivitas</th>
+                                            <th class="text-center pr-3" style="width: 10%;">Qty</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @forelse($data['recentActivities'] as $log)
                                             <tr>
-                                                <td class="pl-3 text-muted align-middle"><i class="far fa-clock mr-1"></i>{{ $log->created_at->format('H:i:s') }}</td>
-                                                <td class="font-weight-bold align-middle">{{ $log->user->username ?? 'System' }}</td>
-                                                <td class="align-middle"><span class="badge badge-dark">{{ $log->lokasi->kode_lokasi ?? 'GLOBAL' }}</span></td>
+                                                {{-- [MODIFIKASI] Tanggal & Jam --}}
+                                                <td class="pl-3 text-muted align-middle"><i class="far fa-clock mr-1"></i>{{ $log->created_at->format('d M Y, H:i:s') }}</td>
+                                                
+                                                {{-- [MODIFIKASI] Nama Lengkap User (Mendukung kolom name, nama, atau fallback username) --}}
+                                                <td class="font-weight-bold align-middle">{{ $log->user->name ?? $log->user->nama ?? $log->user->username ?? 'System' }}</td>
+                                                
+                                                {{-- [MODIFIKASI] Nama Lokasi Alih-alih Kode --}}
+                                                <td class="align-middle"><span class="badge badge-dark">{{ $log->lokasi->nama_lokasi ?? 'GLOBAL' }}</span></td>
+                                                
                                                 <td class="align-middle text-truncate" style="max-width: 200px;">{{ $log->barang->part_name ?? '-' }}</td>
-                                                <td class="align-middle text-sm">{{ Str::limit($log->keterangan, 45) }}</td>
+                                                
+                                                {{-- [MODIFIKASI] Menampilkan Detail Aktivitas Secar Utuh Tanpa Terpotong --}}
+                                                <td class="align-middle text-sm">{{ $log->keterangan }}</td>
+                                                
                                                 <td class="text-center pr-3 align-middle">
                                                     <span class="badge {{ $log->jumlah > 0 ? 'badge-success' : 'badge-danger' }} px-2 py-1">
                                                         {{ $log->jumlah > 0 ? '+' : '' }}{{ $log->jumlah }}
@@ -135,52 +140,6 @@
                                         @endforelse
                                     </tbody>
                                 </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {{-- ================= TAB 2: FINANCIAL ================= --}}
-            <div class="tab-pane fade" id="tab-fin" role="tabpanel">
-                <div class="row">
-                    <div class="col-lg-4 col-md-6">
-                        <div class="small-box bg-gradient-success shadow">
-                            <div class="inner">
-                                <h3 class="mb-1">Rp {{ number_format($data['grandTotalOmset'], 0, ',', '.') }}</h3>
-                                <p class="font-weight-bold mb-0">Omset Global (Sesuai Filter)</p>
-                            </div>
-                            <div class="icon"><i class="fas fa-coins" style="opacity: 0.4;"></i></div>
-                        </div>
-                    </div>
-                    <div class="col-lg-4 col-md-6">
-                        <div class="small-box bg-gradient-info shadow">
-                            <div class="inner">
-                                <h3 class="mb-1">Rp {{ number_format($data['inventoryAssetValue'], 0, ',', '.') }}</h3>
-                                <p class="font-weight-bold mb-0">Valuasi Aset Fisik Gudang</p>
-                            </div>
-                            <div class="icon"><i class="fas fa-box-open" style="opacity: 0.4;"></i></div>
-                        </div>
-                    </div>
-                    <div class="col-lg-4 col-md-12">
-                        <div class="small-box bg-gradient-warning shadow">
-                            <div class="inner text-dark">
-                                <h3 class="mb-1">Rp {{ number_format($data['grandTotalLaba'], 0, ',', '.') }}</h3>
-                                <p class="font-weight-bold mb-0">Est. Laba Kotor (Sesuai Filter)</p>
-                            </div>
-                            <div class="icon"><i class="fas fa-chart-line" style="opacity: 0.4;"></i></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="row mt-2">
-                    <div class="col-12">
-                        <div class="card shadow-none border">
-                            <div class="card-header bg-light border-0">
-                                <h3 class="card-title font-weight-bold"><i class="fas fa-wave-square text-success mr-2"></i> Tren Pendapatan Global</h3>
-                            </div>
-                            <div class="card-body pt-2">
-                                <canvas id="saRevenueChart" style="height: 280px; width: 100%;"></canvas>
                             </div>
                         </div>
                     </div>
@@ -235,22 +194,32 @@
                                                 @endforeach
                                             </select>
                                         </div>
+                                        
+                                        {{-- [MODIFIKASI] FILTER NON-YGP DENGAN OPSI SEMBUNYIKAN --}}
                                         <div class="col-md-2 mb-2 mb-md-0">
                                             <label class="text-xs text-primary font-weight-bold">Filter Non-YGP</label>
                                             <select name="barang_id" class="form-control form-control-sm select2">
-                                                <option value="all">Semua Non-YGP</option>
+                                                <option value="all" {{ $data['filter']['filterNonYgp'] == 'all' ? 'selected' : '' }}>Semua Non-YGP</option>
+                                                <option value="none" {{ $data['filter']['filterNonYgp'] == 'none' ? 'selected' : '' }}>Sembunyikan Non-YGP</option>
                                                 @foreach($data['daftarBarang'] as $brg)
                                                     <option value="{{ $brg->id }}" {{ $data['filter']['filterNonYgp'] == $brg->id ? 'selected' : '' }}>{{ $brg->part_name }}</option>
                                                 @endforeach
                                             </select>
                                         </div>
+                                        
+                                        {{-- [MODIFIKASI] FILTER YGP DENGAN OPSI SEMBUNYIKAN --}}
                                         <div class="col-md-2 mb-2 mb-md-0">
                                             <label class="text-xs text-danger font-weight-bold">Filter YGP (AJAX)</label>
                                             <select name="part_code" id="select2-ygp" class="form-control form-control-sm">
                                                 @if($data['filter']['filterYgp'] === 'all')
                                                     <option value="all" selected>Semua YGP</option>
+                                                    <option value="none">Sembunyikan YGP</option>
+                                                @elseif($data['filter']['filterYgp'] === 'none')
+                                                    <option value="all">Semua YGP</option>
+                                                    <option value="none" selected>Sembunyikan YGP</option>
                                                 @else
                                                     <option value="all">Semua YGP</option>
+                                                    <option value="none">Sembunyikan YGP</option>
                                                     <option value="{{ $data['filter']['filterYgp'] }}" selected>{{ $data['selectedYgpName'] }}</option>
                                                 @endif
                                             </select>
@@ -273,7 +242,7 @@
                         <div class="small-box bg-white border shadow-sm">
                             <div class="inner text-center py-4">
                                 <h3 class="text-success mb-1">Rp {{ number_format($data['grandTotalOmset'], 0, ',', '.') }}</h3>
-                                <p class="text-muted font-weight-bold mb-0">Total Pendapatan (Omset)</p>
+                                <p class="text-muted font-weight-bold mb-0">Total Pendapatan (Omset Netto)</p>
                             </div>
                         </div>
                     </div>
@@ -281,7 +250,7 @@
                         <div class="small-box bg-white border shadow-sm">
                             <div class="inner text-center py-4">
                                 <h3 class="text-info mb-1">Rp {{ number_format($data['grandTotalLaba'], 0, ',', '.') }}</h3>
-                                <p class="text-muted font-weight-bold mb-0">Total Laba Kotor (Gross Profit)</p>
+                                <p class="text-muted font-weight-bold mb-0">Laba Kotor (Setelah Diskon)</p>
                             </div>
                         </div>
                     </div>
@@ -289,7 +258,7 @@
                         <div class="small-box {{ $data['grossProfitMargin'] > 15 ? 'bg-primary' : 'bg-warning' }} shadow-sm">
                             <div class="inner text-center py-4 text-white">
                                 <h3 class="mb-1">{{ $data['grossProfitMargin'] }} <sup style="font-size: 20px">%</sup></h3>
-                                <p class="font-weight-bold mb-0">Gross Profit Margin</p>
+                                <p class="font-weight-bold mb-0">Gross Profit Margin (Netto)</p>
                             </div>
                             <div class="icon"><i class="fas fa-percent" style="opacity: 0.3;"></i></div>
                         </div>
@@ -300,7 +269,7 @@
                     <div class="col-md-6">
                         <div class="card shadow-sm border-0 h-100">
                             <div class="card-header bg-white border-0 pb-1">
-                                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-left text-success mr-2"></i> Perbandingan Retail (Omset)</h3>
+                                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-left text-success mr-2"></i> Perbandingan Retail (Nilai Barang)</h3>
                                 <div class="text-muted text-xs mt-1">{{ $lblCurrent }} vs {{ $lblPrevious }}</div>
                             </div>
                             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="barCompareRetailOmset"></canvas></div></div>
@@ -309,7 +278,7 @@
                     <div class="col-md-6">
                         <div class="card shadow-sm border-0 h-100">
                             <div class="card-header bg-white border-0 pb-1">
-                                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-right text-info mr-2"></i> Perbandingan Service (Omset)</h3>
+                                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-right text-info mr-2"></i> Perbandingan Service (Omset Bersih)</h3>
                                 <div class="text-muted text-xs mt-1">{{ $lblCurrent }} vs {{ $lblPrevious }}</div>
                             </div>
                             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="barCompareServiceOmset"></canvas></div></div>
@@ -320,13 +289,13 @@
                 <div class="row mt-3">
                     <div class="col-md-4">
                         <div class="card shadow-sm border-0 h-100">
-                            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-pie text-secondary mr-2"></i> Komposisi Omset</h3></div>
+                            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-pie text-secondary mr-2"></i> Komposisi Omset Netto</h3></div>
                             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="pieOmset"></canvas></div></div>
                         </div>
                     </div>
                     <div class="col-md-8">
                         <div class="card shadow-sm border-0 h-100">
-                            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-line text-success mr-2"></i> Tren Omset Harian</h3></div>
+                            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-line text-success mr-2"></i> Tren Nilai Keluar Harian</h3></div>
                             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="barOmset"></canvas></div></div>
                         </div>
                     </div>
@@ -335,7 +304,7 @@
                 <div class="row mt-3">
                     <div class="col-md-7">
                         <div class="card shadow-sm border-0 h-100">
-                            <div class="card-header bg-white border-0 pb-2"><h3 class="card-title font-weight-bold"><i class="fas fa-medal text-warning mr-2"></i> Top 5 Part Penghasil Omset</h3></div>
+                            <div class="card-header bg-white border-0 pb-2"><h3 class="card-title font-weight-bold"><i class="fas fa-medal text-warning mr-2"></i> Top 5 Part (Berdasarkan Nilai)</h3></div>
                             <div class="card-body p-0">
                                 <table class="table table-hover table-striped table-sm mb-0">
                                     <thead class="bg-light text-muted"><tr><th class="pl-4">Nama Barang</th><th class="text-right pr-4">Total Rupiah</th></tr></thead>
@@ -576,6 +545,10 @@
             localStorage.setItem('activeTabSA', $(e.target).attr('href'));
         });
         var activeTab = localStorage.getItem('activeTabSA');
+        
+        // Memastikan tidak membuka tab Finansial yang sudah dihapus
+        if(activeTab === '#tab-fin') activeTab = '#tab-it';
+        
         if(activeTab){
             $('#custom-tabs-four-tab a[href="' + activeTab + '"]').tab('show');
         }
@@ -602,51 +575,6 @@
 
     const lblCurText = "Periode Filter";
     const lblPrevText = "H-1 Bulan Lalu";
-
-    // -------------------------------------------------------------
-    // CHART TAB 2: FINANCIAL ACC (SUPER ADMIN)
-    // -------------------------------------------------------------
-    var ctxSA = document.getElementById('saRevenueChart').getContext('2d');
-    var gradientSA = ctxSA.createLinearGradient(0, 0, 0, 400);
-    gradientSA.addColorStop(0, 'rgba(40, 167, 69, 0.5)');   
-    gradientSA.addColorStop(1, 'rgba(40, 167, 69, 0.0)');
-
-    // Gabungkan array Retail + Service menggunakan JS untuk chart SuperAdmin
-    var retailData = {!! json_encode($data['chartRetailOmset'] ?? []) !!};
-    var serviceData = {!! json_encode($data['chartServiceOmset'] ?? []) !!};
-    var combinedData = retailData.map(function(num, idx) {
-        return num + (serviceData[idx] || 0);
-    });
-
-    new Chart(ctxSA, {
-        type: 'line',
-        data: {
-            labels: {!! json_encode($data['chartLabels'] ?? []) !!},
-            datasets: [{
-                label: 'Pendapatan Global Harian (Rp)',
-                backgroundColor: gradientSA,
-                borderColor: '#28a745',
-                pointBackgroundColor: '#ffffff',
-                pointBorderColor: '#28a745',
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                data: combinedData,
-                fill: true,
-                tension: 0.4 
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            responsive: true,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { tooltip: { callbacks: { label: function(context) { return ' Rp ' + new Intl.NumberFormat('id-ID').format(context.raw || 0); } } } },
-            scales: { 
-                y: { beginAtZero: true, grid: { borderDash: [5, 5] }, ticks: { callback: function(value) { return 'Rp ' + new Intl.NumberFormat('id-ID', { notation: "compact" }).format(value); } } },
-                x: { grid: { display: false } }
-            }
-        }
-    });
 
     // -------------------------------------------------------------
     // CHARTS TAB 3: MANAGEMENT PIC (HYBRID DASHBOARD)

@@ -147,7 +147,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('create-retur-pembelian', fn(User $user) => $user->hasRole('AG'));
 
         // Receiving
-        Gate::define('view-receiving', fn(User $user) => $user->hasRole('SA') || $user->hasRole(['AG']));
+        Gate::define('view-receiving', fn(User $user) => $user->hasRole(['SA', 'AG', 'PC']));
         Gate::define('process-receiving-gudang', fn(User $user) => $user->hasRole('AG'));
         Gate::define('process-receiving-dealer', fn(User $user) => $user->hasRole('PC'));
 
@@ -156,7 +156,7 @@ class AuthServiceProvider extends ServiceProvider
         Gate::define('process-qc', fn(User $user) => $user->hasRole('AG'));
 
         // Putaway
-        Gate::define('view-putaway', fn(User $user) => $user->hasRole('SA') || $user->hasRole(['AG']));
+        Gate::define('view-putaway', fn(User $user) => $user->hasRole(['SA', 'AG', 'PC']));
         Gate::define('process-putaway-gudang', fn(User $user) => $user->hasRole('AG'));
         Gate::define('process-putaway-dealer', fn(User $user) => $user->hasRole('PC'));
 
@@ -173,7 +173,7 @@ class AuthServiceProvider extends ServiceProvider
         
         // 1. View Adjustment
         Gate::define('view-stock-adjustment', function (User $user) {
-            return $user->hasRole('SA') || $user->hasRole(['AG', 'KG', 'ACC', 'IMS']);
+            return $user->hasRole(['SA', 'ACC']);
         });
 
         // 2. Create Adjustment (Gabungan logika Gudang & Dealer)
@@ -182,13 +182,13 @@ class AuthServiceProvider extends ServiceProvider
             if ($user->hasRole('SA')) return true;
 
             // Gudang: Admin Gudang (AG) boleh
-            if ($user->isGudang() && $user->hasRole('AG')) return true;
+            // if ($user->isGudang() && $user->hasRole('AG')) return true;
 
             // Dealer: Admin Pusat (ACC/IMS) boleh buat adjustment untuk dealer
             if ($user->isPusat() && $user->hasRole(['ACC', 'IMS'])) return true;
 
             // Dealer: Kepala Cabang (KC) atau Part Counter (PC) di Dealer (Opsional, sesuaikan kebutuhan)
-            if ($user->isDealer() && $user->hasRole(['KC', 'PC'])) return true;
+            // if ($user->isDealer() && $user->hasRole(['KC', 'PC'])) return true;
 
             return false;
         });
@@ -199,36 +199,60 @@ class AuthServiceProvider extends ServiceProvider
             if ($user->hasRole('SA')) return true;
 
             // Gudang: Kepala Gudang (KG) approve kerjaan AG
-            if ($user->isGudang() && $user->hasRole('KG')) return true;
-
-            // Dealer/Pusat: Service Advisor Pusat (SA) atau Area Service Dev (ASD)
-            // Sesuai dokumen: "Jika di Dealer: SA (Pusat) melakukan Approve"
-            if ($user->isPusat() && $user->hasRole(['SA', 'ASD'])) return true;
+            // if ($user->isGudang() && $user->hasRole('KG')) return true;
             
             return false;
         });
 
-        // Mutasi Stok
+        // =================================================================
+        // MUTASI STOK (UPDATED RULES)
+        // =================================================================
+
         Gate::define('view-stock-transaction', function (User $user) {
-            return $user->hasRole('SA') || 
-                   $user->hasRole(['AG', 'KG', 'IMS', 'ACC', 'ASD']) ||
-                   ($user->isDealer() && $user->hasRole(['KC', 'PC']));
+            // 1 & 2: PIC, KC, dan seluruh role GUDANG tidak bisa view
+            if ($user->hasRole(['PIC', 'KC']) || $user->isGudang()) {
+                return false;
+            }
+            
+            // Yang tersisa dan boleh View: SA, Pusat (ASD, IMS, ACC), dan PC (Dealer)
+            return $user->hasRole(['SA', 'ASD', 'IMS', 'ACC', 'PC']);
         });
 
         Gate::define('create-stock-transaction', function (User $user) {
-            // Siapa yang boleh request mutasi?
-            // Biasanya Admin Gudang (Gudang) atau Part Counter (Dealer)
-            return $user->hasRole('SA') || 
-                   ($user->isGudang() && $user->hasRole('AG')) ||
-                   ($user->isDealer() && $user->hasRole('PC'));
+            // 1 & 2: PIC, KC, dan GUDANG tidak bisa create
+            if ($user->hasRole(['PIC', 'KC']) || $user->isGudang()) {
+                return false;
+            }
+
+            // 3: Role PUSAT (ASD, IMS, ACC) tidak bisa create
+            if ($user->isPusat()) {
+                return false;
+            }
+
+            // Yang tersisa dan boleh Create mutasi: SA (Super Admin) & PC (Dealer)
+            return $user->hasRole(['SA', 'PC']);
         });
 
         Gate::define('approve-stock-transaction', function (User $user) {
-            // Siapa yang menyetujui mutasi keluar?
-            // Kepala Gudang (Gudang) atau Kepala Cabang (Dealer)
-            return $user->hasRole('SA') || 
-                   ($user->isGudang() && $user->hasRole('KG')) ||
-                   ($user->isDealer() && $user->hasRole('KC'));
+            // 4: Yang melakukan approve HANYA role ACC 
+            // (Saya tambahkan SA sebagai langkah aman agar Super Admin tidak terkunci dari sistemnya sendiri)
+            return $user->hasRole(['SA', 'ACC']);
+        });
+
+        Gate::define('receive-stock-transaction', function (User $user, \App\Models\StockMutation $mutation) {
+            // 1 & 2: PIC, KC, dan GUDANG tidak bisa receive
+            if ($user->hasRole(['PIC', 'KC']) || $user->isGudang()) {
+                return false;
+            }
+
+            // SA boleh menerima paksa dari mana saja (Bypass)
+            if ($user->hasRole('SA')) {
+                return true;
+            }
+
+            // Role lain (seperti PC di dealer atau ASD/IMS/ACC di pusat) 
+            // hanya boleh menerima jika lokasi mereka sama dengan lokasi_tujuan_id
+            return $user->lokasi_id == $mutation->lokasi_tujuan_id;
         });
 
         // Service

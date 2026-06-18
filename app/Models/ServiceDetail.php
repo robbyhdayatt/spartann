@@ -16,9 +16,7 @@ class ServiceDetail extends Model
         return $this->belongsTo(Service::class);
     }
 
-    /**
-     * Relasi ke Barang (Pengganti Part)
-     */
+
     public function barang()
     {
         return $this->belongsTo(Barang::class, 'barang_id');

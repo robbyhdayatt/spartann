@@ -19,9 +19,8 @@ class Service extends Model
     {
         return $this->hasMany(ServiceDetail::class);
     }
-    public function lokasi() // Pastikan nama relasi ini benar
+    public function lokasi()
     {
-        // Sesuaikan foreign key ('lokasi_id') dan owner key ('id') jika berbeda
         return $this->belongsTo(Lokasi::class, 'lokasi_id', 'id');
     }
 }

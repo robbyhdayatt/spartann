@@ -64,7 +64,8 @@
                         <div class="col-md-2 mb-2 mb-md-0">
                             <label class="text-xs text-primary font-weight-bold">Filter Non-YGP</label>
                             <select name="barang_id" class="form-control form-control-sm select2">
-                                <option value="all">Semua Non-YGP</option>
+                                <option value="all" {{ $data['filter']['filterNonYgp'] == 'all' ? 'selected' : '' }}>Semua Non-YGP</option>
+                                <option value="none" {{ $data['filter']['filterNonYgp'] == 'none' ? 'selected' : '' }}>Sembunyikan Non-YGP</option>
                                 @foreach($data['daftarBarang'] as $brg)
                                     <option value="{{ $brg->id }}" {{ $data['filter']['filterNonYgp'] == $brg->id ? 'selected' : '' }}>{{ $brg->part_name }}</option>
                                 @endforeach
@@ -75,8 +76,13 @@
                             <select name="part_code" id="select2-ygp" class="form-control form-control-sm">
                                 @if($data['filter']['filterYgp'] === 'all')
                                     <option value="all" selected>Semua YGP</option>
+                                    <option value="none">Sembunyikan YGP</option>
+                                @elseif($data['filter']['filterYgp'] === 'none')
+                                    <option value="all">Semua YGP</option>
+                                    <option value="none" selected>Sembunyikan YGP</option>
                                 @else
                                     <option value="all">Semua YGP</option>
+                                    <option value="none">Sembunyikan YGP</option>
                                     <option value="{{ $data['filter']['filterYgp'] }}" selected>{{ $data['selectedYgpName'] }}</option>
                                 @endif
                             </select>
@@ -100,7 +106,7 @@
         <div class="small-box bg-white border shadow-sm">
             <div class="inner text-center py-4">
                 <h3 class="text-success mb-1">Rp {{ number_format($data['grandTotalOmset'], 0, ',', '.') }}</h3>
-                <p class="text-muted font-weight-bold mb-0">Total Pendapatan (Omset)</p>
+                <p class="text-muted font-weight-bold mb-0">Total Pendapatan (Omset Netto)</p>
             </div>
         </div>
     </div>
@@ -108,7 +114,7 @@
         <div class="small-box bg-white border shadow-sm">
             <div class="inner text-center py-4">
                 <h3 class="text-info mb-1">Rp {{ number_format($data['grandTotalLaba'], 0, ',', '.') }}</h3>
-                <p class="text-muted font-weight-bold mb-0">Total Laba Kotor (Gross Profit)</p>
+                <p class="text-muted font-weight-bold mb-0">Laba Kotor (Setelah Diskon)</p>
             </div>
         </div>
     </div>
@@ -116,7 +122,7 @@
         <div class="small-box {{ $data['grossProfitMargin'] > 15 ? 'bg-primary' : 'bg-warning' }} shadow-sm">
             <div class="inner text-center py-4 text-white">
                 <h3 class="mb-1">{{ $data['grossProfitMargin'] }} <sup style="font-size: 20px">%</sup></h3>
-                <p class="font-weight-bold mb-0">Gross Profit Margin</p>
+                <p class="font-weight-bold mb-0">Gross Profit Margin (Netto)</p>
             </div>
             <div class="icon"><i class="fas fa-percent" style="opacity: 0.3;"></i></div>
         </div>
@@ -128,7 +134,7 @@
     <div class="col-md-6">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-header bg-white border-0 pb-1">
-                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-left text-success mr-2"></i> Perbandingan Retail (Omset)</h3>
+                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-left text-success mr-2"></i> Perbandingan Retail (Nilai Barang)</h3>
                 <div class="text-muted text-xs mt-1">{{ $lblCurrent }} vs {{ $lblPrevious }}</div>
             </div>
             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="barCompareRetailOmset"></canvas></div></div>
@@ -137,7 +143,7 @@
     <div class="col-md-6">
         <div class="card shadow-sm border-0 h-100">
             <div class="card-header bg-white border-0 pb-1">
-                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-right text-info mr-2"></i> Perbandingan Service (Omset)</h3>
+                <h3 class="card-title font-weight-bold"><i class="fas fa-balance-scale-right text-info mr-2"></i> Perbandingan Service (Omset Bersih)</h3>
                 <div class="text-muted text-xs mt-1">{{ $lblCurrent }} vs {{ $lblPrevious }}</div>
             </div>
             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="barCompareServiceOmset"></canvas></div></div>
@@ -149,13 +155,13 @@
 <div class="row mt-3">
     <div class="col-md-4">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-pie text-secondary mr-2"></i> Komposisi Omset</h3></div>
+            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-pie text-secondary mr-2"></i> Komposisi Omset Netto</h3></div>
             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="pieOmset"></canvas></div></div>
         </div>
     </div>
     <div class="col-md-8">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-line text-success mr-2"></i> Tren Omset Harian</h3></div>
+            <div class="card-header bg-white border-0 pb-1"><h3 class="card-title font-weight-bold"><i class="fas fa-chart-line text-success mr-2"></i> Tren Nilai Keluar Harian</h3></div>
             <div class="card-body"><div style="position: relative; height: 250px; width: 100%;"><canvas id="barOmset"></canvas></div></div>
         </div>
     </div>
@@ -165,7 +171,7 @@
 <div class="row mt-3">
     <div class="col-md-7">
         <div class="card shadow-sm border-0 h-100">
-            <div class="card-header bg-white border-0 pb-2"><h3 class="card-title font-weight-bold"><i class="fas fa-medal text-warning mr-2"></i> Top 5 Part Penghasil Omset</h3></div>
+            <div class="card-header bg-white border-0 pb-2"><h3 class="card-title font-weight-bold"><i class="fas fa-medal text-warning mr-2"></i> Top 5 Part (Berdasarkan Nilai)</h3></div>
             <div class="card-body p-0">
                 <table class="table table-hover table-striped table-sm mb-0">
                     <thead class="bg-light text-muted"><tr><th class="pl-4">Nama Barang</th><th class="text-right pr-4">Total Rupiah</th></tr></thead>
@@ -334,22 +340,22 @@
     const lblCurText = "Periode Filter";
     const lblPrevText = "H-1 Bulan Lalu";
 
-    // 1. Pie Omset
+    // 1. Pie Omset (Sekarang mengambil Netto)
     new Chart(document.getElementById('pieOmset').getContext('2d'), {
         type: 'doughnut', data: {
-            labels: ['Retail (Omset)', 'Service (Omset)'],
+            labels: ['Retail (Omset Netto)', 'Service (Omset)'],
             datasets: [{ data: [{{ $data['omsetPie']['retail'] }}, {{ $data['omsetPie']['service'] }}], backgroundColor: ['#28a745', '#17a2b8'], borderWidth: 0 }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { tooltip: { callbacks: { label: (ctx) => ' ' + ctx.label + ': ' + formatRp(ctx.raw) } } } }
     });
 
-    // 2. Bar Omset (Line)
+    // 2. Bar Omset (Line) - Menampilkan Nilai Keluar (Bruto untuk tren per-item)
     new Chart(document.getElementById('barOmset').getContext('2d'), {
         type: 'line', data: {
             labels: {!! json_encode($data['chartLabels']) !!},
             datasets: [
-                { label: 'Omset Retail', borderColor: '#28a745', data: {!! json_encode($data['chartRetailOmset']) !!}, backgroundColor: 'transparent', borderWidth: 2, tension: 0.3 },
-                { label: 'Omset Service', borderColor: '#17a2b8', data: {!! json_encode($data['chartServiceOmset']) !!}, backgroundColor: 'transparent', borderWidth: 2, tension: 0.3 }
+                { label: 'Nilai Retail (Kotor)', borderColor: '#28a745', data: {!! json_encode($data['chartRetailOmset']) !!}, backgroundColor: 'transparent', borderWidth: 2, tension: 0.3 },
+                { label: 'Omset Service (Bersih)', borderColor: '#17a2b8', data: {!! json_encode($data['chartServiceOmset']) !!}, backgroundColor: 'transparent', borderWidth: 2, tension: 0.3 }
             ]
         },
         options: { 
@@ -359,11 +365,11 @@
         }
     });
 
-    // 3. Bar Chart OMSET Perbandingan RETAIL
+    // 3. Bar Chart OMSET Perbandingan RETAIL - Menggunakan Nilai Bruto untuk perbandingan performa sales
     new Chart(document.getElementById('barCompareRetailOmset').getContext('2d'), {
         type: 'bar', data: {
             labels: [lblCurText, lblPrevText],
-            datasets: [{ label: 'Total Retail (Omset)', data: [{{ $data['totalRetailOmset'] }}, {{ $data['totalPrevRetailOmset'] }}], backgroundColor: ['#28a745', '#adb5bd'] }]
+            datasets: [{ label: 'Nilai Retail (Kotor)', data: [{{ $data['totalRetailOmset'] }}, {{ $data['totalPrevRetailOmset'] }}], backgroundColor: ['#28a745', '#adb5bd'] }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { tooltip: { callbacks: { label: (ctx) => ' ' + formatRp(ctx.raw) } }, legend: {display: false} } }
     });
@@ -372,7 +378,7 @@
     new Chart(document.getElementById('barCompareServiceOmset').getContext('2d'), {
         type: 'bar', data: {
             labels: [lblCurText, lblPrevText],
-            datasets: [{ label: 'Total Service (Omset)', data: [{{ $data['totalServiceOmset'] }}, {{ $data['totalPrevServiceOmset'] }}], backgroundColor: ['#17a2b8', '#adb5bd'] }]
+            datasets: [{ label: 'Omset Service (Bersih)', data: [{{ $data['totalServiceOmset'] }}, {{ $data['totalPrevServiceOmset'] }}], backgroundColor: ['#17a2b8', '#adb5bd'] }]
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { tooltip: { callbacks: { label: (ctx) => ' ' + formatRp(ctx.raw) } }, legend: {display: false} } }
     });

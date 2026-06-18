@@ -106,6 +106,21 @@ class HomeController extends Controller
         $parts = $query->limit(50)->get();
 
         $results = [];
+
+        if (!$search || stripos('semua', $search) !== false || stripos('all', $search) !== false) {
+            $results[] = [
+                'id' => 'all', 
+                'text' => '-- Semua YGP --'
+            ];
+        }
+        
+        if (!$search || stripos('sembunyi', $search) !== false || stripos('none', $search) !== false) {
+            $results[] = [
+                'id' => 'none', 
+                'text' => '-- Sembunyikan Semua YGP --'
+            ];
+        }
+
         foreach ($parts as $part) {
             $results[] = [
                 'id' => $part->kode_part,
@@ -167,30 +182,46 @@ class HomeController extends Controller
         return array_merge($itData, $opsData, $finData, $picData);
     }
 
-    // =========================================================================
-    // FUNGSI ACCOUNTING (MEWARISI DATA PIC + METRIK KHUSUS AUDIT)
-    // =========================================================================
     private function getAccountingData($request)
     {
         $data = $this->getPicData($request);
 
-        // Valuasi Aset Fisik Gudang (Non-YGP) - Tetap dipertahankan di background karena SuperAdmin membutuhkannya
         $data['inventoryAssetValue'] = DB::table('inventory_batches')
             ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
             ->sum(DB::raw('inventory_batches.quantity * COALESCE(barangs.selling_out, 0)'));
 
-        // Metrik Pengganti Valuasi Aset: Total Transaksi Faktur POS (Sesuai Filter)
-        $data['totalFaktur'] = DB::table('penjualans')
-            ->whereBetween('tanggal_jual', [$data['filter']['startDate'], $data['filter']['endDate']])
-            ->when($data['filter']['filterLokasi'] !== 'all', function($q) use ($data) {
-                return $q->where('lokasi_id', $data['filter']['filterLokasi']);
-            })
-            ->count();
+        $filterL = $data['filter']['filterLokasi'];
+        $startD  = $data['filter']['startDate'];
+        $endD    = $data['filter']['endDate'];
 
-        // Riwayat Transaksi Faktur Terakhir
+        $countPenjualan = DB::table('penjualans')
+            ->whereBetween('tanggal_jual', [$startD, $endD])
+            ->when($filterL !== 'all', function($q) use ($filterL) {
+                return $q->where('lokasi_id', $filterL);
+            })->count();
+
+        $countService = DB::table('services')
+            ->whereBetween(DB::raw('DATE(reg_date)'), [$startD, $endD])
+            ->when($filterL !== 'all', function($q) use ($filterL) {
+                return $q->where('lokasi_id', $filterL);
+            })->count();
+
+        $data['totalFaktur'] = $countPenjualan + $countService;
+
         $data['recentTransactions'] = Penjualan::with(['lokasi', 'sales'])
             ->latest('created_at')
             ->limit(10)
+            ->get();
+
+        $data['stockData'] = DB::table('inventory_batches')
+            ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
+            ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id') 
+            ->where('lokasi.tipe', '=', 'DEALER')
+            ->select('lokasi.nama_lokasi', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_qty'))
+            ->groupBy('lokasi.id', 'lokasi.nama_lokasi', 'barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
+            ->orderByRaw('(SUM(inventory_batches.quantity) < barangs.stok_minimum) DESC')
+            ->orderBy('lokasi.nama_lokasi')
+            ->limit(20)
             ->get();
 
         return $data;
@@ -198,138 +229,34 @@ class HomeController extends Controller
 
     private function getOperatorData($user)
     {
+        $request = request();
         $lokasiId = $user->lokasi_id;
-        $isPusat = ($user->jabatan->singkatan === 'SA' || ($user->lokasi && $user->lokasi->tipe === 'PUSAT'));
-
-        $taskCounts = ['receiving_po' => 0, 'qc' => 0, 'putaway' => 0, 'dealer_request_approval' => 0, 'incoming_mutation_transit' => 0];
-        $stockData = collect([]);
-        $totalItemsSoldMonth = 0;
-
-        $currentYear = Carbon::now()->year;
-        $currentMonth = Carbon::now()->month;
-        $startOfWeek = Carbon::now()->startOfWeek()->format('Y-m-d');
-        $endOfWeek = Carbon::now()->endOfWeek()->format('Y-m-d');
-
-        $targetBarangIds = [1, 2, 3];
-
-        $omset = [
-            'penjualan' => ['minggu' => ['omset' => 0, 'profit' => 0], 'bulan'  => ['omset' => 0, 'profit' => 0], 'tahun'  => ['omset' => 0, 'profit' => 0]],
-            'service' => ['minggu' => ['omset' => 0, 'profit' => 0], 'bulan'  => ['omset' => 0, 'profit' => 0], 'tahun'  => ['omset' => 0, 'profit' => 0]]
-        ];
-
-        $qty = ['penjualan' => ['minggu' => 0, 'bulan' => 0, 'tahun' => 0], 'service'   => ['minggu' => 0, 'bulan' => 0, 'tahun' => 0]];
-
-        $chart = [
-            'labels' => [
-                'minggu' => ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'],
-                'tahun'  => ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'],
-                'bulan'  => range(1, Carbon::now()->daysInMonth)
-            ],
-            'penjualan' => [
-                'minggu' => ['omset' => array_fill(0, 7, 0), 'profit' => array_fill(0, 7, 0)],
-                'bulan'  => ['omset' => array_fill(0, Carbon::now()->daysInMonth, 0), 'profit' => array_fill(0, Carbon::now()->daysInMonth, 0)],
-                'tahun'  => ['omset' => array_fill(0, 12, 0), 'profit' => array_fill(0, 12, 0)]
-            ],
-            'service' => [
-                'minggu' => ['omset' => array_fill(0, 7, 0), 'profit' => array_fill(0, 7, 0)],
-                'bulan'  => ['omset' => array_fill(0, Carbon::now()->daysInMonth, 0), 'profit' => array_fill(0, Carbon::now()->daysInMonth, 0)],
-                'tahun'  => ['omset' => array_fill(0, 12, 0), 'profit' => array_fill(0, 12, 0)]
-            ]
-        ];
-
-        if ($isPusat || !$lokasiId) { 
-            $taskCounts['dealer_request_approval'] = PurchaseOrder::where('status', 'PENDING_APPROVAL')->where('po_type', 'dealer_request')->count();
-        } else {
-            $taskCounts['receiving_po'] = PurchaseOrder::where('lokasi_id', $lokasiId)->where('po_type', 'dealer_request')->whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])->count();
-            $taskCounts['incoming_mutation_transit'] = StockMutation::where('lokasi_tujuan_id', $lokasiId)->where('status', 'IN_TRANSIT')->count();
+        
+        $request->merge(['lokasi_id' => $lokasiId]);
+        $data = $this->getPicData($request);
+        
+        $data['isPusat'] = false;
+        $data['lokasi'] = Lokasi::find($lokasiId);
+        
+        $data['pendingReceive'] = PurchaseOrder::where('lokasi_id', $lokasiId)
+            ->where('po_type', 'dealer_request')
+            ->whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])
+            ->count();
             
-            $stockData = DB::table('inventory_batches')
-                ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
-                ->where('inventory_batches.lokasi_id', $lokasiId)
-                ->whereIn('inventory_batches.barang_id', $targetBarangIds)
-                ->select('barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_qty'))
-                ->groupBy('barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
-                ->get();
-
-            $itemsFromSales = DB::table('penjualan_details')
-                ->join('penjualans', 'penjualan_details.penjualan_id', '=', 'penjualans.id')
-                ->where('penjualans.lokasi_id', $lokasiId)
-                ->whereIn('penjualan_details.barang_id', $targetBarangIds)
-                ->whereMonth('penjualans.tanggal_jual', now()->month)->sum('penjualan_details.qty_jual');
-
-            $netServiceMovement = DB::table('stock_movements')
-                ->where('referensi_type', 'like', '%Service%')
-                ->where('lokasi_id', $lokasiId)
-                ->whereIn('barang_id', $targetBarangIds)
-                ->whereMonth('created_at', now()->month)
-                ->sum('jumlah');
-
-            $totalItemsSoldMonth = $itemsFromSales + abs($netServiceMovement);
-
-            $posData = DB::table('penjualan_details')
-                ->join('penjualans', 'penjualan_details.penjualan_id', '=', 'penjualans.id')
-                ->where('penjualans.lokasi_id', $lokasiId)
-                ->whereIn('penjualan_details.barang_id', $targetBarangIds)
-                ->whereYear('penjualans.tanggal_jual', $currentYear)
-                ->get(['penjualans.tanggal_jual', 'penjualan_details.subtotal', 'penjualan_details.qty_jual', 'penjualan_details.harga_modal']);
-
-            foreach ($posData as $p) {
-                $date = Carbon::parse($p->tanggal_jual);
-                $valOmset = (float) $p->subtotal;
-                $valProfit = $valOmset - ($p->qty_jual * $p->harga_modal); 
-                $valQty = (int) $p->qty_jual;
-
-                $omset['penjualan']['tahun']['omset'] += $valOmset; $omset['penjualan']['tahun']['profit'] += $valProfit; $qty['penjualan']['tahun'] += $valQty;
-                $chart['penjualan']['tahun']['omset'][$date->month - 1] += $valOmset; $chart['penjualan']['tahun']['profit'][$date->month - 1] += $valProfit;
-
-                if ($date->month == $currentMonth) {
-                    $omset['penjualan']['bulan']['omset'] += $valOmset; $omset['penjualan']['bulan']['profit'] += $valProfit; $qty['penjualan']['bulan'] += $valQty;
-                    $chart['penjualan']['bulan']['omset'][$date->day - 1] += $valOmset; $chart['penjualan']['bulan']['profit'][$date->day - 1] += $valProfit;
-                }
-
-                if ($date->format('Y-m-d') >= $startOfWeek && $date->format('Y-m-d') <= $endOfWeek) {
-                    $omset['penjualan']['minggu']['omset'] += $valOmset; $omset['penjualan']['minggu']['profit'] += $valProfit; $qty['penjualan']['minggu'] += $valQty;
-                    $chart['penjualan']['minggu']['omset'][$date->dayOfWeekIso - 1] += $valOmset; $chart['penjualan']['minggu']['profit'][$date->dayOfWeekIso - 1] += $valProfit;
-                }
-            }
-
-            $serviceData = DB::table('service_details')
-                ->join('services', 'service_details.service_id', '=', 'services.id')
-                ->where('services.lokasi_id', $lokasiId)
-                ->whereIn('service_details.barang_id', $targetBarangIds)
-                ->whereYear('services.reg_date', $currentYear)
-                ->get(['services.reg_date', 'service_details.quantity', 'service_details.price', 'service_details.cost_price']);
-
-            foreach ($serviceData as $s) {
-                $date = Carbon::parse($s->reg_date);
-                $valOmset = (float) ($s->quantity * $s->price); 
-                $valHPP = (float) ($s->quantity * $s->cost_price);
-                $valProfit = $valOmset - $valHPP;
-                $valQty = (int) $s->quantity;
-
-                $omset['service']['tahun']['omset'] += $valOmset; $omset['service']['tahun']['profit'] += $valProfit; $qty['service']['tahun'] += $valQty;
-                $chart['service']['tahun']['omset'][$date->month - 1] += $valOmset; $chart['service']['tahun']['profit'][$date->month - 1] += $valProfit;
-
-                if ($date->month == $currentMonth) {
-                    $omset['service']['bulan']['omset'] += $valOmset; $omset['service']['bulan']['profit'] += $valProfit; $qty['service']['bulan'] += $valQty;
-                    $chart['service']['bulan']['omset'][$date->day - 1] += $valOmset; $chart['service']['bulan']['profit'][$date->day - 1] += $valProfit;
-                }
-
-                if ($date->format('Y-m-d') >= $startOfWeek && $date->format('Y-m-d') <= $endOfWeek) {
-                    $omset['service']['minggu']['omset'] += $valOmset; $omset['service']['minggu']['profit'] += $valProfit; $qty['service']['minggu'] += $valQty;
-                    $chart['service']['minggu']['omset'][$date->dayOfWeekIso - 1] += $valOmset; $chart['service']['minggu']['profit'][$date->dayOfWeekIso - 1] += $valProfit;
-                }
-            }
-        }
-
-        if($lokasiId) {
-            $taskCounts['qc'] = Receiving::where('lokasi_id', $lokasiId)->where('status', 'PENDING_QC')->count();
-            $taskCounts['putaway'] = Receiving::where('lokasi_id', $lokasiId)->where('status', 'PENDING_PUTAWAY')->count();
-        }
-
-        $lokasi = $lokasiId ? Lokasi::find($lokasiId) : (object)['nama_lokasi' => 'Global/Pusat'];
-
-        return compact('taskCounts', 'lokasi', 'isPusat', 'stockData', 'totalItemsSoldMonth', 'omset', 'qty', 'chart');
+        $data['pendingPutaway'] = Receiving::where('lokasi_id', $lokasiId)
+            ->where('status', 'PENDING_PUTAWAY')
+            ->count();
+            
+        $data['stockData'] = DB::table('inventory_batches')
+            ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
+            ->where('inventory_batches.lokasi_id', $lokasiId)
+            ->select('barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_qty'))
+            ->groupBy('barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
+            ->orderByRaw('(SUM(inventory_batches.quantity) < barangs.stok_minimum) DESC')
+            ->limit(20)
+            ->get();
+            
+        return $data;
     }
 
     private function getPicData($request)
@@ -351,7 +278,7 @@ class HomeController extends Controller
         }
 
         $selectedYgpName = 'Semua YGP';
-        if ($filterYgp !== 'all') {
+        if ($filterYgp !== 'all' && $filterYgp !== 'none') {
             $ygpData = Part::where('kode_part', $filterYgp)->first();
             if ($ygpData) {
                 $selectedYgpName = $ygpData->kode_part . ' - ' . $ygpData->nama_part;
@@ -376,43 +303,57 @@ class HomeController extends Controller
             )
             ->whereNotNull('penjualan_details.barang_id')->whereBetween('penjualans.tanggal_jual', [$startDate, $endDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('penjualans.lokasi_id', $filterLokasi); })
-            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { return $q->where('penjualan_details.barang_id', $filterNonYgp); });
+            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { 
+                if ($filterNonYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('penjualan_details.barang_id', $filterNonYgp); 
+            });
 
         $retailYgpQuery = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
             ->select(
                 'services.lokasi_id', 'services.reg_date as tgl', 
-                'service_details.price as omset', 
+                DB::raw('(service_details.quantity * service_details.price) as omset'), 
                 DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
                 'service_details.quantity as qty', 'service_details.barang_id', 'service_details.item_code'
             )
             ->where('services.service_order', 'Part Retail')->whereBetween('services.reg_date', [$startDate, $endDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
-            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { return $q->where('service_details.item_code', $filterYgp); });
+            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
+                if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('service_details.item_code', $filterYgp); 
+            });
 
         $serviceNonYgpQuery = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
             ->select(
                 'services.lokasi_id', 'services.reg_date as tgl', 
-                'service_details.price as omset', DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
+                DB::raw('(service_details.quantity * service_details.price) as omset'), 
+                DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
                 'service_details.quantity as qty', 'service_details.barang_id', DB::raw('NULL as item_code')
             )
             ->where('services.service_order', 'LIKE', '%service%')->whereNotNull('service_details.barang_id')
             ->whereBetween('services.reg_date', [$startDate, $endDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
-            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { return $q->where('service_details.barang_id', $filterNonYgp); });
+            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { 
+                if ($filterNonYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('service_details.barang_id', $filterNonYgp); 
+            });
 
         $serviceYgpQuery = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
             ->join('parts', 'service_details.item_code', '=', 'parts.kode_part') 
             ->select(
                 'services.lokasi_id', 'services.reg_date as tgl', 
-                'service_details.price as omset', DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
+                DB::raw('(service_details.quantity * service_details.price) as omset'), 
+                DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
                 'service_details.quantity as qty', 'service_details.barang_id', 'service_details.item_code'
             )
             ->where('services.service_order', 'LIKE', '%service%')->whereBetween('services.reg_date', [$startDate, $endDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
-            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { return $q->where('service_details.item_code', $filterYgp); });
+            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
+                if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('service_details.item_code', $filterYgp); 
+            });
 
         $dataRetail = collect($retailNonYgpQuery->unionAll($retailYgpQuery)->get());
         $dataService = collect($serviceNonYgpQuery->unionAll($serviceYgpQuery)->get());
@@ -421,31 +362,44 @@ class HomeController extends Controller
             ->select('penjualan_details.qty_jual as qty', 'penjualan_details.subtotal as omset')
             ->whereNotNull('penjualan_details.barang_id')->whereBetween('penjualans.tanggal_jual', [$prevStartDate, $prevEndDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('penjualans.lokasi_id', $filterLokasi); })
-            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { return $q->where('penjualan_details.barang_id', $filterNonYgp); });
+            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { 
+                if ($filterNonYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('penjualan_details.barang_id', $filterNonYgp); 
+            });
 
         $prevRetailYgpQuery = DB::table('service_details')->join('services', 'service_details.service_id', '=', 'services.id')
-            ->select('service_details.quantity as qty', 'service_details.price as omset')
+            ->select('service_details.quantity as qty', DB::raw('(service_details.quantity * service_details.price) as omset'))
             ->where('services.service_order', 'Part Retail')->whereBetween('services.reg_date', [$prevStartDate, $prevEndDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
-            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { return $q->where('service_details.item_code', $filterYgp); });
+            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
+                if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('service_details.item_code', $filterYgp); 
+            });
 
         $prevServiceNonYgpQuery = DB::table('service_details')->join('services', 'service_details.service_id', '=', 'services.id')
-            ->select('service_details.quantity as qty', 'service_details.price as omset')
+            ->select('service_details.quantity as qty', DB::raw('(service_details.quantity * service_details.price) as omset'))
             ->where('services.service_order', 'LIKE', '%service%')->whereNotNull('service_details.barang_id')
             ->whereBetween('services.reg_date', [$prevStartDate, $prevEndDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
-            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { return $q->where('service_details.barang_id', $filterNonYgp); });
+            ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { 
+                if ($filterNonYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('service_details.barang_id', $filterNonYgp); 
+            });
 
         $prevServiceYgpQuery = DB::table('service_details')->join('services', 'service_details.service_id', '=', 'services.id')
             ->join('parts', 'service_details.item_code', '=', 'parts.kode_part')
-            ->select('service_details.quantity as qty', 'service_details.price as omset')
+            ->select('service_details.quantity as qty', DB::raw('(service_details.quantity * service_details.price) as omset'))
             ->where('services.service_order', 'LIKE', '%service%')->whereBetween('services.reg_date', [$prevStartDate, $prevEndDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
-            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { return $q->where('service_details.item_code', $filterYgp); });
+            ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
+                if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
+                return $q->where('service_details.item_code', $filterYgp); 
+            });
 
         $prevDataRetail = collect($prevRetailNonYgpQuery->unionAll($prevRetailYgpQuery)->get());
         $prevDataService = collect($prevServiceNonYgpQuery->unionAll($prevServiceYgpQuery)->get());
 
+        // Pengumpulan Nilai Mentah (Bruto / Kotor)
         $totalRetailOmset = $dataRetail->sum('omset');
         $totalRetailHpp = $dataRetail->sum('hpp');
         $totalRetailQty = $dataRetail->sum('qty');
@@ -458,13 +412,30 @@ class HomeController extends Controller
         $totalPrevServiceQty = $prevDataService->sum('qty');
         $totalPrevRetailOmset = $prevDataRetail->sum('omset');
         $totalPrevServiceOmset = $prevDataService->sum('omset');
+
+        // =========================================================================
+        // LOGIKA PERHITUNGAN KEUANGAN NETTO (BERSIH)
+        // =========================================================================
+        // 1. Ambil Total Diskon Kasir (Retail POS) yang tersimpan di Header
+        $totalDiskonRetail = DB::table('penjualans')
+            ->whereBetween('tanggal_jual', [$startDate, $endDate])
+            ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('lokasi_id', $filterLokasi); })
+            ->sum('total_diskon');
+
+        // 2. Omset Keseluruhan (Retail Bruto dikurangi Diskon Kasir + Service Netto Excel)
+        $grandTotalOmset = ($totalRetailOmset - $totalDiskonRetail) + $totalServiceOmset;
         
-        $grandTotalOmset = $totalRetailOmset + $totalServiceOmset;
-        $grandTotalLaba = ($totalRetailOmset - $totalRetailHpp) + ($totalServiceOmset - $totalServiceHpp);
+        // 3. Menghitung Laba Retail & Laba Service secara terpisah lalu digabung
+        $labaRetailBersih = ($totalRetailOmset - $totalRetailHpp) - $totalDiskonRetail;
+        $labaServiceBersih = ($totalServiceOmset - $totalServiceHpp);
+        $grandTotalLaba = $labaRetailBersih + $labaServiceBersih;
+        
+        // 4. Kalkulasi Akhir
         $grandTotalQty = $totalRetailQty + $totalServiceQty;
         $grossProfitMargin = $grandTotalOmset > 0 ? round(($grandTotalLaba / $grandTotalOmset) * 100, 2) : 0;
+        // =========================================================================
 
-        $omsetPie = ['retail' => $totalRetailOmset, 'service' => $totalServiceOmset];
+        $omsetPie = ['retail' => ($totalRetailOmset - $totalDiskonRetail), 'service' => $totalServiceOmset];
         $qtyPie = ['retail' => $totalRetailQty, 'service' => $totalServiceQty];
 
         $chartLabels = [];
@@ -479,6 +450,7 @@ class HomeController extends Controller
             $dateStr = $date->format('Y-m-d');
             $chartLabels[] = $date->format('d M');
             
+            // Catatan: Chart masih menampilkan tren Bruto harian untuk kemudahan teknis
             $chartRetailOmset[] = isset($retailGrouped[$dateStr]) ? $retailGrouped[$dateStr]->sum('omset') : 0;
             $chartRetailQty[] = isset($retailGrouped[$dateStr]) ? $retailGrouped[$dateStr]->sum('qty') : 0;
             
@@ -548,40 +520,38 @@ class HomeController extends Controller
 
     private function getKepalaCabangData($user)
     {
+        $request = request();
         $lokasiId = $user->lokasi_id;
-        $lokasi = Lokasi::find($lokasiId);
-
-        // 1. Statistik Harian
-        $salesToday = Penjualan::where('lokasi_id', $lokasiId)->whereDate('tanggal_jual', today())->count();
-        $serviceToday = DB::table('services')->where('lokasi_id', $lokasiId)->whereDate('created_at', today())->count();
-
-        // 2. Approval Tasks
-        // KC menyetujui Adjustment (Stok Opname) dari PC/Mekanik di cabangnya
-        $pendingAdjustments = StockAdjustment::where('status', 'PENDING_APPROVAL')
-            ->where('lokasi_id', $lokasiId)
-            ->with('barang')
-            ->latest()->take(5)->get();
         
-        // KC menyetujui Mutasi Keluar (Jika ada permintaan dari cabang lain)
-        $pendingMutations = StockMutation::where('status', 'PENDING_APPROVAL')
-            ->where('lokasi_asal_id', $lokasiId) // Mutasi Keluar
-            ->with('barang', 'lokasiTujuan')
-            ->latest()->take(5)->get();
+        $request->merge(['lokasi_id' => $lokasiId]);
+        $data = $this->getPicData($request);
+        
+        $data['lokasi'] = Lokasi::find($lokasiId);
+        
+        $data['kcPendingAdjustmentsCount'] = StockAdjustment::where('status', 'PENDING_APPROVAL')
+            ->where('lokasi_id', $lokasiId)->count();
+            
+        $data['kcPendingMutationsCount'] = StockMutation::where('status', 'PENDING_APPROVAL')
+            ->where('lokasi_asal_id', $lokasiId)->count(); 
+            
+        $data['kcPendingAdjustments'] = StockAdjustment::where('status', 'PENDING_APPROVAL')
+            ->where('lokasi_id', $lokasiId)->with('barang')->latest()->take(5)->get();
+            
+        $data['kcPendingMutations'] = StockMutation::where('status', 'PENDING_APPROVAL')
+            ->where('lokasi_asal_id', $lokasiId)->with('barang', 'lokasiTujuan')->latest()->take(5)->get();
 
-        return compact('lokasi', 'salesToday', 'serviceToday', 'pendingAdjustments', 'pendingMutations');
+        return $data;
     }
 
     private function getAdminGudangData($user)
     {
         $lokasiId = $user->lokasi_id;
 
-        // 1. Widget Counters
         $pendingApprovalPO = PurchaseOrder::where('status', 'PENDING_APPROVAL')
             ->where('po_type', 'dealer_request')
-            ->where('sumber_lokasi_id', $lokasiId) // Yang sumber pengirimannya adalah Gudang ini
+            ->where('sumber_lokasi_id', $lokasiId) 
             ->count();
 
-        // PO yang masuk ke lokasi dia dan sudah approve (siap di-receive)
         $readyToReceivePO = PurchaseOrder::where('lokasi_id', $lokasiId)
             ->whereIn('status', ['APPROVED', 'PARTIALLY_RECEIVED'])
             ->count();
@@ -590,12 +560,10 @@ class HomeController extends Controller
             ->where('status', 'PENDING_QC')
             ->count();
 
-        // Menghitung yang siap putaway (Lolos QC atau Bypass QC)
         $pendingPutaway = Receiving::where('lokasi_id', $lokasiId)
             ->whereIn('status', ['QC_PASSED', 'PENDING_PUTAWAY'])
             ->count();
 
-        // 2. Stok Kritis (Hanya di gudang ini)
         $stockAlerts = DB::table('inventory_batches')
             ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
             ->where('inventory_batches.lokasi_id', $lokasiId)
@@ -610,7 +578,6 @@ class HomeController extends Controller
             ->limit(5)
             ->get();
 
-        // 3. Aktivitas Penerimaan Terakhir
         $recentReceivings = Receiving::with(['purchaseOrder.supplier', 'purchaseOrder.sumberLokasi'])
             ->where('lokasi_id', $lokasiId)
             ->latest()
@@ -627,14 +594,25 @@ class HomeController extends Controller
         );
     }
 
-    // --- KASIR ---
     private function getKasirData($user)
     {
         $lokasiId = $user->lokasi_id;
-        $serviceToday = DB::table('services')->where('lokasi_id', $lokasiId)->whereDate('created_at', today())->count();
-        $serviceWeek = DB::table('services')->where('lokasi_id', $lokasiId)->whereBetween('created_at', [now()->subDays(7), now()])->count();
-        $salesToday = Penjualan::where('lokasi_id', $lokasiId)->whereDate('tanggal_jual', today())->count();
-        $salesWeek = Penjualan::where('lokasi_id', $lokasiId)->whereBetween('tanggal_jual', [now()->subDays(7), now()])->count();
+        
+        $serviceToday = DB::table('services')
+            ->where('lokasi_id', $lokasiId)
+            ->where('service_order', '!=', 'Part Retail')
+            ->whereDate('created_at', today())
+            ->count();
+            
+        $salesToday = DB::table('services')
+            ->where('lokasi_id', $lokasiId)
+            ->where('service_order', 'Part Retail')
+            ->whereDate('created_at', today())
+            ->count();
+
+        $revenueSalesToday = Penjualan::where('lokasi_id', $lokasiId)->whereDate('tanggal_jual', today())->sum('total_harga');
+        $revenueServiceToday = DB::table('services')->where('lokasi_id', $lokasiId)->whereDate('reg_date', today())->sum(DB::raw('COALESCE(total_payment, total_amount, 0)'));
+        $grandTotalRevenueToday = $revenueSalesToday + $revenueServiceToday;
 
         $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code')->toArray();
         $validBarangIds = Barang::whereIn('part_code', $validPartCodes)->pluck('id');
@@ -653,10 +631,25 @@ class HomeController extends Controller
 
         $totalItemsSoldMonth = $itemsFromSales + abs($netServiceMovement);
 
-        return compact('serviceToday', 'serviceWeek', 'salesToday', 'salesWeek', 'totalItemsSoldMonth', 'lokasiId');
+        $recentPenjualan = Penjualan::where('lokasi_id', $lokasiId)->latest('created_at')->take(5)->get()->map(function($item) {
+            $item->jenis = 'Retail (POS)';
+            $item->nomor = $item->nomor_faktur;
+            $item->total = $item->total_harga;
+            return $item;
+        });
+        
+        $recentService = Service::where('lokasi_id', $lokasiId)->latest('created_at')->take(5)->get()->map(function($item) {
+            $item->jenis = ($item->service_order == 'Part Retail') ? 'Part Retail' : 'Service';
+            $item->nomor = $item->invoice_no;
+            $item->total = $item->total_payment ?? $item->total_amount ?? 0;
+            return $item;
+        });
+
+        $recentTransactions = $recentPenjualan->concat($recentService)->sortByDesc('created_at')->take(10);
+
+        return compact('serviceToday', 'salesToday', 'grandTotalRevenueToday', 'totalItemsSoldMonth', 'lokasiId', 'recentTransactions');
     }
 
-    // --- LAINNYA ---
     private function getServiceMdData($user)
     {
         $myRequests = PurchaseOrder::where('created_by', $user->id)
@@ -668,7 +661,6 @@ class HomeController extends Controller
         $stockData = DB::table('inventory_batches')
             ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
             ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id')
-            // [PERBAIKAN] Ganti '!=', 'PUSAT' menjadi '=', 'DEALER'
             ->where('lokasi.tipe', '=', 'DEALER') 
             ->select('lokasi.nama_lokasi', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_qty'))
             ->groupBy('lokasi.id', 'lokasi.nama_lokasi', 'barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
@@ -679,7 +671,6 @@ class HomeController extends Controller
             
         $totalStokCount = DB::table('inventory_batches')
             ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id')
-            // [PERBAIKAN] Ganti juga di perhitungan total ini
             ->where('lokasi.tipe', '=', 'DEALER') 
             ->sum('quantity');
 
@@ -698,34 +689,14 @@ class HomeController extends Controller
 
     private function getAsdData($user)
     {
-        // 1. KASIR WIDGET DATA (Global Area / Seluruh Cabang untuk ASD)
-        $serviceToday = DB::table('services')->whereDate('created_at', today())->count();
-        $serviceWeek = DB::table('services')->whereBetween('created_at', [now()->subDays(7), now()])->count();
-        $salesToday = DB::table('penjualans')->whereDate('tanggal_jual', today())->count();
-        $salesWeek = DB::table('penjualans')->whereBetween('tanggal_jual', [now()->subDays(7), now()])->count();
+        $request = request(); 
+        
+        $data = $this->getPicData($request);
 
-        // 2. ITEM TERJUAL BULAN INI (Part & Oli dari Service + Penjualan Langsung)
-        $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code')->toArray();
-        $validBarangIds = \App\Models\Barang::whereIn('part_code', $validPartCodes)->pluck('id');
-
-        $itemsFromSales = DB::table('penjualan_details')
-            ->join('penjualans', 'penjualan_details.penjualan_id', '=', 'penjualans.id')
-            ->whereMonth('penjualans.tanggal_jual', now()->month)
-            ->sum('penjualan_details.qty_jual');
-
-        $netServiceMovement = DB::table('stock_movements')
-            ->where('referensi_type', 'like', '%Service%')
-            ->whereIn('barang_id', $validBarangIds)
-            ->whereMonth('created_at', now()->month)
-            ->sum('jumlah');
-
-        $totalItemsSoldMonth = $itemsFromSales + abs($netServiceMovement);
-
-        // 3. MONITORING STOK JARINGAN DEALER (Sama seperti perbaikan kita sebelumnya)
-        $stockData = DB::table('inventory_batches')
+        $data['stockData'] = DB::table('inventory_batches')
             ->join('barangs', 'inventory_batches.barang_id', '=', 'barangs.id')
             ->join('lokasi', 'inventory_batches.lokasi_id', '=', 'lokasi.id') 
-            ->where('lokasi.tipe', '=', 'DEALER') // Hanya Dealer
+            ->where('lokasi.tipe', '=', 'DEALER')
             ->select('lokasi.nama_lokasi', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum', DB::raw('SUM(inventory_batches.quantity) as total_qty'))
             ->groupBy('lokasi.id', 'lokasi.nama_lokasi', 'barangs.id', 'barangs.part_name', 'barangs.part_code', 'barangs.stok_minimum')
             ->orderByRaw('(SUM(inventory_batches.quantity) < barangs.stok_minimum) DESC')
@@ -733,32 +704,7 @@ class HomeController extends Controller
             ->limit(20)
             ->get();
 
-        // 4. CHART DATA: TREN 30 HARI TERAKHIR (Service vs Penjualan)
-        $dailySales = DB::table('penjualans')
-            ->where('tanggal_jual', '>=', now()->subDays(30))
-            ->select(DB::raw('DATE(tanggal_jual) as date'), DB::raw('COUNT(*) as total'))
-            ->groupBy('date')->pluck('total', 'date')->toArray();
-
-        $dailyService = DB::table('services')
-            ->where('created_at', '>=', now()->subDays(30))
-            ->select(DB::raw('DATE(created_at) as date'), DB::raw('COUNT(*) as total'))
-            ->groupBy('date')->pluck('total', 'date')->toArray();
-
-        $chartLabels = [];
-        $salesChartData = [];
-        $serviceChartData = [];
-        
-        for ($i = 29; $i >= 0; $i--) {
-            $date = now()->subDays($i)->format('Y-m-d');
-            $chartLabels[] = now()->subDays($i)->format('d M');
-            $salesChartData[] = $dailySales[$date] ?? 0;
-            $serviceChartData[] = $dailyService[$date] ?? 0;
-        }
-
-        return compact(
-            'serviceToday', 'serviceWeek', 'salesToday', 'salesWeek', 'totalItemsSoldMonth',
-            'stockData', 'chartLabels', 'salesChartData', 'serviceChartData'
-        );
+        return $data;
     }
 
     private function getApproverData($user)

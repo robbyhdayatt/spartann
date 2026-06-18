@@ -88,8 +88,19 @@ class ServiceController extends Controller
                     return $row->customer_name ?? '-';
                 })
                 ->editColumn('total_amount', function($row) {
-                    $total = $row->total_payment ?? $row->total_amount;
-                    return 'Rp ' . number_format($total, 0, ',', '.');
+                    // Cek apakah ini transaksi Part Retail
+                    $isPartRetail = stripos($row->service_order ?? '', 'part') !== false;
+                    
+                    if ($isPartRetail) {
+                        // Jika Part Retail, mutlak ambil dari total_amount
+                        $total = $row->total_amount;
+                    } else {
+                        // Jika service biasa, ambil total_payment. Tapi jika payment 0, fallback ke total_amount
+                        $total = ($row->total_payment > 0) ? $row->total_payment : $row->total_amount;
+                    }
+                    
+                    // Pastikan diubah ke float agar tidak error jika null, lalu diformat
+                    return 'Rp ' . number_format((float)($total ?? 0), 0, ',', '.');
                 })
                 ->addColumn('dealer', function($row) {
                     return $row->lokasi ? $row->lokasi->nama_lokasi : $row->dealer_code;

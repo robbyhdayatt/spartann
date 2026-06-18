@@ -362,12 +362,13 @@ return [
                     'icon'  => 'fas fa-sliders-h',
                     'can'   => 'view-stock-adjustment',
                 ],
-                // [
-                //     'text' => 'Mutasi Stok',
-                //     'route' => 'admin.stock-mutations.index',
-                //     'icon' => 'fas fa-random',
-                //     'can'  => 'view-stock-transaction',
-                // ],
+                [
+                    'text' => 'Mutasi Stok',
+                    'url'  => 'admin/stock-mutations',
+                    'icon' => 'fas fa-fw fa-exchange-alt',
+                    'can'  => 'view-stock-transaction', // Hanya muncul bagi yang punya hak akses
+                    'active' => ['admin/stock-mutations', 'admin/stock-mutations/*'],
+                ],
             ],
         ],
 

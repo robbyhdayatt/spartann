@@ -37,7 +37,7 @@
                 <tr>
                     <th>Tanggal</th>
                     <th>Lokasi / Rak</th>
-                    <th width="30%">Barang</th>
+                    <th width="25%">Barang</th>
                     <th class="text-center">Tipe</th>
                     <th class="text-center">Jumlah</th>
                     <th class="text-center">Status</th>
@@ -48,7 +48,11 @@
             <tbody>
                 @foreach($adjustments as $adj)
                 <tr>
-                    <td class="align-middle">{{ $adj->created_at->format('d/m/Y') }}</td>
+                    {{-- [MODIFIKASI] Tambah atribut data-sort agar DataTables mengurutkan berdasarkan format waktu baku, bukan teks visual --}}
+                    <td class="align-middle" data-sort="{{ $adj->created_at->format('Y-m-d H:i:s') }}">
+                        <div class="font-weight-bold">{{ $adj->created_at->format('d/m/Y') }}</div>
+                        <small class="text-muted">{{ $adj->created_at->format('H:i') }}</small>
+                    </td>
                     <td class="align-middle">
                         <strong>{{ $adj->lokasi->nama_lokasi }}</strong><br>
                         <small class="text-muted"><i class="fas fa-th mr-1"></i> {{ $adj->rak->kode_rak ?? '-' }}</small>
@@ -72,10 +76,18 @@
                         @elseif($adj->status == 'APPROVED')
                             <span class="badge badge-primary">Disetujui</span>
                         @else
-                            <span class="badge badge-secondary">Ditolak</span>
+                            <span class="badge badge-secondary" title="{{ $adj->rejection_reason ?? 'Tanpa keterangan' }}">Ditolak</span>
                         @endif
                     </td>
-                    <td class="align-middle text-sm">{{ $adj->createdBy->nama ?? 'System' }}</td>
+                    {{-- [MODIFIKASI] Menambahkan info siapa yang membuat dan menyetujui --}}
+                    <td class="align-middle text-sm">
+                        <div><i class="fas fa-user-edit text-muted mr-1" title="Dibuat oleh"></i> {{ $adj->createdBy->nama ?? $adj->createdBy->username ?? 'System' }}</div>
+                        @if($adj->status == 'APPROVED')
+                            <div class="mt-1 text-success"><i class="fas fa-check-double mr-1" title="Disetujui oleh"></i> {{ $adj->approvedBy->nama ?? $adj->approvedBy->username ?? 'Unknown' }}</div>
+                        @elseif($adj->status == 'REJECTED')
+                            <div class="mt-1 text-danger"><i class="fas fa-times mr-1" title="Ditolak oleh"></i> {{ $adj->approvedBy->nama ?? $adj->approvedBy->username ?? 'Unknown' }}</div>
+                        @endif
+                    </td>
                     <td class="align-middle text-center">
                         @if($adj->status == 'PENDING_APPROVAL')
                             @can('approve-stock-adjustment', $adj)

@@ -12,25 +12,77 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Yajra\DataTables\Facades\DataTables;
 
 class StockMutationController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $this->authorize('view-stock-transaction');
-        
-        $user = Auth::user();
-        $query = StockMutation::with(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy']);
 
-        if (!$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS'])) {
-            $query->where(function($q) use ($user) {
-                $q->where('lokasi_asal_id', $user->lokasi_id)
-                  ->orWhere('lokasi_tujuan_id', $user->lokasi_id);
-            });
+        // Menyimpan riwayat filter di session agar tidak hilang saat refresh
+        if ($request->filled('start_date') || $request->filled('end_date')) {
+            session([
+                'mutation.start_date' => $request->input('start_date'),
+                'mutation.end_date'   => $request->input('end_date'),
+            ]);
         }
 
-        $mutations = $query->latest()->paginate(15);
-        return view('admin.stock_mutations.index', compact('mutations'));
+        // Default: 1 Bulan terakhir (jika belum ada filter)
+        $startDate = $request->input('start_date', session('mutation.start_date', now()->startOfMonth()->toDateString()));
+        $endDate   = $request->input('end_date', session('mutation.end_date', now()->toDateString()));
+        
+        if ($request->ajax()) {
+            $user = Auth::user();
+            $query = StockMutation::with(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy'])->select('stock_mutations.*');
+
+            if (!$user->hasRole(['SA', 'PIC', 'ASD', 'ACC', 'IMS'])) {
+                $query->where(function($q) use ($user) {
+                    $q->where('lokasi_asal_id', $user->lokasi_id)
+                      ->orWhere('lokasi_tujuan_id', $user->lokasi_id);
+                });
+            }
+
+            // Menerapkan Filter Tanggal
+            if ($startDate && $endDate) {
+                try {
+                    $start = \Carbon\Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
+                    $end = \Carbon\Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
+                    $query->whereBetween('stock_mutations.created_at', [$start, $end]);
+                } catch (\Exception $e) {
+                    // Abaikan jika format tanggal salah
+                }
+            }
+
+            return DataTables::of($query)
+                ->addColumn('nomor_mutasi_html', function($row) {
+                    return '<strong>'.$row->nomor_mutasi.'</strong><br><small class="text-muted">'.$row->created_at->format('d M Y').'</small>';
+                })
+                ->addColumn('part_html', function($row) {
+                    $name = $row->barang ? $row->barang->part_name : '-';
+                    $code = $row->barang ? $row->barang->part_code : '-';
+                    return $name.'<br><small class="text-muted">'.$code.'</small>';
+                })
+                ->addColumn('rute_html', function($row) {
+                    $asal = $row->lokasiAsal ? $row->lokasiAsal->nama_lokasi : '-';
+                    $tujuan = $row->lokasiTujuan ? $row->lokasiTujuan->nama_lokasi : '-';
+                    return '<i class="fas fa-arrow-up text-danger"></i> '.$asal.'<br><i class="fas fa-arrow-down text-success"></i> '.$tujuan;
+                })
+                ->editColumn('status', function($row) {
+                    if($row->status == 'PENDING_APPROVAL') return '<span class="badge badge-warning">Menunggu Persetujuan</span>';
+                    if($row->status == 'IN_TRANSIT') return '<span class="badge badge-info"><i class="fas fa-shipping-fast"></i> Dalam Perjalanan</span>';
+                    if($row->status == 'COMPLETED') return '<span class="badge badge-success"><i class="fas fa-check"></i> Selesai</span>';
+                    if($row->status == 'REJECTED') return '<span class="badge badge-danger"><i class="fas fa-times"></i> Ditolak</span>';
+                    return '<span class="badge badge-secondary">'.$row->status.'</span>';
+                })
+                ->addColumn('aksi', function($row) {
+                    return '<a href="'.route('admin.stock-mutations.show', $row).'" class="btn btn-info btn-sm shadow-sm"><i class="fas fa-eye"></i> Detail</a>';
+                })
+                ->rawColumns(['nomor_mutasi_html', 'part_html', 'rute_html', 'status', 'aksi'])
+                ->make(true);
+        }
+
+        return view('admin.stock_mutations.index', compact('startDate', 'endDate'));
     }
 
     public function create()
@@ -215,13 +267,78 @@ class StockMutationController extends Controller
         return redirect()->route('admin.stock-mutations.index')->with('success', 'Permintaan mutasi ditolak.');
     }
 
+    // ====================================================================================
+    // [FUNGSI BARU] MENERIMA BARANG (MENGUBAH STATUS IN_TRANSIT -> COMPLETED)
+    // ====================================================================================
+    public function receive(StockMutation $stockMutation)
+    {
+        // Hanya yang berada di lokasi tujuan (atau SA/Pusat) yang boleh menerima
+        $user = Auth::user();
+        if (!$user->hasRole(['SA', 'PIC', 'ASD']) && $user->lokasi_id != $stockMutation->lokasi_tujuan_id) {
+            return back()->with('error', 'Anda tidak memiliki hak untuk menerima barang di lokasi tujuan ini.');
+        }
+
+        if ($stockMutation->status !== 'IN_TRANSIT') {
+            return back()->with('error', 'Hanya mutasi berstatus IN TRANSIT yang dapat diterima.');
+        }
+
+        DB::beginTransaction();
+        try {
+            // 1. Cari atau buat batch baru di gudang tujuan
+            $batchTujuan = InventoryBatch::firstOrCreate(
+                [
+                    'barang_id' => $stockMutation->barang_id,
+                    'lokasi_id' => $stockMutation->lokasi_tujuan_id,
+                ],
+                [
+                    'batch_no' => 'MUT-' . date('ymd') . '-' . $stockMutation->id,
+                    'quantity' => 0,
+                    // Karena tidak milih rak secara spesifik, dibiarkan default atau null jika ada logic rak
+                ]
+            );
+
+            $stokAwalTujuan = $batchTujuan->quantity;
+            
+            // 2. Tambahkan kuantitas ke gudang tujuan
+            $batchTujuan->increment('quantity', $stockMutation->jumlah);
+
+            // 3. Catat di Stock Movement sebagai barang masuk
+            StockMovement::create([
+                'barang_id'      => $stockMutation->barang_id,
+                'lokasi_id'      => $stockMutation->lokasi_tujuan_id,
+                'rak_id'         => $batchTujuan->rak_id,
+                'jumlah'         => $stockMutation->jumlah,
+                'stok_sebelum'   => $stokAwalTujuan,
+                'stok_sesudah'   => $stokAwalTujuan + $stockMutation->jumlah,
+                'referensi_type' => get_class($stockMutation),
+                'referensi_id'   => $stockMutation->id,
+                'keterangan'     => 'Mutasi Masuk dari: ' . $stockMutation->lokasiAsal->nama_lokasi,
+                'user_id'        => Auth::id(),
+            ]);
+
+            // 4. Ubah status mutasi menjadi COMPLETED
+            $stockMutation->update([
+                'status'      => 'COMPLETED',
+                'received_by' => Auth::id(),
+                'received_at' => now(),
+            ]);
+
+            DB::commit();
+            return redirect()->route('admin.stock-mutations.show', $stockMutation->id)
+                ->with('success', 'Barang berhasil diterima. Stok di lokasi tujuan telah bertambah!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal memproses penerimaan: ' . $e->getMessage());
+        }
+    }
+
     public function show(StockMutation $stockMutation)
     {
         $stockMutation->load(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy', 'approvedBy', 'receivedBy']);
         return view('admin.stock_mutations.show', compact('stockMutation'));
     }
 
-    
     public function getPartsWithStock(Lokasi $lokasi)
     {
         $barangs = Barang::where('is_active', true)->whereHas('inventoryBatches', function($q) use ($lokasi) {

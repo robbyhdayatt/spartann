@@ -74,6 +74,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::resource('stock-mutations', StockMutationController::class)->except(['edit', 'update', 'destroy'])->names('stock-mutations');
     Route::post('stock-mutations/{stock_mutation}/approve', [StockMutationController::class, 'approve'])->name('stock-mutations.approve');
     Route::post('stock-mutations/{stock_mutation}/reject', [StockMutationController::class, 'reject'])->name('stock-mutations.reject');
+    Route::post('stock-mutations/{stockMutation}/receive', [StockMutationController::class, 'receive'])->name('stock-mutations.receive');
 
     Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'create', 'store', 'show']);
     Route::get('purchase-returns/{purchaseReturn}/pdf', [PurchaseReturnController::class, 'pdf'])->name('purchase-returns.pdf');

@@ -17,7 +17,7 @@ class PenjualanDetail extends Model
         'rak_id',
         'qty_jual',
         'harga_jual',
-        'harga_modal', // <--- TAMBAHKAN BARIS INI
+        'harga_modal',
         'subtotal',
         'qty_diretur'
     ];
