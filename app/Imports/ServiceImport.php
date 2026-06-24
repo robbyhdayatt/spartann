@@ -662,7 +662,30 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     $this->isCurrentServiceNew = false;
                     $this->processedDetailIds = []; 
                     
+                    // Update data reguler
                     $existingService->update($serviceData);
+
+                    // [PERBAIKAN]: Cek & Sinkronisasi 'created_at' jika tanggal dikoreksi
+                    $oldDate = \Carbon\Carbon::parse($existingService->created_at)->format('Y-m-d');
+                    if ($oldDate !== $regDate) {
+                        // Rakit waktu yang baru (Tanggal Baru + Jam Lama)
+                        $newCreatedAt = $regDate . ' ' . $existingService->created_at->format('H:i:s');
+
+                        // Paksa timpa created_at (bypass proteksi timestamp Laravel)
+                        $existingService->timestamps = false; 
+                        $existingService->created_at = $newCreatedAt;
+                        $existingService->save();
+                        $existingService->timestamps = true; 
+
+                        // Wajib: Pindahkan juga tanggal riwayat pengeluaran gudang agar laporan HPP tidak bocor
+                        StockMovement::where('referensi_type', 'App\Models\Service')
+                            ->where('referensi_id', $existingService->id)
+                            ->update([
+                                'created_at' => $newCreatedAt,
+                                'updated_at' => $newCreatedAt
+                            ]);
+                    }
+
                     $this->currentService = $existingService;
                     $this->updatedCount++;
                     

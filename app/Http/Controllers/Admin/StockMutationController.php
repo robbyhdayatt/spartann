@@ -55,6 +55,7 @@ class StockMutationController extends Controller
             }
 
             return DataTables::of($query)
+                ->addIndexColumn()
                 ->addColumn('nomor_mutasi_html', function($row) {
                     return '<strong>'.$row->nomor_mutasi.'</strong><br><small class="text-muted">'.$row->created_at->format('d M Y').'</small>';
                 })
@@ -270,62 +271,78 @@ class StockMutationController extends Controller
     // ====================================================================================
     // [FUNGSI BARU] MENERIMA BARANG (MENGUBAH STATUS IN_TRANSIT -> COMPLETED)
     // ====================================================================================
-    public function receive(StockMutation $stockMutation)
+    public function receive(Request $request, StockMutation $stockMutation)
     {
-        // Hanya yang berada di lokasi tujuan (atau SA/Pusat) yang boleh menerima
         $user = Auth::user();
         if (!$user->hasRole(['SA', 'PIC', 'ASD']) && $user->lokasi_id != $stockMutation->lokasi_tujuan_id) {
             return back()->with('error', 'Anda tidak memiliki hak untuk menerima barang di lokasi tujuan ini.');
         }
 
-        if ($stockMutation->status !== 'IN_TRANSIT') {
-            return back()->with('error', 'Hanya mutasi berstatus IN TRANSIT yang dapat diterima.');
+        if (!in_array($stockMutation->status, ['IN_TRANSIT', 'PARTIALLY_RECEIVED'])) {
+            return back()->with('error', 'Hanya mutasi berstatus IN TRANSIT atau PARTIAL yang dapat diterima.');
         }
+
+        // Hitung sisa barang yang belum diterima
+        $sisaBelumDiterima = $stockMutation->jumlah - $stockMutation->jumlah_diterima;
+
+        // [PERBAIKAN POINT 3]: Validasi Partial Receiving
+        $request->validate([
+            'rak_id' => 'required',
+            'qty_terima' => 'required|integer|min:1|max:' . $sisaBelumDiterima,
+        ], [
+            'rak_id.required' => 'Wajib memilih lokasi Rak untuk putaway.',
+            'qty_terima.max' => 'Jumlah terima tidak boleh melebihi sisa barang yang dikirim (' . $sisaBelumDiterima . ' Pcs).'
+        ]);
+
+        $qtyTerimaSekarang = (int) $request->qty_terima;
 
         DB::beginTransaction();
         try {
-            // 1. Cari atau buat batch baru di gudang tujuan
-            $batchTujuan = InventoryBatch::firstOrCreate(
-                [
-                    'barang_id' => $stockMutation->barang_id,
-                    'lokasi_id' => $stockMutation->lokasi_tujuan_id,
-                ],
-                [
-                    'batch_no' => 'MUT-' . date('ymd') . '-' . $stockMutation->id,
-                    'quantity' => 0,
-                    // Karena tidak milih rak secara spesifik, dibiarkan default atau null jika ada logic rak
-                ]
-            );
+            // [PERBAIKAN POINT 2]: Simpan stock_mutation_id ke InventoryBatch
+            $batchTujuan = InventoryBatch::create([
+                'barang_id'         => $stockMutation->barang_id,
+                'lokasi_id'         => $stockMutation->lokasi_tujuan_id,
+                'rak_id'            => $request->rak_id, 
+                'stock_mutation_id' => $stockMutation->id, // Tautkan ID Mutasi
+                'batch_no'          => 'MUT-' . date('ymd') . '-' . $stockMutation->id,
+                'quantity'          => $qtyTerimaSekarang,
+            ]);
 
-            $stokAwalTujuan = $batchTujuan->quantity;
-            
-            // 2. Tambahkan kuantitas ke gudang tujuan
-            $batchTujuan->increment('quantity', $stockMutation->jumlah);
-
-            // 3. Catat di Stock Movement sebagai barang masuk
             StockMovement::create([
                 'barang_id'      => $stockMutation->barang_id,
                 'lokasi_id'      => $stockMutation->lokasi_tujuan_id,
-                'rak_id'         => $batchTujuan->rak_id,
-                'jumlah'         => $stockMutation->jumlah,
-                'stok_sebelum'   => $stokAwalTujuan,
-                'stok_sesudah'   => $stokAwalTujuan + $stockMutation->jumlah,
+                'rak_id'         => $request->rak_id,
+                'jumlah'         => $qtyTerimaSekarang,
+                'stok_sebelum'   => 0,
+                'stok_sesudah'   => $qtyTerimaSekarang,
                 'referensi_type' => get_class($stockMutation),
                 'referensi_id'   => $stockMutation->id,
-                'keterangan'     => 'Mutasi Masuk dari: ' . $stockMutation->lokasiAsal->nama_lokasi,
+                'keterangan'     => "Terima Parsial ({$qtyTerimaSekarang} Pcs) dari Mutasi Asal: " . $stockMutation->lokasiAsal->nama_lokasi,
                 'user_id'        => Auth::id(),
             ]);
 
-            // 4. Ubah status mutasi menjadi COMPLETED
+            // Hitung total penerimaan baru
+            $totalDiterima = $stockMutation->jumlah_diterima + $qtyTerimaSekarang;
+            
+            // Tentukan status: Apakah sudah genap diterima semua, atau masih sisa (Partial)?
+            $statusBaru = ($totalDiterima >= $stockMutation->jumlah) ? 'COMPLETED' : 'PARTIALLY_RECEIVED';
+
+            // [PERBAIKAN POINT 4]: Update status, jumlah terima, dan rak_tujuan_id
             $stockMutation->update([
-                'status'      => 'COMPLETED',
-                'received_by' => Auth::id(),
-                'received_at' => now(),
+                'status'          => $statusBaru,
+                'jumlah_diterima' => $totalDiterima,
+                'rak_tujuan_id'   => $request->rak_id, // Simpan rak terakhir ke header mutasi
+                'received_by'     => Auth::id(),
+                'received_at'     => now(),
             ]);
 
             DB::commit();
-            return redirect()->route('admin.stock-mutations.show', $stockMutation->id)
-                ->with('success', 'Barang berhasil diterima. Stok di lokasi tujuan telah bertambah!');
+            
+            $pesan = $statusBaru === 'COMPLETED' 
+                ? 'Seluruh barang mutasi telah berhasil diterima dan diletakkan di rak.' 
+                : "Berhasil menerima sebagian barang ({$qtyTerimaSekarang} Pcs). Sisa barang masih berstatus PARTIAL.";
+
+            return redirect()->route('admin.stock-mutations.show', $stockMutation->id)->with('success', $pesan);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -336,7 +353,15 @@ class StockMutationController extends Controller
     public function show(StockMutation $stockMutation)
     {
         $stockMutation->load(['barang', 'lokasiAsal', 'lokasiTujuan', 'createdBy', 'approvedBy', 'receivedBy']);
-        return view('admin.stock_mutations.show', compact('stockMutation'));
+        
+        // [PERBAIKAN POINT 1]: Sembunyikan Rak Karantina
+        $daftarRak = DB::table('raks') 
+            ->where('lokasi_id', $stockMutation->lokasi_tujuan_id)
+            ->where('tipe_rak', '!=', 'karantina') // Filter rak karantina
+            ->orderBy('kode_rak')
+            ->get();
+
+        return view('admin.stock_mutations.show', compact('stockMutation', 'daftarRak'));
     }
 
     public function getPartsWithStock(Lokasi $lokasi)

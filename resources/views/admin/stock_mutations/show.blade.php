@@ -40,18 +40,6 @@
                 @endcan
             @endif
 
-            {{-- TOMBOL TERIMA BARANG jika status IN_TRANSIT --}}
-            @if($stockMutation->status === 'IN_TRANSIT')
-                @can('receive-stock-transaction', $stockMutation)
-                    <form action="{{ route('admin.stock-mutations.receive', $stockMutation->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Apakah barang fisik sudah Anda terima dan diperiksa? Ini akan menambah stok di gudang Anda!');">
-                        @csrf
-                        <button type="submit" class="btn btn-info btn-sm shadow-sm">
-                            <i class="fas fa-box-open mr-1"></i> Konfirmasi Terima Barang
-                        </button>
-                    </form>
-                @endcan
-            @endif
-
             <a href="{{ route('admin.stock-mutations.index') }}" class="btn btn-default btn-sm ml-2 shadow-sm"><i class="fas fa-arrow-left"></i> Kembali</a>
         </div>
     </div>
@@ -73,7 +61,8 @@
                         <td>: 
                             @if($stockMutation->status == 'PENDING_APPROVAL') <span class="badge badge-warning">Menunggu Persetujuan</span>
                             @elseif($stockMutation->status == 'IN_TRANSIT') <span class="badge badge-info"><i class="fas fa-shipping-fast"></i> Dalam Perjalanan</span>
-                            @elseif($stockMutation->status == 'COMPLETED') <span class="badge badge-success"><i class="fas fa-check-circle"></i> Selesai (Diterima)</span>
+                            @elseif($stockMutation->status == 'PARTIALLY_RECEIVED') <span class="badge badge-primary"><i class="fas fa-star-half-alt"></i> Diterima Sebagian</span>
+                            @elseif($stockMutation->status == 'COMPLETED') <span class="badge badge-success"><i class="fas fa-check-circle"></i> Selesai (Diterima Penuh)</span>
                             @elseif($stockMutation->status == 'REJECTED') <span class="badge badge-danger">Ditolak</span>
                             @else <span class="badge badge-secondary">{{ $stockMutation->status }}</span>
                             @endif
@@ -97,7 +86,7 @@
                             <small class="text-muted">{{ $stockMutation->lokasiAsal->kode_lokasi }}</small>
                         </div>
                         <div class="text-center px-3">
-                            <i class="fas fa-truck-moving fa-2x text-secondary {{ $stockMutation->status == 'IN_TRANSIT' ? 'text-info' : '' }}"></i>
+                            <i class="fas fa-truck-moving fa-2x text-secondary {{ in_array($stockMutation->status, ['IN_TRANSIT', 'PARTIALLY_RECEIVED']) ? 'text-info' : '' }}"></i>
                         </div>
                         <div class="text-center w-50">
                             <strong class="d-block text-success">Gudang Tujuan <i class="fas fa-arrow-down"></i></strong>
@@ -127,12 +116,73 @@
                     <tr>
                         <td class="align-middle"><code>{{ $stockMutation->barang->part_code }}</code></td>
                         <td class="align-middle font-weight-bold">{{ $stockMutation->barang->part_name }}</td>
-                        <td class="text-center font-weight-bold align-middle text-primary" style="font-size: 1.3em">{{ $stockMutation->jumlah }}</td>
+                        <td class="text-center align-middle">
+                            <strong class="text-primary" style="font-size: 1.3em">{{ $stockMutation->jumlah }} Pcs</strong><br>
+                            <small class="text-success font-weight-bold">Diterima: {{ $stockMutation->jumlah_diterima ?? 0 }}</small>
+                        </td>
                         <td class="align-middle">{{ $stockMutation->keterangan ?? '-' }}</td>
                     </tr>
                 </tbody>
             </table>
         </div>
+
+        {{-- [FITUR BARU] PANEL PARTIAL RECEIVING & PUTAWAY --}}
+        @php 
+            $sisaKirim = $stockMutation->jumlah - ($stockMutation->jumlah_diterima ?? 0); 
+        @endphp
+
+        @if(in_array($stockMutation->status, ['IN_TRANSIT', 'PARTIALLY_RECEIVED']) && $sisaKirim > 0)
+            @can('receive-stock-transaction', $stockMutation)
+                <div class="card card-outline card-success shadow-sm mt-4 border-success">
+                    <div class="card-header bg-success text-white">
+                        <h3 class="card-title font-weight-bold"><i class="fas fa-boxes mr-2"></i> Proses Penerimaan Fisik & Putaway (Mendukung Parsial)</h3>
+                    </div>
+                    <div class="card-body bg-light">
+                        <form action="{{ route('admin.stock-mutations.receive', $stockMutation->id) }}" method="POST" onsubmit="return confirm('Pastikan Qty fisik dan Rak penempatan sudah sesuai. Lanjutkan?');">
+                            @csrf
+                            <div class="row align-items-end">
+                                <div class="col-md-3 mb-3 mb-md-0">
+                                    <div class="form-group mb-0">
+                                        <label class="text-sm font-weight-bold text-dark">Sisa Belum Diterima</label>
+                                        <input type="text" class="form-control font-weight-bold text-danger" value="{{ $sisaKirim }} Pcs" disabled>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3 mb-md-0">
+                                    <div class="form-group mb-0">
+                                        <label for="qty_terima" class="text-sm font-weight-bold text-primary">Qty Diterima Saat Ini <span class="text-danger">*</span></label>
+                                        <input type="number" name="qty_terima" id="qty_terima" class="form-control @error('qty_terima') is-invalid @enderror" min="1" max="{{ $sisaKirim }}" value="{{ $sisaKirim }}" required>
+                                        @error('qty_terima')
+                                            <span class="invalid-feedback d-block"><strong>{{ $message }}</strong></span>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3 mb-md-0">
+                                    <div class="form-group mb-0">
+                                        <label for="rak_id" class="text-sm font-weight-bold text-dark">Simpan ke Rak <span class="text-danger">*</span></label>
+                                        <select name="rak_id" id="rak_id" class="form-control select2 @error('rak_id') is-invalid @enderror" required style="width: 100%;">
+                                            <option value="">-- Pilih Rak --</option>
+                                            @if(isset($daftarRak))
+                                                @foreach($daftarRak as $rak)
+                                                    <option value="{{ $rak->id }}">{{ $rak->kode_rak }} - {{ $rak->nama_rak }}</option>
+                                                @endforeach
+                                            @endif
+                                        </select>
+                                        @error('rak_id')
+                                            <span class="invalid-feedback d-block"><strong>{{ $message }}</strong></span>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit" class="btn btn-success btn-block font-weight-bold shadow-sm" style="height: 38px;">
+                                        <i class="fas fa-check"></i> Proses
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            @endcan
+        @endif
 
         {{-- History Log --}}
         <div class="row mt-4">
@@ -160,13 +210,13 @@
                 </div>
             @endif
 
-            {{-- Jika Diterima (Log Receive) --}}
-            @if($stockMutation->received_at)
+            {{-- Jika Diterima (Log Receive - Tampil jika sudah ada yang diterima) --}}
+            @if($stockMutation->jumlah_diterima > 0)
                 <div class="col-md-6">
                     <div class="alert alert-success border-success bg-light text-dark">
                         <i class="icon fas fa-box-open text-success"></i> 
-                        <strong>Diterima Oleh:</strong> {{ $stockMutation->receivedBy->nama ?? '-' }}<br>
-                        <small class="text-muted"><i class="far fa-clock"></i> Waktu: {{ $stockMutation->received_at->format('d M Y, H:i') }}</small>
+                        <strong>Penerimaan Terakhir:</strong> {{ $stockMutation->receivedBy->nama ?? '-' }}<br>
+                        <small class="text-muted"><i class="far fa-clock"></i> Waktu: {{ $stockMutation->received_at ? $stockMutation->received_at->format('d M Y, H:i') : '-' }}</small>
                     </div>
                 </div>
             @endif
@@ -204,8 +254,18 @@
 
 @section('js')
 <script>
-    @if ($errors->has('rejection_reason'))
-        $('#rejectModal').modal('show');
-    @endif
+    $(document).ready(function() {
+        // Inisialisasi Select2 untuk dropdown Rak agar mudah dicari
+        if ($('.select2').length) {
+            $('.select2').select2({
+                theme: 'bootstrap4',
+                placeholder: "-- Pilih Rak --"
+            });
+        }
+
+        @if ($errors->has('rejection_reason'))
+            $('#rejectModal').modal('show');
+        @endif
+    });
 </script>
 @stop
