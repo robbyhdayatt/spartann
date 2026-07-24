@@ -24,6 +24,12 @@ class ServiceController extends Controller
 {
     public function index(Request $request)
     {
+        // =========================================================================
+        // [MODIFIKASI] MAINTENANCE MODE: Mengarahkan halaman ke view maintenance
+        // Hapus atau jadikan komentar (//) baris di bawah ini jika perbaikan sudah selesai
+        // =========================================================================
+        // return view('admin.maintenance');
+
         $this->authorize('view-service');
 
         $user = Auth::user();

@@ -20,6 +20,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class HomeController extends Controller
 {
@@ -94,39 +95,44 @@ class HomeController extends Controller
     public function searchYgp(Request $request)
     {
         $search = $request->q;
-        $query = Part::where('is_active', 1);
-        
-        if ($search) {
-            $query->where(function($q) use ($search) {
-                $q->where('kode_part', 'like', "%{$search}%")
-                  ->orWhere('nama_part', 'like', "%{$search}%");
-            });
-        }
-        
-        $parts = $query->limit(50)->get();
+        $cacheKey = 'search_ygp_' . md5($search);
 
-        $results = [];
+        $results = Cache::remember($cacheKey, now()->addMinutes(5), function() use ($search) {
+            $query = Part::where('is_active', 1);
+            
+            if ($search) {
+                $query->where(function($q) use ($search) {
+                    $q->where('kode_part', 'like', "%{$search}%")
+                      ->orWhere('nama_part', 'like', "%{$search}%");
+                });
+            }
+            
+            $parts = $query->limit(50)->get();
+            $results = [];
 
-        if (!$search || stripos('semua', $search) !== false || stripos('all', $search) !== false) {
-            $results[] = [
-                'id' => 'all', 
-                'text' => '-- Semua YGP --'
-            ];
-        }
-        
-        if (!$search || stripos('sembunyi', $search) !== false || stripos('none', $search) !== false) {
-            $results[] = [
-                'id' => 'none', 
-                'text' => '-- Sembunyikan Semua YGP --'
-            ];
-        }
+            if (!$search || stripos('semua', $search) !== false || stripos('all', $search) !== false) {
+                $results[] = [
+                    'id' => 'all', 
+                    'text' => '-- Semua YGP --'
+                ];
+            }
+            
+            if (!$search || stripos('sembunyi', $search) !== false || stripos('none', $search) !== false) {
+                $results[] = [
+                    'id' => 'none', 
+                    'text' => '-- Sembunyikan Semua YGP --'
+                ];
+            }
 
-        foreach ($parts as $part) {
-            $results[] = [
-                'id' => $part->kode_part,
-                'text' => $part->kode_part . ' - ' . $part->nama_part
-            ];
-        }
+            foreach ($parts as $part) {
+                $results[] = [
+                    'id' => $part->kode_part,
+                    'text' => $part->kode_part . ' - ' . $part->nama_part
+                ];
+            }
+
+            return $results;
+        });
 
         return response()->json(['results' => $results]);
     }
@@ -139,6 +145,10 @@ class HomeController extends Controller
             'totalUsers' => User::where('is_active', 1)->count(),
             'totalWarehouses' => Lokasi::count(),
             'negativeStockCount' => DB::table('inventory_batches')->where('quantity', '<', 0)->count(),
+            // [MODIFIKASI]: Menarik data dealer yang sudah melakukan import (Relasi dealer_code & kode_lokasi)
+            'activeDealersImport' => Lokasi::whereIn('kode_lokasi', function($q) {
+                $q->select('dealer_code')->from('services')->distinct();
+            })->get(['kode_lokasi', 'nama_lokasi']),
             'recentActivities' => StockMovement::with(['user', 'lokasi', 'barang'])->latest()->limit(10)->get(),
             'dbStats' => [
                 'penjualan' => DB::table('penjualans')->count(),
@@ -200,8 +210,9 @@ class HomeController extends Controller
                 return $q->where('lokasi_id', $filterL);
             })->count();
 
+        // [MODIFIKASI SOP] Ganti DATE(reg_date) ke DATE(created_at)
         $countService = DB::table('services')
-            ->whereBetween(DB::raw('DATE(reg_date)'), [$startD, $endD])
+            ->whereBetween(DB::raw('DATE(created_at)'), [$startD, $endD])
             ->when($filterL !== 'all', function($q) use ($filterL) {
                 return $q->where('lokasi_id', $filterL);
             })->count();
@@ -308,47 +319,52 @@ class HomeController extends Controller
                 return $q->where('penjualan_details.barang_id', $filterNonYgp); 
             });
 
+        // [MODIFIKASI SOP] Ganti filter whereBetween dan kolom select dari reg_date menjadi DATE(created_at)
         $retailYgpQuery = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
             ->select(
-                'services.lokasi_id', 'services.reg_date as tgl', 
+                'services.lokasi_id', DB::raw('DATE(services.created_at) as tgl'), 
                 DB::raw('(service_details.quantity * service_details.price) as omset'), 
                 DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
                 'service_details.quantity as qty', 'service_details.barang_id', 'service_details.item_code'
             )
-            ->where('services.service_order', 'Part Retail')->whereBetween('services.reg_date', [$startDate, $endDate])
+            ->where('services.service_order', 'Part Retail')
+            ->whereBetween(DB::raw('DATE(services.created_at)'), [$startDate, $endDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
             ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
                 if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
                 return $q->where('service_details.item_code', $filterYgp); 
             });
 
+        // [MODIFIKASI SOP] Ganti filter whereBetween dan kolom select dari reg_date menjadi DATE(created_at)
         $serviceNonYgpQuery = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
             ->select(
-                'services.lokasi_id', 'services.reg_date as tgl', 
+                'services.lokasi_id', DB::raw('DATE(services.created_at) as tgl'), 
                 DB::raw('(service_details.quantity * service_details.price) as omset'), 
                 DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
                 'service_details.quantity as qty', 'service_details.barang_id', DB::raw('NULL as item_code')
             )
             ->where('services.service_order', 'LIKE', '%service%')->whereNotNull('service_details.barang_id')
-            ->whereBetween('services.reg_date', [$startDate, $endDate])
+            ->whereBetween(DB::raw('DATE(services.created_at)'), [$startDate, $endDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
             ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { 
                 if ($filterNonYgp === 'none') return $q->whereRaw('1 = 0');
                 return $q->where('service_details.barang_id', $filterNonYgp); 
             });
 
+        // [MODIFIKASI SOP] Ganti filter whereBetween dan kolom select dari reg_date menjadi DATE(created_at)
         $serviceYgpQuery = DB::table('service_details')
             ->join('services', 'service_details.service_id', '=', 'services.id')
             ->join('parts', 'service_details.item_code', '=', 'parts.kode_part') 
             ->select(
-                'services.lokasi_id', 'services.reg_date as tgl', 
+                'services.lokasi_id', DB::raw('DATE(services.created_at) as tgl'), 
                 DB::raw('(service_details.quantity * service_details.price) as omset'), 
                 DB::raw('(service_details.quantity * service_details.cost_price) as hpp'),
                 'service_details.quantity as qty', 'service_details.barang_id', 'service_details.item_code'
             )
-            ->where('services.service_order', 'LIKE', '%service%')->whereBetween('services.reg_date', [$startDate, $endDate])
+            ->where('services.service_order', 'LIKE', '%service%')
+            ->whereBetween(DB::raw('DATE(services.created_at)'), [$startDate, $endDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
             ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
                 if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
@@ -367,29 +383,34 @@ class HomeController extends Controller
                 return $q->where('penjualan_details.barang_id', $filterNonYgp); 
             });
 
+        // [MODIFIKASI SOP] Ganti whereBetween dari reg_date menjadi DATE(created_at)
         $prevRetailYgpQuery = DB::table('service_details')->join('services', 'service_details.service_id', '=', 'services.id')
             ->select('service_details.quantity as qty', DB::raw('(service_details.quantity * service_details.price) as omset'))
-            ->where('services.service_order', 'Part Retail')->whereBetween('services.reg_date', [$prevStartDate, $prevEndDate])
+            ->where('services.service_order', 'Part Retail')
+            ->whereBetween(DB::raw('DATE(services.created_at)'), [$prevStartDate, $prevEndDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
             ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
                 if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
                 return $q->where('service_details.item_code', $filterYgp); 
             });
 
+        // [MODIFIKASI SOP] Ganti whereBetween dari reg_date menjadi DATE(created_at)
         $prevServiceNonYgpQuery = DB::table('service_details')->join('services', 'service_details.service_id', '=', 'services.id')
             ->select('service_details.quantity as qty', DB::raw('(service_details.quantity * service_details.price) as omset'))
             ->where('services.service_order', 'LIKE', '%service%')->whereNotNull('service_details.barang_id')
-            ->whereBetween('services.reg_date', [$prevStartDate, $prevEndDate])
+            ->whereBetween(DB::raw('DATE(services.created_at)'), [$prevStartDate, $prevEndDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
             ->when($filterNonYgp !== 'all', function($q) use ($filterNonYgp) { 
                 if ($filterNonYgp === 'none') return $q->whereRaw('1 = 0');
                 return $q->where('service_details.barang_id', $filterNonYgp); 
             });
 
+        // [MODIFIKASI SOP] Ganti whereBetween dari reg_date menjadi DATE(created_at)
         $prevServiceYgpQuery = DB::table('service_details')->join('services', 'service_details.service_id', '=', 'services.id')
             ->join('parts', 'service_details.item_code', '=', 'parts.kode_part')
             ->select('service_details.quantity as qty', DB::raw('(service_details.quantity * service_details.price) as omset'))
-            ->where('services.service_order', 'LIKE', '%service%')->whereBetween('services.reg_date', [$prevStartDate, $prevEndDate])
+            ->where('services.service_order', 'LIKE', '%service%')
+            ->whereBetween(DB::raw('DATE(services.created_at)'), [$prevStartDate, $prevEndDate])
             ->when($filterLokasi !== 'all', function($q) use ($filterLokasi) { return $q->where('services.lokasi_id', $filterLokasi); })
             ->when($filterYgp !== 'all', function($q) use ($filterYgp) { 
                 if ($filterYgp === 'none') return $q->whereRaw('1 = 0');
@@ -611,7 +632,13 @@ class HomeController extends Controller
             ->count();
 
         $revenueSalesToday = Penjualan::where('lokasi_id', $lokasiId)->whereDate('tanggal_jual', today())->sum('total_harga');
-        $revenueServiceToday = DB::table('services')->where('lokasi_id', $lokasiId)->whereDate('reg_date', today())->sum(DB::raw('COALESCE(total_payment, total_amount, 0)'));
+        
+        // [MODIFIKASI SOP] Ganti whereDate dari reg_date menjadi created_at
+        $revenueServiceToday = DB::table('services')
+            ->where('lokasi_id', $lokasiId)
+            ->whereDate('created_at', today())
+            ->sum(DB::raw('COALESCE(total_payment, total_amount, 0)'));
+            
         $grandTotalRevenueToday = $revenueSalesToday + $revenueServiceToday;
 
         $validPartCodes = DB::table('converts_main')->distinct()->pluck('part_code')->toArray();

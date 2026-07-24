@@ -1,64 +1,165 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400"></a></p>
+# 🏍️ SPARTAN LTI — Sistem Manajemen Sparepart, Inventori & Bengkel Dealer Yamaha
 
-<p align="center">
-<a href="https://travis-ci.org/laravel/framework"><img src="https://travis-ci.org/laravel/framework.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+![Laravel Version](https://img.shields.io/badge/Laravel-8.x-orange.svg)
+![PHP Version](https://img.shields.io/badge/PHP-%5E7.3%20%7C%20%5E8.0-blue.svg)
+![Database](https://img.shields.io/badge/Database-MySQL%20%2F%20MariaDB-darkblue.svg)
+![AdminLTE](https://img.shields.io/badge/UI-AdminLTE%203-green.svg)
+![Organization](https://img.shields.io/badge/Watermark-IT%20Lautan%20Teduh-blue.svg)
+![Developer](https://img.shields.io/badge/Developer-Robby%20Hidayat-success.svg)
 
-## About Laravel
+**SPARTAN LTI** (*Sparepart & Inventory Management System*) adalah aplikasi Enterprise Resource Planning (ERP) berstandar industri yang dirancang khusus untuk mengelola operasional **Main Dealer Yamaha** beserta **34+ jaringan dealer & bengkel resmi** di wilayah Lampung.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 📌 Fitur & Modul Utama
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **📦 Manajemen Inventori Multi-Lokasi & Multi-Rak (WMS)**
+  - Melacak stok barang di 34+ cabang (Pusat, Gudang, Dealer).
+  - Manajemen rak berbasis koordinat 4 level: `[Zona]-[NomorRak]-[Level]-[Bin]` (contoh: `A-R01-L1-B01`).
+  - Pemisahan lokasi rak **PENYIMPANAN** vs **KARANTINA**.
+  - Metode pencatatan stok **FIFO (First-In, First-Out)** dengan **Pessimistic Locking** (`lockForUpdate()`).
 
-## Learning Laravel
+- **🛒 Purchasing & Distribution Management**
+  - **Dealer Request**: Permintaan pasokan stok dari cabang ke Gudang Pusat.
+  - **Supplier PO**: Pemesanan barang dari Gudang ke Supplier / Vendor resmi.
+  - Alur otorisasi berjenjang (2-level approval).
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **🔬 Quality Control (QC) & Receiving Workflow**
+  - Penerimaan barang masuk (*Goods Receipt*).
+  - Inspeksi QC: Barang lolos langsung masuk proses **Putaway** ke rak penyimpanan; barang retur/cacat masuk ke rak **KARANTINA**.
+  - Alur penanganan barang karantina (Restock, Return ke Supplier, atau Write-Off).
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains over 1500 video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- **💰 Point of Sale (POS) & Retail Sales**
+  - Kasir POS retail terintegrasi dengan pemotongan stok batch FIFO otomatis.
+  - Kalkulasi PPN (11%) dan diskon promosi bertingkat.
+  - Cetak Faktur Penjualan format landscape PDF (24cm x 14cm).
 
-## Laravel Sponsors
+- **🔧 Service Bengkel / Workshop Management**
+  - Integrasi invoice service bengkel (data kendaraan, nomor rangka, nomor mesin, teknisi).
+  - Import harian data service dari sistem YSS/Yamaha via Excel.
+  - Estimasi dan pemotongan otomatis stok sparepart yang digunakan dalam servis.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the Laravel [Patreon page](https://patreon.com/taylorotwell).
+- **🔄 Mutasi & Penyesuaian Stok (Stock Transfer & Adjustment)**
+  - Transfer stok antar-cabang dengan status `IN_TRANSIT` dan penerimaan parsial.
+  - Penyesuaian stok (*Stock Adjustment* `TAMBAH` / `KURANG`) dengan approval workflow.
 
-### Premium Partners
+- **📊 Laporan & Keuangan lengkap (Reports)**
+  - Kartu Stok (*Stock Card*), Total Stok, Stok per Lokasi, Jurnal Penjualan, Jurnal Pembelian, Nilai Inventori (HPP), Ringkasan Penjualan, dan Service Summary.
+  - Export data laporan ke format Microsoft Excel (.xlsx).
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Cubet Techno Labs](https://cubettech.com)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[Many](https://www.many.co.uk)**
-- **[Webdock, Fast VPS Hosting](https://www.webdock.io/en)**
-- **[DevSquad](https://devsquad.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[OP.GG](https://op.gg)**
-- **[WebReinvent](https://webreinvent.com/?utm_source=laravel&utm_medium=github&utm_campaign=patreon-sponsors)**
-- **[Lendio](https://lendio.com)**
+---
 
-## Contributing
+## 🔐 Otorisasi & Peran Pengguna (10 Roles)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Sistem menggunakan kontrol akses berbasis peran (*Gate Authorized*) yang dibagi ke dalam 10 jabatan:
 
-## Code of Conduct
+| Singkatan | Nama Jabatan | Lingkup Otoritas |
+|-----------|--------------|------------------|
+| **SA** | Super Admin | Akses Penuh Sistem (Global) |
+| **PIC** | Person In Charge | Monitoring Area & Approval Otoritas |
+| **ASD** | Area Service Development | Pengawasan Bengkel & Layanan Service |
+| **IMS** | Inventory MD | Pengelolaan Master Data & Inventori Pusat |
+| **ACC** | Accounting MD | Laporan Keuangan & Audit Jurnal |
+| **KG** | Kepala Gudang | Otorisasi Receiving, QC, Putaway & Mutasi |
+| **AG** | Admin Gudang | Eksekusi Fisik Gudang & Penerimaan |
+| **KC** | Kepala Cabang | Approval Internal Dealer & Cabang |
+| **PC** | Part Counter | Transaksi POS & Stok Cabang |
+| **KSR** | Kasir | Penjualan Kasir POS |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+## 🛠️ Technology Stack
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- **Framework**: Laravel 8.x
+- **PHP Version**: PHP 7.3 - 8.0+
+- **Frontend Template**: AdminLTE v3.1 + Bootstrap 5
+- **Database**: MySQL / MariaDB (Collation: `utf8mb4_unicode_ci`)
+- **PDF Engine**: DomPDF (`barryvdh/laravel-dompdf`)
+- **Spreadsheet Engine**: Laravel Excel (`maatwebsite/excel`)
+- **DataTables Engine**: Yajra DataTables (`yajra/laravel-datatables-oracle`)
+- **API Authentication**: Laravel Sanctum
 
-## License
+---
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## 🚀 Panduan Instalasi Lokal (Laragon / XAMPP)
+
+### 1. Prasyarat Sistem
+- PHP >= 7.3 / 8.0 (Extension: `pdo_mysql`, `mbstring`, `gd`, `zip`, `xml`, `fileinfo`)
+- Composer >= 2.0
+- Node.js & NPM
+- Laragon / XAMPP dengan MySQL Server
+
+### 2. Langkah Instalasi
+
+1. **Clone / Buka Repositori**:
+   ```bash
+   cd c:/laragon/www/spartann
+   ```
+
+2. **Install Dependensi PHP & JS**:
+   ```bash
+   composer install
+   npm install
+   ```
+
+3. **Konfigurasi Environment**:
+   Salin `.env.example` ke `.env` dan atur koneksi database:
+   ```env
+   APP_NAME="SPARTAN LTI"
+   APP_ENV=local
+   APP_KEY=base64:...
+   APP_DEBUG=true
+   APP_URL=http://localhost/spartann
+
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=spartann
+   DB_USERNAME=root
+   DB_PASSWORD=
+
+   QUEUE_CONNECTION=sync
+   ```
+
+4. **Import Database**:
+   Import file SQL bawaan `spartann.sql` ke MySQL Database `spartann` melalui phpMyAdmin atau MySQL CLI:
+   ```bash
+   mysql -u root -p spartann < spartann.sql
+   ```
+
+5. **Jalankan Migrasi Tambahan**:
+   ```bash
+   php artisan migrate
+   ```
+
+6. **Build Asset Frontend**:
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## ⚙️ Perintah Artisan Khusus
+
+- **Deaktivasi Kampanye Kedaluwarsa**:
+  ```bash
+  php artisan campaigns:deactivate
+  ```
+- **Audit Kartu Stok / Rebuild Running Balance**:
+  ```bash
+  php artisan stock:fix-history
+  ```
+- **Kalkulasi Ulang HPP Beli Rata-Rata**:
+  ```bash
+  php artisan stock:recalculate-avg-price
+  ```
+
+---
+
+## 📄 Lisensi & Hak Cipta
+
+Hak Cipta © 2026 **SPARTAN LTI** - All Rights Reserved.  
+🏢 **Developed & Maintained by**: **Robby Hidayat**  
+💧 **Watermark / Organization**: **IT Lautan Teduh**  
+
+*Sistem dikembangkan secara internal oleh Tim IT Lautan Teduh untuk mengoperasikan jaringan Main Dealer & Dealer Resmi Yamaha di wilayah Lampung.*

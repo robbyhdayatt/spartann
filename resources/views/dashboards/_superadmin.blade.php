@@ -34,7 +34,6 @@
                     <i class="fas fa-server mr-1 text-secondary"></i> IT & System Health
                 </a>
             </li>
-            {{-- Tab Financial (ACC) telah dihapus sesuai permintaan --}}
             <li class="nav-item">
                 <a class="nav-link font-weight-bold" id="tab-mgt-link" data-toggle="pill" href="#tab-mgt" role="tab">
                     <i class="fas fa-briefcase mr-1 text-warning"></i> Management (PIC)
@@ -83,11 +82,14 @@
                         <div class="info-box shadow-sm border border-secondary bg-white">
                             <span class="info-box-icon text-secondary"><i class="fas fa-network-wired"></i></span>
                             <div class="info-box-content">
-                                <span class="info-box-text text-muted font-weight-bold">Jaringan Ekosistem</span>
+                                {{-- [MODIFIKASI] Widget Jaringan Ekosistem --}}
+                                <span class="info-box-text text-muted font-weight-bold">Ekosistem (Import Service)</span>
                                 <span class="info-box-number text-dark" style="font-size: 1.5rem;">
-                                    {{ $data['totalUsers'] }} <small>User</small> <span class="text-muted font-weight-light mx-1">|</span> {{ $data['totalWarehouses'] }} <small>Lokasi</small>
+                                    {{ count($data['activeDealersImport']) }} <small>Aktif</small> <span class="text-muted font-weight-light mx-1">|</span> {{ $data['totalWarehouses'] }} <small>Lokasi</small>
                                 </span>
-                                <span class="progress-description text-xs text-muted">Total entitas aktif di sistem</span>
+                                <span class="progress-description text-xs mt-1">
+                                    <a href="#" data-toggle="modal" data-target="#modalDealerImport" class="text-secondary text-decoration-none font-weight-bold"><i class="fas fa-list mr-1"></i> Lihat Daftar Dealer</a>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -115,20 +117,11 @@
                                     <tbody>
                                         @forelse($data['recentActivities'] as $log)
                                             <tr>
-                                                {{-- [MODIFIKASI] Tanggal & Jam --}}
                                                 <td class="pl-3 text-muted align-middle"><i class="far fa-clock mr-1"></i>{{ $log->created_at->format('d M Y, H:i:s') }}</td>
-                                                
-                                                {{-- [MODIFIKASI] Nama Lengkap User (Mendukung kolom name, nama, atau fallback username) --}}
                                                 <td class="font-weight-bold align-middle">{{ $log->user->name ?? $log->user->nama ?? $log->user->username ?? 'System' }}</td>
-                                                
-                                                {{-- [MODIFIKASI] Nama Lokasi Alih-alih Kode --}}
                                                 <td class="align-middle"><span class="badge badge-dark">{{ $log->lokasi->nama_lokasi ?? 'GLOBAL' }}</span></td>
-                                                
                                                 <td class="align-middle text-truncate" style="max-width: 200px;">{{ $log->barang->part_name ?? '-' }}</td>
-                                                
-                                                {{-- [MODIFIKASI] Menampilkan Detail Aktivitas Secar Utuh Tanpa Terpotong --}}
                                                 <td class="align-middle text-sm">{{ $log->keterangan }}</td>
-                                                
                                                 <td class="text-center pr-3 align-middle">
                                                     <span class="badge {{ $log->jumlah > 0 ? 'badge-success' : 'badge-danger' }} px-2 py-1">
                                                         {{ $log->jumlah > 0 ? '+' : '' }}{{ $log->jumlah }}
@@ -195,7 +188,6 @@
                                             </select>
                                         </div>
                                         
-                                        {{-- [MODIFIKASI] FILTER NON-YGP DENGAN OPSI SEMBUNYIKAN --}}
                                         <div class="col-md-2 mb-2 mb-md-0">
                                             <label class="text-xs text-primary font-weight-bold">Filter Non-YGP</label>
                                             <select name="barang_id" class="form-control form-control-sm select2">
@@ -207,7 +199,6 @@
                                             </select>
                                         </div>
                                         
-                                        {{-- [MODIFIKASI] FILTER YGP DENGAN OPSI SEMBUNYIKAN --}}
                                         <div class="col-md-2 mb-2 mb-md-0">
                                             <label class="text-xs text-danger font-weight-bold">Filter YGP (AJAX)</label>
                                             <select name="part_code" id="select2-ygp" class="form-control form-control-sm">
@@ -522,6 +513,38 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+</div>
+
+{{-- [MODIFIKASI] MODAL DAFTAR DEALER IMPORT --}}
+<div class="modal fade" id="modalDealerImport" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-secondary text-white border-0">
+                <h5 class="modal-title font-weight-bold"><i class="fas fa-network-wired mr-2"></i>Daftar Dealer (Sudah Import)</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <ul class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                    @forelse($data['activeDealersImport'] as $dealer)
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-check-circle text-success mr-2"></i>
+                                <span class="font-weight-bold text-dark">{{ $dealer->nama_lokasi }}</span>
+                            </div>
+                            <span class="badge badge-light border">{{ $dealer->kode_lokasi }}</span>
+                        </li>
+                    @empty
+                        <li class="list-group-item text-center text-muted py-4">Belum ada dealer yang melakukan import data service.</li>
+                    @endforelse
+                </ul>
+            </div>
+            <div class="modal-footer border-0 bg-light p-2 justify-content-center">
+                <span class="text-xs text-muted">Data ini diidentifikasi berdasarkan record import terakhir.</span>
+            </div>
         </div>
     </div>
 </div>

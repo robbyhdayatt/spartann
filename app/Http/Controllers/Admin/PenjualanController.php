@@ -10,6 +10,7 @@ use App\Models\Lokasi;
 use App\Models\Barang;
 use App\Models\InventoryBatch;
 use App\Models\StockMovement;
+use App\Services\PenjualanService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -87,161 +88,13 @@ class PenjualanController extends Controller
             return back()->withErrors($validator)->withInput();
         }
 
-        $lokasiId = $user->lokasi_id;
-        
-        if (!$lokasiId && $user->isGlobal()) {
-             $lokasiId = Lokasi::where('tipe', 'DEALER')->first()->id ?? null;
-        }
-
-        if (!$lokasiId) {
-            return back()->with('error', 'Lokasi penjualan tidak valid.')->withInput();
-        }
-
-        DB::beginTransaction();
         try {
-            // 2. Handle Data Konsumen (Cari atau Buat Baru)
-            $konsumen = Konsumen::firstOrCreate(
-                ['nama_konsumen' => $request->customer_name],
-                [
-                    'kode_konsumen' => 'CST-' . now()->format('ymd-His'),
-                    'tipe_konsumen' => $request->tipe_konsumen,
-                    'alamat'        => $request->alamat ?? '-',
-                    'telepon'       => $request->telepon ?? '-',
-                    'is_active'     => true
-                ]
-            );
-
-            // Jika konsumen sudah ada, update info kontaknya jika diisi
-            if (!$konsumen->wasRecentlyCreated) {
-                $konsumen->update([
-                    'tipe_konsumen' => $request->tipe_konsumen,
-                    'alamat' => $request->alamat ?? $konsumen->alamat,
-                    'telepon' => $request->telepon ?? $konsumen->telepon,
-                ]);
-            }
-
-            // 3. Buat Header Penjualan
-            $penjualan = Penjualan::create([
-                'nomor_faktur' => Penjualan::generateNomorFaktur($lokasiId),
-                'tanggal_jual' => $request->tanggal_jual,
-                'lokasi_id'    => $lokasiId,
-                'konsumen_id'  => $konsumen->id,
-                'sales_id'     => $user->id,
-                'created_by'   => $user->id,
-                'status'       => 'COMPLETED',
-                'keterangan_diskon' => $request->nama_diskon,
-                'diskon'       => 0,
-                'subtotal'     => 0,
-                'pajak'        => 0,
-                'total_harga'  => 0,
-            ]);
-
-            $subtotalGlobal = 0;
-
-            // 4. Proses Setiap Item
-            foreach ($request->items as $item) {
-                $barangId = $item['barang_id'];
-                $qtyRequest = (int) $item['qty'];
-                
-                $barang = Barang::find($barangId);
-
-                if (!$barang->is_active) {
-                    throw new \Exception("Transaksi Dibatalkan! Barang '{$barang->part_name}' ({$barang->part_code}) berstatus NONAKTIF dan tidak dapat dijual.");
-                }
-
-                $hargaJualSatuan = $barang->retail;
-                // [MODIFIKASI PENTING]: Ambil HPP (Harga Modal) dari Master Barang saat ini
-                $hargaModalSatuan = $barang->selling_out ?? 0;
-
-                // Ambil stok dari inventory_batch (FIFO)
-                $batches = InventoryBatch::where('barang_id', $barangId)
-                    ->where('lokasi_id', $lokasiId)
-                    ->where('quantity', '>', 0)
-                    ->orderBy('created_at', 'asc')
-                    ->lockForUpdate()
-                    ->get();
-
-                $totalStokTersedia = $batches->sum('quantity');
-
-                if ($totalStokTersedia < $qtyRequest) {
-                    throw new \Exception("Stok tidak mencukupi untuk barang: {$barang->part_name}. Diminta: {$qtyRequest}, Tersedia: {$totalStokTersedia}");
-                }
-
-                $sisaQtyYangHarusDipenuhi = $qtyRequest;
-
-                // Loop batches untuk mengurangi stok (Split Rak/Batch)
-                foreach ($batches as $batch) {
-                    if ($sisaQtyYangHarusDipenuhi <= 0) break;
-
-                    // Ambil sebanyak mungkin dari batch ini
-                    $qtyDiambil = min($batch->quantity, $sisaQtyYangHarusDipenuhi);
-
-                    // 4a. Buat Penjualan Detail
-                    $subtotalItem = $qtyDiambil * $hargaJualSatuan;
-                    
-                    $penjualan->details()->create([
-                        'barang_id'   => $barang->id,
-                        'rak_id'      => $batch->rak_id,
-                        'qty_jual'    => $qtyDiambil,
-                        'harga_jual'  => $hargaJualSatuan,
-                        // [MODIFIKASI PENTING]: Simpan Snapshot HPP ke kolom harga_modal
-                        'harga_modal' => $hargaModalSatuan, 
-                        'subtotal'    => $subtotalItem,
-                        'qty_diretur' => 0
-                    ]);
-
-                    // 4b. Update Inventory Batch (Kurangi Stok)
-                    $stokAwalBatch = $batch->quantity;
-                    $batch->decrement('quantity', $qtyDiambil);
-
-                    // 4c. Catat Kartu Stok (Movement)
-                    StockMovement::create([
-                        'barang_id'      => $barang->id,
-                        'lokasi_id'      => $lokasiId,
-                        'rak_id'         => $batch->rak_id,
-                        'jumlah'         => -$qtyDiambil,
-                        'stok_sebelum'   => $stokAwalBatch,
-                        'stok_sesudah'   => $stokAwalBatch - $qtyDiambil,
-                        'referensi_type' => get_class($penjualan),
-                        'referensi_id'   => $penjualan->id,
-                        'keterangan'     => "Penjualan POS #{$penjualan->nomor_faktur}",
-                        'user_id'        => $user->id,
-                    ]);
-
-                    $sisaQtyYangHarusDipenuhi -= $qtyDiambil;
-                    $subtotalGlobal += $subtotalItem;
-                }
-            }
-
-            // 5. Kalkulasi Final (Diskon & Pajak)
-            $inputDiskon = (float) $request->nilai_diskon;
-            $finalDiskon = min($inputDiskon, $subtotalGlobal);
-            
-            $dpp = $subtotalGlobal - $finalDiskon;
-            
-            $nilaiPajak = 0;
-            if ($request->has('ppn_check') && $request->ppn_check == 1) {
-                $nilaiPajak = $dpp * 0.11; // PPN 11%
-            }
-
-            $grandTotal = $dpp + $nilaiPajak;
-
-            // 6. Update Header Penjualan
-            $penjualan->update([
-                'subtotal'     => $subtotalGlobal,
-                'diskon'       => $finalDiskon,
-                'total_diskon' => $finalDiskon,
-                'pajak'        => $nilaiPajak,
-                'total_harga'  => $grandTotal
-            ]);
-
-            DB::commit();
+            $penjualan = $this->penjualanService->createPenjualan($request->all(), $user);
 
             return redirect()->route('admin.penjualans.show', $penjualan->id)
                 ->with('success', 'Transaksi Penjualan Berhasil Disimpan.');
 
         } catch (\Exception $e) {
-            DB::rollBack();
             return back()->with('error', 'Gagal memproses transaksi: ' . $e->getMessage())->withInput();
         }
     }

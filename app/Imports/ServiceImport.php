@@ -71,8 +71,8 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $this->cleanupOrphanDetails($this->currentService);
         }
 
-        // [FITUR BARU: AUTO-KOREKSI MOTOR MENGINAP]
-        // Menarik maju tanggal laporan motor yang masuk kemarin tapi selesai di hari ini
+        // [MATIKAN FITUR INI]: Karena sering bentrok dengan SOP Re-import KSG H+1
+        /*
         if (!empty($this->importedServiceIds) && $this->referenceRegDate) {
             $targetDate = $this->referenceRegDate;
             
@@ -83,7 +83,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
             foreach ($servicesToFix as $srv) {
                 $diffDays = Carbon::parse($srv->reg_date)->diffInDays(Carbon::parse($targetDate));
                 
-                // Batasi maksimal selisih 7 hari agar tidak merusak data jika mengimpor Laporan Bulanan
                 if ($diffDays > 0 && $diffDays <= 7) {
                     $newCreatedAt = $targetDate . ' ' . $srv->created_at->format('H:i:s');
                     
@@ -91,7 +90,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     $srv->created_at = $newCreatedAt;
                     $srv->save();
                     
-                    // Sinkronkan juga laporan pengeluaran gudangnya
                     StockMovement::where('referensi_type', 'App\Models\Service')
                         ->where('referensi_id', $srv->id)
                         ->update([
@@ -101,6 +99,7 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 }
             }
         }
+        */
     }
 
     private function cleanupOrphanDetails(Service $service)
@@ -371,6 +370,20 @@ class ServiceImport implements OnEachRow, WithChunkReading
         $lokasiId = $service->lokasi_id;
         $serviceDate = $service->created_at;
 
+        // =========================================================================
+        // [ANTI PART HANTU]: Otomatis tambahkan '00' jika kode Excel hanya 12 digit
+        // =========================================================================
+        if (($type == 'PART' || $type == 'OLI') && !empty($data['item_code'])) {
+            if (strlen($data['item_code']) == 12) {
+                $paddedCode = $data['item_code'] . '00';
+                // Cek apakah kode 14 digitnya ada di master part
+                if (\App\Models\Part::where('kode_part', $paddedCode)->exists()) {
+                    $data['item_code'] = $paddedCode; // Paksa gunakan kode 14 digit
+                }
+            }
+        }
+        // =========================================================================
+
         $query = $service->details()->where('item_category', $type);
 
         $barangId = null;
@@ -409,7 +422,30 @@ class ServiceImport implements OnEachRow, WithChunkReading
             $isLaborChanged = ($data['labor_cost_service'] != $existingDetail->labor_cost_service);
             $isBarangIdChanged = ($barangId !== $existingDetail->barang_id);
 
-            if ($isQtyChanged && $barangId) {
+            // [PERBAIKAN KRUSIAL DARI OBROLAN SEBELUMNYA]: Antisipasi jika Kode Part BERUBAH
+            if ($isCodeChanged) {
+                if ($existingDetail->barang_id && $existingDetail->quantity > 0) {
+                    $this->processStockDeduction(
+                        $existingDetail->barang_id, 
+                        -($existingDetail->quantity), 
+                        $service->id, 
+                        $lokasiId, 
+                        $service->invoice_no, 
+                        $serviceDate
+                    );
+                }
+                if ($barangId && $data['quantity'] > 0) {
+                    $this->processStockDeduction(
+                        $barangId, 
+                        $data['quantity'], 
+                        $service->id, 
+                        $lokasiId, 
+                        $service->invoice_no, 
+                        $serviceDate
+                    );
+                }
+            } 
+            elseif ($isQtyChanged && $barangId) {
                 $qtyDiff = $data['quantity'] - $existingDetail->quantity;
                 $this->processStockDeduction($barangId, $qtyDiff, $service->id, $lokasiId, $service->invoice_no, $serviceDate);
             }
@@ -554,14 +590,14 @@ class ServiceImport implements OnEachRow, WithChunkReading
             // 1. CEK BARIS TOTAL
             $rowString = implode(' ', array_slice($rowArray, 0, 10));
             if (str_contains(strtoupper($rowString), 'TOTAL')) {
-                $this->currentService = null; // [PERBAIKAN] Tutup kebocoran
+                $this->currentService = null; 
                 DB::commit();
                 return;
             }
 
             // 2. CEK BARIS CANCELLED
             if ($this->isRowCancelled($rowArray)) {
-                $this->currentService = null; // [PERBAIKAN] Tutup kebocoran (Kasus Virli)
+                $this->currentService = null; 
                 DB::commit();
                 return;
             }
@@ -570,12 +606,20 @@ class ServiceImport implements OnEachRow, WithChunkReading
             
             // 3. CEK BLACKLIST INVOICE
             if (!empty($invoiceNo) && in_array($invoiceNo, $this->failedInvoices)) {
-                $this->currentService = null; // [PERBAIKAN] Tutup kebocoran
+                $this->currentService = null; 
                 DB::commit();
                 return; 
             }
 
             $dealerCode = trim($this->getVal($rowArray, 'dealer_code') ?? '');
+
+            // =========================================================================
+            // [MODIFIKASI] ALIAS INTERCEPTOR: Penyesuaian Cabang Induk vs Sub-Cabang
+            // Jika User Login = 9HL003B (Pramuka) & Excel = 9HL003 (Kedaton), paksa jadi 9HL003B
+            // =========================================================================
+            if ($this->userDealerCode === '9HL003B' && $dealerCode === '9HL003') {
+                $dealerCode = '9HL003B';
+            }
 
             // VALIDASI DEALER CODE
             if (!empty($dealerCode)) {
@@ -618,9 +662,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                 if (empty($regDate)) {
                     throw new \Exception("Tanggal registrasi invalid.");
                 }
-                
-                $isFileToday = ($this->referenceRegDate === now()->toDateString());
-                $shouldBackdate = !$isFileToday; 
 
                 $serviceData = [
                     'reg_date' => $regDate,
@@ -665,19 +706,17 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     // Update data reguler
                     $existingService->update($serviceData);
 
-                    // [PERBAIKAN]: Cek & Sinkronisasi 'created_at' jika tanggal dikoreksi
+                    // [KUNCI SOP]: Paksa created_at mengikuti Tanggal Laporan (UI), bukan reg_date
                     $oldDate = \Carbon\Carbon::parse($existingService->created_at)->format('Y-m-d');
-                    if ($oldDate !== $regDate) {
-                        // Rakit waktu yang baru (Tanggal Baru + Jam Lama)
-                        $newCreatedAt = $regDate . ' ' . $existingService->created_at->format('H:i:s');
+                    
+                    if ($oldDate !== $this->referenceRegDate) {
+                        $newCreatedAt = $this->referenceRegDate . ' ' . $existingService->created_at->format('H:i:s');
 
-                        // Paksa timpa created_at (bypass proteksi timestamp Laravel)
                         $existingService->timestamps = false; 
                         $existingService->created_at = $newCreatedAt;
                         $existingService->save();
                         $existingService->timestamps = true; 
 
-                        // Wajib: Pindahkan juga tanggal riwayat pengeluaran gudang agar laporan HPP tidak bocor
                         StockMovement::where('referensi_type', 'App\Models\Service')
                             ->where('referensi_id', $existingService->id)
                             ->update([
@@ -689,7 +728,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     $this->currentService = $existingService;
                     $this->updatedCount++;
                     
-                    // DAFTARKAN ID UNTUK AUTO-KOREKSI
                     $this->importedServiceIds[$existingService->id] = $existingService->id;
                 } else {
                     $this->isCurrentServiceNew = true;
@@ -697,20 +735,9 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     
                     $serviceData['invoice_no'] = $invoiceNo;
                     
-                    if ($shouldBackdate) {
-                        $sibling = Service::where('dealer_code', $dealerCode)
-                            ->where('reg_date', $regDate)
-                            ->orderBy('created_at', 'asc')
-                            ->first();
-                        
-                        if ($sibling) {
-                            $serviceData['created_at'] = $sibling->created_at;
-                            $serviceData['updated_at'] = now();
-                        } else {
-                            $serviceData['created_at'] = $regDate . ' ' . now()->format('H:i:s');
-                            $serviceData['updated_at'] = now();
-                        }
-                    }
+                    // [KUNCI SOP]: Semua data baru MUTLAK memakai Tanggal Laporan (UI), bukan tanggal nota
+                    $serviceData['created_at'] = $this->referenceRegDate . ' ' . now()->format('H:i:s');
+                    $serviceData['updated_at'] = now();
                     
                     $this->currentService = Service::create($serviceData);
                     $this->importedCount++;
@@ -767,7 +794,6 @@ class ServiceImport implements OnEachRow, WithChunkReading
                     $this->currentService->delete(); 
                     $this->importedCount--; 
                     
-                    // Lepas dari antrean Auto-Koreksi karena datanya sudah dihapus
                     unset($this->importedServiceIds[$srvId]); 
                 } catch (\Exception $rollbackEx) {
                     Log::error("Gagal melakukan manual rollback untuk Invoice {$invoiceFailed}: " . $rollbackEx->getMessage());
