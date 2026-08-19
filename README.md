@@ -121,15 +121,10 @@ Sistem menggunakan kontrol akses berbasis peran (*Gate Authorized*) yang dibagi 
    QUEUE_CONNECTION=sync
    ```
 
-4. **Import Database**:
-   Import file SQL bawaan `spartann.sql` ke MySQL Database `spartann` melalui phpMyAdmin atau MySQL CLI:
+4. **Jalankan Migrasi & Database Seeder**:
+   Jalankan migrasi bersih dan seeder data awal master:
    ```bash
-   mysql -u root -p spartann < spartann.sql
-   ```
-
-5. **Jalankan Migrasi Tambahan**:
-   ```bash
-   php artisan migrate
+   php artisan migrate --seed
    ```
 
 6. **Build Asset Frontend**:
