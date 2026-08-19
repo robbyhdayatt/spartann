@@ -40,9 +40,7 @@
         @endempty
 
         {{-- Footer --}}
-        @hasSection('footer')
-            @include('adminlte::partials.footer.footer')
-        @endif
+        @include('adminlte::partials.footer.footer')
 
         {{-- Right Control Sidebar --}}
         @if($layoutHelper->isRightSidebarEnabled())

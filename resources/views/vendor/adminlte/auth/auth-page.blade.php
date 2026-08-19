@@ -81,6 +81,12 @@
 
         </div>
 
+        {{-- Auth Page Footer --}}
+        <div class="text-center mt-3 text-muted" style="font-size: 0.85rem;">
+            <div>IT Lautan Teduh Interniaga &copy; {{ date('Y') }}</div>
+            <div>Created by <a href="https://byron.my.id/" target="_blank" rel="noopener noreferrer" class="font-weight-bold">Robby IT</a></div>
+        </div>
+
     </div>
 @stop
 

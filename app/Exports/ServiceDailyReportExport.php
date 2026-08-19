@@ -3,11 +3,9 @@
 namespace App\Exports;
 
 use App\Models\Service;
-use App\Models\ServiceDetail;
 use App\Models\Lokasi;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -19,12 +17,12 @@ use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
 use PhpOffice\PhpSpreadsheet\Cell\Cell;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class ServiceDailyReportExport extends DefaultValueBinder implements
     FromCollection,
     WithHeadings,
-    ShouldAutoSize,
     WithEvents,
     WithStyles,
     WithCustomValueBinder
@@ -45,19 +43,32 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         $this->dealers    = Lokasi::where('tipe', 'DEALER')->pluck('nama_lokasi', 'kode_lokasi');
     }
 
+    public function bindValue(Cell $cell, $value)
+    {
+        // Memaksa kolom KTP (N), Telepon (M), NPWP (O), No Rangka (R), No Invoice (B), Kode Part (W) bertipe STRING murni
+        // Mencegah Excel mengubah angka 16-digit KTP menjadi notasi ilmiah (e.g., 1.87107E+15)
+        $stringColumns = ['B', 'C', 'D', 'F', 'G', 'H', 'I', 'J', 'K', 'M', 'N', 'O', 'R', 'W'];
+        if (in_array($cell->getColumn(), $stringColumns)) {
+            $cell->setValueExplicit((string) ($value ?? '-'), DataType::TYPE_STRING);
+            return true;
+        }
+
+        return parent::bindValue($cell, $value);
+    }
+
     private function applyFilters($query)
     {
         if ($this->startDate && $this->endDate) {
             $start = Carbon::parse($this->startDate)->startOfDay();
             $end   = Carbon::parse($this->endDate)->endOfDay();
-            $query->whereBetween('created_at', [$start, $end]);
+            $query->whereBetween('services.created_at', [$start, $end]);
         } elseif ($this->startDate) {
             $start = Carbon::parse($this->startDate)->startOfDay();
-            $query->where('created_at', '>=', $start);
+            $query->where('services.created_at', '>=', $start);
         }
 
         if ($this->dealerCode !== 'all' && $this->dealerCode !== null && $this->dealerCode !== '') {
-            $query->where('dealer_code', $this->dealerCode);
+            $query->where('services.dealer_code', $this->dealerCode);
         }
 
         return $query;
@@ -69,62 +80,18 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         return $this->applyFilters($query);
     }
 
-    public function bindValue(Cell $cell, $value)
-    {
-        // Kolom kode/nomor yang wajib diawali string agar 0 di depan tidak terpotong
-        $stringColumns = ['C', 'G', 'I', 'J', 'K', 'M', 'N', 'O', 'R', 'W'];
-        if (in_array($cell->getColumn(), $stringColumns)) {
-            $cell->setValueExplicit((string) $value, DataType::TYPE_STRING);
-            return true;
-        }
-
-        // Kolom Keuangan/Nominal Rupiah
-        $moneyColumns = [
-            'V',  // Labor Cost Service
-            'Z',  // Harga Satuan
-            'AA', // Subtotal Item
-            'AB', // HPP Satuan
-            'AE', // E-Payment
-            'AF', // Cash
-            'AG', // Debit
-            'AH', // Total DP
-            'AI', // Total Labor
-            'AJ', // Total Part Service
-            'AK', // Total Oil Service
-            'AL', // Total Retail Parts
-            'AM', // Total Retail Oil
-            'AN', // Total Amount (Gross)
-            'AO', // Benefit Amount
-            'AP', // Total Payment (Net)
-            'AQ'  // Balance
-        ];
-
-        if (in_array($cell->getColumn(), $moneyColumns) && is_numeric($value)) {
-            $cell->setValueExplicit((float) $value, DataType::TYPE_NUMERIC);
-            $cell->getStyle()->getNumberFormat()->setFormatCode('"Rp "#,##0_);("Rp "#,##0)');
-            return true;
-        }
-
-        // Kolom Qty (Tipe Data Integer)
-        if ($cell->getColumn() === 'Y' && is_numeric($value)) {
-            $cell->setValueExplicit((int) $value, DataType::TYPE_NUMERIC);
-            $cell->getStyle()->getNumberFormat()->setFormatCode('#,##0');
-            return true;
-        }
-
-        return parent::bindValue($cell, $value);
-    }
-
     public function collection()
     {
-        $query = Service::with(['lokasi', 'details']);
+        $query = Service::with(['lokasi:id,kode_lokasi,nama_lokasi', 'details']);
         $query = $this->applyFilters($query);
 
-        $services = $query->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get();
+        $services = $query->orderBy('services.created_at', 'desc')
+            ->orderBy('services.id', 'desc')
+            ->get();
 
         $rows = [];
         $invoiceNumber = 1;
-        $currentRow = 2; // Baris data dimulai di baris 2 (setelah header di baris 1)
+        $currentRow = 2; // Data dimulai di baris 2
 
         foreach ($services as $service) {
             $namaDealer = $this->dealers->get($service->dealer_code) ?? ($service->lokasi->nama_lokasi ?? $service->dealer_code);
@@ -137,29 +104,29 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                 foreach ($details as $detail) {
                     $rows[] = [
                         $invoiceNumber,
-                        $service->invoice_no ?? '-',
+                        (string) ($service->invoice_no ?? '-'),
                         $service->reg_date ? Carbon::parse($service->reg_date)->format('Y-m-d') : '-',
-                        $service->dealer_code ?? '-',
+                        (string) ($service->dealer_code ?? '-'),
                         $namaDealer,
-                        $service->yss ?? '-',
-                        $service->point ?? '-',
+                        (string) ($service->yss ?? '-'),
+                        (string) ($service->point ?? '-'),
                         $service->service_order ?? '-',
-                        $service->plate_no ?? '-',
-                        $service->work_order_no ?? '-',
-                        $service->work_order_status ?? '-',
+                        (string) ($service->plate_no ?? '-'),
+                        (string) ($service->work_order_no ?? '-'),
+                        (string) ($service->work_order_status ?? '-'),
                         $service->customer_name ?? '-',
-                        $service->customer_phone ?? '-',
-                        $service->customer_ktp ?? '-',
-                        $service->customer_npwp_no ?? '-',
+                        (string) ($service->customer_phone ?? '-'),
+                        (string) ($service->customer_ktp ?? '-'),
+                        (string) ($service->customer_npwp_no ?? '-'),
                         $service->mc_brand ?? '-',
                         $service->mc_model_name ?? '-',
-                        $service->mc_frame_no ?? '-',
+                        (string) ($service->mc_frame_no ?? '-'),
                         // --- ITEM DETAILS (S-AB) ---
                         $detail->item_category ?? '-',
                         $detail->service_category_code ?? '-',
                         $detail->service_package_name ?? '-',
                         (float) ($detail->labor_cost_service ?? 0),
-                        $detail->item_code ?? '-',
+                        (string) ($detail->item_code ?? '-'),
                         $detail->item_name ?? '-',
                         (int) ($detail->quantity ?? 0),
                         (float) ($detail->price ?? 0),
@@ -191,23 +158,23 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             } else {
                 $rows[] = [
                     $invoiceNumber,
-                    $service->invoice_no ?? '-',
+                    (string) ($service->invoice_no ?? '-'),
                     $service->reg_date ? Carbon::parse($service->reg_date)->format('Y-m-d') : '-',
-                    $service->dealer_code ?? '-',
+                    (string) ($service->dealer_code ?? '-'),
                     $namaDealer,
-                    $service->yss ?? '-',
-                    $service->point ?? '-',
+                    (string) ($service->yss ?? '-'),
+                    (string) ($service->point ?? '-'),
                     $service->service_order ?? '-',
-                    $service->plate_no ?? '-',
-                    $service->work_order_no ?? '-',
-                    $service->work_order_status ?? '-',
+                    (string) ($service->plate_no ?? '-'),
+                    (string) ($service->work_order_no ?? '-'),
+                    (string) ($service->work_order_status ?? '-'),
                     $service->customer_name ?? '-',
-                    $service->customer_phone ?? '-',
-                    $service->customer_ktp ?? '-',
-                    $service->customer_npwp_no ?? '-',
+                    (string) ($service->customer_phone ?? '-'),
+                    (string) ($service->customer_ktp ?? '-'),
+                    (string) ($service->customer_npwp_no ?? '-'),
                     $service->mc_brand ?? '-',
                     $service->mc_model_name ?? '-',
-                    $service->mc_frame_no ?? '-',
+                    (string) ($service->mc_frame_no ?? '-'),
                     '-', '-', '-', 0, '-', '-', 0, 0, 0, 0,
                     $service->payment_type ?? '-',
                     $service->transaction_code ?? '-',
@@ -233,34 +200,30 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
 
             $endRow = $currentRow - 1;
 
-            // Jika 1 invoice memiliki lebih dari 1 item detail, lakukan merge vertikal per invoice
             if ($startRow < $endRow) {
-                // Merge Header Info Invoice (A sampai R)
+                // Merge Header Info (A-R)
                 for ($col = 'A'; $col !== 'S'; $col++) {
                     $this->mergeRanges[] = "{$col}{$startRow}:{$col}{$endRow}";
                 }
 
-                // Cek apakah seluruh detail item pada invoice ini memiliki Kategori Service yang sama (misal KSG / KSB)
+                // Merge Kategori & Paket Service jika seragam per invoice
                 $firstCategory = $details->first()->service_category_code ?? null;
                 $allSameCategory = $details->every(function ($d) use ($firstCategory) {
                     return ($d->service_category_code ?? null) === $firstCategory;
                 });
-
                 if ($allSameCategory && $firstCategory !== null) {
-                    $this->mergeRanges[] = "T{$startRow}:T{$endRow}"; // Merge Vertikal Kolom Kategori Service
+                    $this->mergeRanges[] = "T{$startRow}:T{$endRow}";
                 }
 
-                // Cek apakah seluruh detail item pada invoice ini memiliki Paket Service yang sama
                 $firstPackage = $details->first()->service_package_name ?? null;
                 $allSamePackage = $details->every(function ($d) use ($firstPackage) {
                     return ($d->service_package_name ?? null) === $firstPackage;
                 });
-
                 if ($allSamePackage && $firstPackage !== null) {
-                    $this->mergeRanges[] = "U{$startRow}:U{$endRow}"; // Merge Vertikal Kolom Paket Service
+                    $this->mergeRanges[] = "U{$startRow}:U{$endRow}";
                 }
 
-                // Merge Total Keuangan & Info Invoice (AC sampai AT)
+                // Merge Total Keuangan (AC-AT)
                 $columnsACtoAT = ['AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT'];
                 foreach ($columnsACtoAT as $col) {
                     $this->mergeRanges[] = "{$col}{$startRow}:{$col}{$endRow}";
@@ -328,9 +291,6 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         ];
     }
 
-    /**
-     * RUMUS PATEN KONTRAK BISNIS: Perhitungan Total Tanpa KSG
-     */
     private function calculateTotalWithoutKSG()
     {
         $grandTotal = (clone $this->getBaseQuery())->selectRaw('
@@ -349,46 +309,40 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
             SUM(balance) as balance
         ')->first();
 
-        $details = ServiceDetail::with('service')
-            ->whereHas('service', function ($q) {
-                $this->applyFilters($q);
-                $q->where('balance', '<', 0);
-            })->get();
-
-        $ksgLaborSum = 0;
-
-        foreach ($details as $item) {
-            $pkgName = strtoupper($item->service_package_name ?? '');
-            $laborCost = $item->labor_cost_service;
-
-            if (str_contains($pkgName, 'KSG') || str_contains($pkgName, 'CLAIM')) {
-                if ($laborCost > 0) {
-                    $ksgLaborSum += $laborCost;
-                } else {
-                    $modelName = strtoupper($item->service->mc_model_name ?? '');
-
-                    if (str_contains($pkgName, 'KSG1')) {
-                        if (str_contains($modelName, 'MX KING')) {
-                            $ksgLaborSum += 28000;
-                        } else {
-                            $ksgLaborSum += 24000;
-                        }
-                    } elseif (str_contains($pkgName, 'KSG2')) {
-                        $ksgLaborSum += 25000;
-                    } elseif (str_contains($pkgName, 'KSG3')) {
-                        $ksgLaborSum += 25000;
-                    } elseif (str_contains($pkgName, 'KSG4')) {
-                        if (str_contains($modelName, 'NEO')) {
-                            $ksgLaborSum += 42000;
-                        } else {
-                            $ksgLaborSum += 29000;
-                        }
-                    } elseif (str_contains($pkgName, 'CLAIM')) {
-                        $ksgLaborSum += 16000;
-                    }
+        $ksgLaborSum = DB::table('service_details')
+            ->join('services', 'service_details.service_id', '=', 'services.id')
+            ->where('services.balance', '<', 0)
+            ->when($this->startDate && $this->endDate, function ($q) {
+                $start = Carbon::parse($this->startDate)->startOfDay();
+                $end   = Carbon::parse($this->endDate)->endOfDay();
+                $q->whereBetween('services.created_at', [$start, $end]);
+            }, function ($q) {
+                if ($this->startDate) {
+                    $q->where('services.created_at', '>=', Carbon::parse($this->startDate)->startOfDay());
                 }
-            }
-        }
+            })
+            ->when($this->dealerCode !== 'all' && $this->dealerCode !== null && $this->dealerCode !== '', function ($q) {
+                $q->where('services.dealer_code', $this->dealerCode);
+            })
+            ->where(function ($q) {
+                $q->where('service_details.service_package_name', 'LIKE', '%KSG%')
+                  ->orWhere('service_details.service_package_name', 'LIKE', '%CLAIM%')
+                  ->orWhere('service_details.service_category_code', 'LIKE', '%KSG%')
+                  ->orWhere('service_details.service_category_code', 'LIKE', '%CLAIM%');
+            })
+            ->sum(DB::raw("
+                CASE 
+                    WHEN service_details.labor_cost_service > 0 THEN service_details.labor_cost_service
+                    WHEN UPPER(service_details.service_package_name) LIKE '%KSG1%' OR UPPER(service_details.service_category_code) LIKE '%KSG1%' THEN
+                        CASE WHEN UPPER(services.mc_model_name) LIKE '%MX KING%' THEN 28000 ELSE 24000 END
+                    WHEN UPPER(service_details.service_package_name) LIKE '%KSG2%' OR UPPER(service_details.service_category_code) LIKE '%KSG2%' THEN 25000
+                    WHEN UPPER(service_details.service_package_name) LIKE '%KSG3%' OR UPPER(service_details.service_category_code) LIKE '%KSG3%' THEN 25000
+                    WHEN UPPER(service_details.service_package_name) LIKE '%KSG4%' OR UPPER(service_details.service_category_code) LIKE '%KSG4%' THEN
+                        CASE WHEN UPPER(services.mc_model_name) LIKE '%NEO%' THEN 42000 ELSE 29000 END
+                    WHEN UPPER(service_details.service_package_name) LIKE '%CLAIM%' OR UPPER(service_details.service_category_code) LIKE '%CLAIM%' THEN 16000
+                    ELSE 0
+                END
+            "));
 
         return (object) [
             'e_payment_amount'   => $grandTotal->e_payment_amount ?? 0,
@@ -412,24 +366,41 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                $lastRow = $this->totalDataRows + 1; // +1 untuk header di baris 1
+                $lastRow = $this->totalDataRows + 1; // +1 untuk header
                 $lastColLetter = 'AT'; // Kolom 46
 
-                // 1. Ubah Default Font Size ke 9 untuk Seluruh Spreadsheet
+                // Set default Font Size ke 9pt
                 $sheet->getParent()->getDefaultStyle()->getFont()->setSize(9);
 
-                // 2. Jalankan penggabungan sel vertikal per invoice
+                // 1. Eksekusi merge vertikal per invoice
                 foreach ($this->mergeRanges as $range) {
                     $sheet->mergeCells($range);
                 }
 
-                // 3. Aktifkan AutoFilter di Baris 1
-                $sheet->setAutoFilter("A1:{$lastColLetter}1");
+                // 2. Format Massal Kolom Keuangan & Text di C-level kecepatan PhpSpreadsheet
+                if ($this->totalDataRows > 0) {
+                    $rupiahFormat = '"Rp "#,##0_);("Rp "#,##0)';
 
-                // 4. Freeze Pane di Baris 2 (Header tetap terlihat saat scroll)
+                    // Format Text (@) eksplisit untuk NIK KTP, Telepon, NPWP, No Rangka, No Invoice
+                    $sheet->getStyle("B2:K{$lastRow}")->getNumberFormat()->setFormatCode('@');
+                    $sheet->getStyle("M2:O{$lastRow}")->getNumberFormat()->setFormatCode('@');
+                    $sheet->getStyle("R2:R{$lastRow}")->getNumberFormat()->setFormatCode('@');
+                    $sheet->getStyle("W2:W{$lastRow}")->getNumberFormat()->setFormatCode('@');
+
+                    // Format Rupiah untuk kolom nominal V, Z, AA, AB, AE s/d AQ
+                    $sheet->getStyle("V2:V{$lastRow}")->getNumberFormat()->setFormatCode($rupiahFormat);
+                    $sheet->getStyle("Z2:AB{$lastRow}")->getNumberFormat()->setFormatCode($rupiahFormat);
+                    $sheet->getStyle("AE2:AQ{$lastRow}")->getNumberFormat()->setFormatCode($rupiahFormat);
+
+                    // Format Qty Integer untuk kolom Y
+                    $sheet->getStyle("Y2:Y{$lastRow}")->getNumberFormat()->setFormatCode('#,##0');
+                }
+
+                // 3. AutoFilter & Freeze Pane
+                $sheet->setAutoFilter("A1:{$lastColLetter}1");
                 $sheet->freezePane('A2');
 
-                // 5. Tambahkan Baris TOTAL SUMMARY dan TOTAL (TANPA KSG) di bagian bawah jika ada data
+                // 4. Tambahkan Baris TOTAL SUMMARY dan TOTAL (TANPA KSG) di bagian bawah
                 if ($this->totalDataRows > 0) {
                     $totalRow = $lastRow + 1;
                     $totalNonKsgRow = $lastRow + 2;
@@ -457,17 +428,13 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
 
                     foreach ($sumColumns as $col => $name) {
                         $sheet->setCellValue("{$col}{$totalRow}", "=SUM({$col}2:{$col}{$lastRow})");
-
-                        if ($col !== 'Y') {
-                            $sheet->getStyle("{$col}{$totalRow}")->getNumberFormat()->setFormatCode('"Rp "#,##0_);("Rp "#,##0)');
-                        } else {
-                            $sheet->getStyle("{$col}{$totalRow}")->getNumberFormat()->setFormatCode('#,##0');
-                        }
+                        $format = ($col === 'Y') ? '#,##0' : '"Rp "#,##0_);("Rp "#,##0)';
+                        $sheet->getStyle("{$col}{$totalRow}")->getNumberFormat()->setFormatCode($format);
                     }
 
                     $totalStyle = [
                         'font' => ['bold' => true, 'size' => 9, 'color' => ['rgb' => '000000']],
-                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE2EFDA']], // Soft Green Accent
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFE2EFDA']],
                         'borders' => [
                             'top' => ['borderStyle' => Border::BORDER_THIN],
                             'bottom' => ['borderStyle' => Border::BORDER_THIN],
@@ -475,7 +442,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                     ];
                     $sheet->getStyle("A{$totalRow}:{$lastColLetter}{$totalRow}")->applyFromArray($totalStyle);
 
-                    // --- BARIS 2: TOTAL (TANPA KSG) (RUMUS PATEN KODE AWAL) ---
+                    // --- BARIS 2: TOTAL (TANPA KSG) ---
                     $nonKsgTotal = $this->calculateTotalWithoutKSG();
                     $sheet->setCellValue("A{$totalNonKsgRow}", 'TOTAL (TANPA KSG)');
 
@@ -495,11 +462,9 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                         'AQ' => 'balance',
                     ];
 
-                    // Qty tetap sama dengan SUM
                     $sheet->setCellValue("Y{$totalNonKsgRow}", "=SUM(Y2:Y{$lastRow})");
                     $sheet->getStyle("Y{$totalNonKsgRow}")->getNumberFormat()->setFormatCode('#,##0');
 
-                    // Nilai Keuangan Tanpa KSG menggunakan hasil kalkulasi paten
                     foreach ($colMap as $col => $key) {
                         $val = $nonKsgTotal->$key ?? 0;
                         $sheet->setCellValue("{$col}{$totalNonKsgRow}", $val);
@@ -508,7 +473,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
 
                     $nonKsgStyle = [
                         'font' => ['bold' => true, 'size' => 9, 'color' => ['rgb' => '006100']],
-                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFC6EFCE']], // Light Green Fill
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFC6EFCE']],
                         'borders' => [
                             'top' => ['borderStyle' => Border::BORDER_THIN],
                             'bottom' => ['borderStyle' => Border::BORDER_DOUBLE],
@@ -525,7 +490,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
         $lastRow = $this->totalDataRows + 1;
 
         return [
-            // Header Baris 1: Font Size 9 Bold
+            // Header Baris 1: Font Size 9 Bold Navy
             1 => [
                 'font' => [
                     'bold' => true,
@@ -534,7 +499,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                 ],
                 'fill' => [
                     'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['argb' => 'FF1F4E78'], // Dark Blue Navy Professional
+                    'startColor' => ['argb' => 'FF1F4E78'],
                 ],
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -542,7 +507,7 @@ class ServiceDailyReportExport extends DefaultValueBinder implements
                     'wrapText' => false,
                 ],
             ],
-            // Alignment vertikal tengah dan font size 9 untuk seluruh data
+            // Data Rows: Font Size 9, Vertical Alignment Center
             "A2:AT{$lastRow}" => [
                 'font' => [
                     'size' => 9,

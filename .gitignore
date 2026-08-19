@@ -16,3 +16,4 @@ yarn-error.log
 *.lock
 composer.lock
 spartann.sql
+database/migrations_backup/

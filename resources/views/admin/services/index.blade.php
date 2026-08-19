@@ -27,7 +27,7 @@
             </div>
         @endif
 
-        {{-- [MODIFIKASI] KOTAK KHUSUS MENAMPILKAN DETAIL ERROR IMPORT --}}
+        {{-- KOTAK KHUSUS MENAMPILKAN DETAIL ERROR IMPORT --}}
         @if (session('import_errors'))
             <div class="alert alert-warning alert-dismissible shadow-sm">
                 <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
@@ -126,7 +126,7 @@
                     </div>
                 </form>
 
-                {{-- Tombol Export Excel (Sesuai Hak Akses) --}}
+                {{-- Tombol Export Excel --}}
                 @can('view-service')
                 <div class="mt-2">
                     <button type="button" class="btn btn-success shadow-sm" id="export-excel-btn">
@@ -160,7 +160,6 @@
                                 <th class="text-center" style="width: 8%;">Aksi</th>
                             </tr>
                         </thead>
-                        {{-- TBODY dikosongkan karena DataTables AJAX yang akan mengisinya otomatis --}}
                         <tbody></tbody>
                     </table>
                 </div>
@@ -178,7 +177,7 @@
 
         var table = $('#services-table').DataTable({
             processing: true,
-            serverSide: true, // Mengaktifkan Server-Side Processing
+            serverSide: true,
             responsive: true,
             autoWidth: false,
             ajax: {
@@ -210,7 +209,6 @@
                 { extend: 'print', text: '<i class="fas fa-print"></i> Cetak', className: 'btn btn-sm btn-default' },
                 { extend: 'colvis', text: '<i class="fas fa-eye"></i> Kolom', className: 'btn btn-sm btn-default' }
             ],
-            // Pemetaan Kolom dari Response JSON Yajra DataTables
             columns: [
                 { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
                 { data: 'invoice_no', name: 'invoice_no', render: function(data) { return '<strong>'+data+'</strong>'; } },
@@ -235,7 +233,6 @@
                 }},
                 { data: 'aksi', name: 'aksi', orderable: false, searchable: false, className: 'text-center' }
             ],
-            // [MODIFIKASI] Target Default Sorting dialihkan ke Kolom 8 (Status Cetak)
             order: [[ 8, "asc" ]], 
             createdRow: function(row, data, dataIndex) {
                 if (data.printed_at) {
@@ -244,7 +241,7 @@
             }
         });
 
-        // AJAX FILTER SUBMIT (Tanpa Refresh Halaman)
+        // AJAX FILTER SUBMIT
         $('#filter-form').on('submit', function(e) {
             e.preventDefault();
             table.ajax.reload(); 
@@ -266,10 +263,12 @@
         }
 
         checkExportButtonState();
-
         $('#start_date, #end_date').on('change', checkExportButtonState);
 
-        $('#export-excel-btn').on('click', function() {
+        // INLINE BUTTON LOADING STATE UNTUK EXPORT EXCEL
+        $(document).on('click', '#export-excel-btn', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
             var startDateValue = $('#start_date').val();
             var endDateValue = $('#end_date').val();
             var dealerCodeValue = $('#dealer_code').length ? $('#dealer_code').val() : 'all';
@@ -279,12 +278,23 @@
                 return;
             }
 
+            var originalHtml = '<i class="fas fa-file-excel"></i> Export Excel (sesuai filter)';
+
+            // Ubah tampilan tombol ke Spinner Loading & disable tombol
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Memproses Export...');
+
             var exportUrl = "{{ route('admin.services.export.excel') }}" +
                             "?start_date=" + startDateValue +
                             "&end_date=" + endDateValue +
                             "&dealer_code=" + dealerCodeValue;
 
+            // Trigger Download File Excel
             window.location.href = exportUrl;
+
+            // Otomatis kembalikan tombol ke kondisi aktif semula dalam 1 detik (1000ms)
+            setTimeout(function() {
+                $btn.prop('disabled', false).html(originalHtml);
+            }, 1000);
         });
     });
 </script>

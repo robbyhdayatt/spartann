@@ -19,21 +19,34 @@
     </ul>
 
     {{-- Navbar right links --}}
-    <ul class="navbar-nav ml-auto">
+    <ul class="navbar-nav ml-auto align-items-center">
+        {{-- Badge Informasi User Aktif & Dealer --}}
+        @if(Auth::user())
+            <li class="nav-item d-none d-md-inline-flex align-items-center mr-3">
+                <div class="user-info-badge">
+                    <i class="fas fa-user-circle"></i>
+                    <span>{{ Auth::user()->name }}</span>
+                    @if(Auth::user()->lokasi)
+                        <span class="dealer-tag"><i class="fas fa-store mr-1"></i>{{ Auth::user()->lokasi->nama_lokasi ?? Auth::user()->lokasi->kode_lokasi }}</span>
+                    @else
+                        <span class="dealer-tag"><i class="fas fa-building mr-1"></i>Pusat / LTI</span>
+                    @endif
+                </div>
+            </li>
+        @endif
+
         {{-- Custom right links --}}
         @yield('content_top_nav_right')
 
         {{-- Configured right links (seperti fullscreen) --}}
         @each('adminlte::partials.navbar.menu-item', $adminlte->menu('navbar-right'), 'item')
 
-        {{-- ++ PERUBAHAN: Tambahkan Logout Link Secara Eksplisit di Sini ++ --}}
-        {{-- Ini akan muncul meskipun usermenu_enabled=true, karena kita includekan langsung --}}
+        {{-- Tombol Logout Link --}}
         @if(Auth::user())
             @include('adminlte::partials.navbar.menu-item-logout-link')
         @endif
 
         {{-- User menu link (dropdown) --}}
-        {{-- Biarkan logika ini jika Anda masih ingin dropdown user muncul di paling kanan --}}
         @if(Auth::user() && config('adminlte.usermenu_enabled'))
             @include('adminlte::partials.navbar.menu-item-dropdown-user-menu')
         @endif

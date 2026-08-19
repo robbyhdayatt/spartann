@@ -4,12 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Penjualan;
-use App\Models\PenjualanDetail;
 use App\Models\Konsumen;
 use App\Models\Lokasi;
 use App\Models\Barang;
 use App\Models\InventoryBatch;
-use App\Models\StockMovement;
 use App\Services\PenjualanService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,6 +16,13 @@ use Illuminate\Support\Facades\Validator;
 
 class PenjualanController extends Controller
 {
+    protected $penjualanService;
+
+    public function __construct(PenjualanService $penjualanService)
+    {
+        $this->penjualanService = $penjualanService;
+    }
+
     public function index()
     {
         $this->authorize('view-penjualan');
@@ -165,10 +170,5 @@ class PenjualanController extends Controller
         }
 
         return response()->json($results);
-    }
-    
-    public function calculateDiscount(Request $request)
-    {
-        return response()->json(['discount' => 0]);
     }
 }

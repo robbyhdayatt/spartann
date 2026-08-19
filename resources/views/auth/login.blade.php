@@ -90,8 +90,9 @@
             </form>
         </div>
     </div>
-    <div class="footer-credit">
-        IT Lautan Teduh - Robby Hidayat &copy; 2025
+    <div class="footer-credit text-center">
+        <div>IT Lautan Teduh Interniaga &copy; {{ date('Y') }}</div>
+        <div>Created by <a href="https://byron.my.id/" target="_blank" rel="noopener noreferrer" style="color: #ffffff; text-decoration: underline; font-weight: 600;">Robby IT</a></div>
     </div>
 </div>
 @stop

@@ -136,7 +136,6 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('api/penjualan/items', [PenjualanController::class, 'getBarangItems'])->name('api.penjualan.items');
     Route::get('api/parts/{part}/purchase-details', [PurchaseOrderController::class, 'getPartPurchaseDetails'])->name('api.part.purchase-details');
     Route::get('api/part-stock-details', [StockMutationController::class, 'getPartStockDetails'])->name('api.part.stock-details');
-    Route::get('api/calculate-discount', [PenjualanController::class, 'calculateDiscount'])->name('api.calculate-discount');
     Route::get('api/get-barang-items', [PenjualanController::class, 'getBarangItems'])->name('api.get-barang-items');
     Route::get('api/check-stock', [StockAdjustmentController::class, 'checkStock'])->name('api.check-stock');
     Route::get('purchase-returns/get-failed-items/{receiving}', [PurchaseReturnController::class, 'getFailedItems']);

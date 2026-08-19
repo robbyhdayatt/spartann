@@ -19,7 +19,7 @@ return [
     */
 
     'use_ico_only' => false,
-    'use_full_favicon' => false,
+    'use_full_favicon' => true,
 
     /*
     |--------------------------------------------------------------------------
@@ -56,8 +56,8 @@ return [
             'path' => 'img/SPARTAN.png',
             'alt' => 'SPARTAN Logo',
             'class' => '',
-            'width' => 200,
-            'height' => 100,
+            'width' => 320,
+            'height' => 160,
         ],
     ],
 
@@ -74,8 +74,8 @@ return [
             'path' => 'img/SPARTAN.png',
             'alt' => 'SPARTAN Logo',
             'effect' => 'animation__shake',
-            'width' => 200,
-            'height' => 200,
+            'width' => 320,
+            'height' => 320,
         ],
     ],
 
@@ -85,7 +85,7 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'usermenu_enabled' => true, // Biarkan true jika ingin dropdown user tetap ada
+    'usermenu_enabled' => false,
     'usermenu_header' => false,
     'usermenu_header_class' => 'bg-primary',
     'usermenu_image' => false,
@@ -517,6 +517,12 @@ return [
             'files' => [
                 ['type' => 'css', 'asset' => true, 'location' => 'vendor/pace-progress/themes/blue/pace-theme-center-radar.min.css'],
                 ['type' => 'js', 'asset' => true, 'location' => 'vendor/pace-progress/pace.min.js'],
+            ],
+        ],
+        'CustomLogoStyle' => [
+            'active' => true,
+            'files' => [
+                ['type' => 'css', 'asset' => true, 'location' => 'css/custom-logo.css'],
             ],
         ],
     ],
